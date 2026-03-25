@@ -69,3 +69,9 @@ logs/
 # Test output
 coverage/
 .nyc_output/
+
+# ML model artifacts (binary files, tracked via metadata only)
+ml/models/*.joblib
+ml/models/*.pkl
+ml/models/*.json
+!ml/models/.gitkeep

@@ -1,7 +1,7 @@
 {
-  "name": "energy-price-dashboard",
-  "version": "1.0.0",
-  "description": "Interactive energy price dashboard with Hugo and Plotly.js",
+  "name": "augur",
+  "version": "2.0.0",
+  "description": "Energy price forecasting platform — data collection, ML prediction, and interactive dashboard",
   "private": true,
   "scripts": {
     "dev": "hugo server -D",
@@ -22,11 +22,13 @@
   },
   "keywords": [
     "energy",
+    "forecasting",
+    "machine-learning",
+    "xgboost",
     "dashboard",
-    "hugo",
-    "plotly",
     "netherlands",
-    "electricity-prices"
+    "electricity-prices",
+    "online-learning"
   ],
   "author": "",
   "license": "MIT"

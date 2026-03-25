@@ -1,9 +1,9 @@
-baseURL = 'https://energy.yourdomain.com'
+baseURL = 'https://augur.yourdomain.com'
 languageCode = 'en-us'
-title = 'Energy Price Dashboard'
+title = 'Augur'
 
 [params]
-  description = "Real-time energy price forecasts"
+  description = "Energy price forecasting platform for the Netherlands"
   author = "Jeroen Veen"
   
 [markup]
