@@ -566,6 +566,91 @@ body {
     height: 600px;
 }
 
+.chart-area-sm {
+    height: 350px;
+}
+
+/* Forecast sections */
+.forecast-section {
+    margin-bottom: 24px;
+}
+
+.forecast-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    padding: 0 4px;
+}
+
+.forecast-header h3 {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #cccccc;
+    margin: 0;
+}
+
+.location-select {
+    padding: 6px 12px;
+    background: #1a1a1a;
+    border: 1px solid #333333;
+    border-radius: 6px;
+    color: #ffffff;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.location-select:focus {
+    outline: none;
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+}
+
+.location-select option {
+    background: #1a1a1a;
+    color: #ffffff;
+}
+
+/* Market summary cards */
+.market-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.market-card {
+    background: #111111;
+    border: 1px solid #333333;
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.market-card .card-label {
+    font-size: 0.85rem;
+    color: #999999;
+    margin-bottom: 8px;
+}
+
+.market-card .card-value {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: #ffffff;
+    line-height: 1.2;
+}
+
+.market-card .card-unit {
+    font-size: 0.85rem;
+    color: #666666;
+    margin-top: 4px;
+}
+
+.market-card .card-detail {
+    font-size: 0.8rem;
+    color: #666666;
+    margin-top: 8px;
+}
+
 /* Loading Indicator */
 .loading-indicator {
     position: absolute;
@@ -639,6 +724,20 @@ body {
     .tab-btn {
         padding: 8px 14px;
         font-size: 0.85rem;
+    }
+
+    .forecast-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .location-select {
+        width: 100%;
+    }
+
+    .chart-area-sm {
+        height: 280px;
     }
     
     .live-data-controls {

@@ -60,19 +60,16 @@ export const DATA_SOURCES = {
     // Tab configuration: which data files to load per tab
     tabs: {
         prices: {
-            files: ['energy_price_forecast.json', 'market_proxies.json'],
+            files: ['energy_price_forecast.json'],
         },
-        renewables: {
-            files: ['wind_forecast.json', 'solar_forecast.json'],
+        forecast: {
+            files: ['wind_forecast.json', 'solar_forecast.json', 'weather_forecast_multi_location.json'],
         },
         grid: {
             files: ['grid_imbalance.json', 'cross_border_flows.json', 'load_forecast.json'],
         },
-        weather: {
-            files: ['weather_forecast_multi_location.json'],
-        },
-        gas: {
-            files: ['gas_storage.json', 'gas_flows.json'],
+        market: {
+            files: ['market_proxies.json', 'gas_storage.json', 'gas_flows.json'],
         },
     },
 

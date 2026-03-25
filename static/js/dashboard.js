@@ -13,7 +13,13 @@ import { UIController } from './modules/ui-controller.js';
 import { initWebVitals } from './modules/web-vitals.js';
 import { TabController } from './modules/tab-controller.js';
 import { DataLoader } from './modules/data-loader.js';
-import { processRenewables, processGrid, processWeather, processGas } from './modules/tab-charts.js';
+import {
+    getWindLocations, processWind,
+    getSolarLocations, processSolar,
+    getWeatherLocations, processWeather,
+    processGrid,
+    buildMarketCards, processGasChart,
+} from './modules/tab-charts.js';
 
 /**
  * Main Energy Dashboard class
@@ -261,44 +267,127 @@ class EnergyDashboard {
     }
 
     /**
-     * Handle tab switch — load data and render chart for non-Prices tabs.
-     * @param {string} tabKey
-     * @param {boolean} firstVisit - True if tab has never been opened
+     * Handle tab switch — load data and render for non-Prices tabs.
      */
     async onTabChange(tabKey, firstVisit) {
-        // Prices tab is handled by the existing updateChart flow
         if (tabKey === 'prices') return;
 
         const tabConfig = DATA_SOURCES.tabs[tabKey];
         if (!tabConfig) return;
 
-        const chartEl = this.tabController.getChartElement(tabKey);
-        if (!chartEl) return;
-
-        // Load data on first visit
         if (firstVisit) {
             const files = await this.dataLoader.loadFiles(tabConfig.files);
-            this.renderTabChart(tabKey, chartEl, files);
+            this.forecastFiles = tabKey === 'forecast' ? files : this.forecastFiles;
+
+            if (tabKey === 'forecast') {
+                this.initForecastTab(files);
+            } else if (tabKey === 'grid') {
+                this.renderPlotlyChart('gridChart', processGrid(files));
+            } else if (tabKey === 'market') {
+                this.renderMarketTab(files);
+            }
         }
     }
 
     /**
-     * Render a non-Prices tab chart.
+     * Initialize the Forecast tab with 3 sub-charts and dropdowns.
      */
-    renderTabChart(tabKey, chartEl, files) {
-        const processors = {
-            renewables: processRenewables,
-            grid: processGrid,
-            weather: processWeather,
-            gas: processGas,
-        };
+    initForecastTab(files) {
+        // Wind
+        const windLocs = getWindLocations(files);
+        const windSelect = document.getElementById('wind-location');
+        this.populateSelect(windSelect, windLocs, loc => loc.includes('NL'));
+        windSelect.addEventListener('change', () => {
+            this.renderPlotlyChart('windChart', processWind(files, windSelect.value));
+        });
+        if (windLocs.length > 0) {
+            this.renderPlotlyChart('windChart', processWind(files, windSelect.value));
+        }
 
-        const processor = processors[tabKey];
-        if (!processor) return;
+        // Solar
+        const solarLocs = getSolarLocations(files);
+        const solarSelect = document.getElementById('solar-location');
+        this.populateSelect(solarSelect, solarLocs, loc => loc.includes('NL'));
+        solarSelect.addEventListener('change', () => {
+            this.renderPlotlyChart('solarChart', processSolar(files, solarSelect.value));
+        });
+        if (solarLocs.length > 0) {
+            this.renderPlotlyChart('solarChart', processSolar(files, solarSelect.value));
+        }
 
-        const result = processor(files);
+        // Weather
+        const weatherLocs = getWeatherLocations(files);
+        const weatherSelect = document.getElementById('weather-location');
+        this.populateSelect(weatherSelect, weatherLocs, loc => loc.includes('NL'));
+        weatherSelect.addEventListener('change', () => {
+            this.renderPlotlyChart('weatherChart', processWeather(files, weatherSelect.value));
+        });
+        if (weatherLocs.length > 0) {
+            this.renderPlotlyChart('weatherChart', processWeather(files, weatherSelect.value));
+        }
+    }
+
+    /**
+     * Populate a select element with locations, NL first.
+     */
+    populateSelect(select, locations, isPreferred) {
+        select.innerHTML = '';
+        const preferred = locations.filter(isPreferred);
+        const others = locations.filter(l => !isPreferred(l));
+
+        if (preferred.length > 0 && others.length > 0) {
+            const nlGroup = document.createElement('optgroup');
+            nlGroup.label = 'Netherlands';
+            preferred.forEach(loc => {
+                nlGroup.appendChild(new Option(loc.replace(/_/g, ' '), loc));
+            });
+            select.appendChild(nlGroup);
+
+            const otherGroup = document.createElement('optgroup');
+            otherGroup.label = 'International';
+            others.forEach(loc => {
+                otherGroup.appendChild(new Option(loc.replace(/_/g, ' '), loc));
+            });
+            select.appendChild(otherGroup);
+        } else {
+            locations.forEach(loc => {
+                select.appendChild(new Option(loc.replace(/_/g, ' '), loc));
+            });
+        }
+    }
+
+    /**
+     * Render the Market tab: summary cards + small gas chart.
+     */
+    renderMarketTab(files) {
+        const cards = buildMarketCards(files);
+        const container = document.getElementById('marketCards');
+        if (cards.length > 0) {
+            container.innerHTML = cards.map(c => `
+                <div class="market-card">
+                    <div class="card-label">${c.label}</div>
+                    <div class="card-value">${c.value}</div>
+                    <div class="card-unit">${c.unit}</div>
+                    ${c.detail ? `<div class="card-detail">${c.detail}</div>` : ''}
+                </div>
+            `).join('');
+        } else {
+            container.innerHTML = '<p style="color:#999;text-align:center;padding:20px;">No market data available.</p>';
+        }
+
+        // Small gas storage chart below cards
+        this.renderPlotlyChart('gasChart', processGasChart(files));
+    }
+
+    /**
+     * Render a Plotly chart into an element from a processor result.
+     */
+    renderPlotlyChart(elementId, result) {
+        const chartEl = document.getElementById(elementId);
+        if (!chartEl) return;
+
         if (!result.traces || result.traces.length === 0) {
-            chartEl.innerHTML = '<p style="color:#999;text-align:center;padding:40px;">No data available for this tab.</p>';
+            chartEl.innerHTML = '<p style="color:#999;text-align:center;padding:40px;">No data available.</p>';
             return;
         }
 
@@ -324,7 +413,7 @@ class EnergyDashboard {
                 xanchor: 'center',
                 x: 0.5,
             },
-            margin: { l: 60, r: hasSecondAxis ? 80 : 30, t: 40, b: 50 },
+            margin: { l: 60, r: hasSecondAxis ? 80 : 30, t: 30, b: 50 },
             hovermode: 'x unified',
         };
 
@@ -342,12 +431,10 @@ class EnergyDashboard {
             modeBarButtonsToRemove: ['lasso2d', 'select2d'],
         };
 
-        // Clear loading fallback
         const fallback = chartEl.querySelector('.chart-loading-fallback');
         if (fallback) fallback.remove();
 
         Plotly.newPlot(chartEl, result.traces, layout, config);
-        this.tabCharts[tabKey] = true;
     }
 
     /**

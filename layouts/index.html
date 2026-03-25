@@ -7,13 +7,13 @@
 
     <nav class="tab-nav" role="tablist" aria-label="Dashboard views">
         <button class="tab-btn active" role="tab" data-tab="prices" aria-selected="true" aria-controls="panel-prices">Prices</button>
-        <button class="tab-btn" role="tab" data-tab="renewables" aria-selected="false" aria-controls="panel-renewables">Renewables</button>
+        <button class="tab-btn" role="tab" data-tab="forecast" aria-selected="false" aria-controls="panel-forecast">Forecast</button>
         <button class="tab-btn" role="tab" data-tab="grid" aria-selected="false" aria-controls="panel-grid">Grid</button>
-        <button class="tab-btn" role="tab" data-tab="weather" aria-selected="false" aria-controls="panel-weather">Weather</button>
-        <button class="tab-btn" role="tab" data-tab="gas" aria-selected="false" aria-controls="panel-gas">Gas &amp; Storage</button>
+        <button class="tab-btn" role="tab" data-tab="market" aria-selected="false" aria-controls="panel-market">Market</button>
     </nav>
 
     <div class="tab-panels">
+        <!-- Prices: today + tomorrow -->
         <div class="tab-panel active" id="panel-prices" role="tabpanel">
             <div class="chart-container">
                 <div id="energyChart">
@@ -28,17 +28,40 @@
             </div>
         </div>
 
-        <div class="tab-panel" id="panel-renewables" role="tabpanel">
-            <div class="chart-container">
-                <div id="renewablesChart" class="chart-area">
-                    <div class="chart-loading-fallback">
-                        <div class="loading-spinner"></div>
-                        <p>Loading renewables data...</p>
-                    </div>
+        <!-- Forecast: 7-10 day outlook (wind, solar, weather) -->
+        <div class="tab-panel" id="panel-forecast" role="tabpanel">
+            <div class="forecast-section">
+                <div class="forecast-header">
+                    <h3>Offshore Wind Speed (10-day)</h3>
+                    <select id="wind-location" class="location-select" aria-label="Wind farm location"></select>
+                </div>
+                <div class="chart-container">
+                    <div id="windChart" class="chart-area"></div>
+                </div>
+            </div>
+
+            <div class="forecast-section">
+                <div class="forecast-header">
+                    <h3>Solar Irradiance (7-day)</h3>
+                    <select id="solar-location" class="location-select" aria-label="Solar location"></select>
+                </div>
+                <div class="chart-container">
+                    <div id="solarChart" class="chart-area"></div>
+                </div>
+            </div>
+
+            <div class="forecast-section">
+                <div class="forecast-header">
+                    <h3>Weather (10-day)</h3>
+                    <select id="weather-location" class="location-select" aria-label="Weather location"></select>
+                </div>
+                <div class="chart-container">
+                    <div id="weatherChart" class="chart-area"></div>
                 </div>
             </div>
         </div>
 
+        <!-- Grid: yesterday's operational data -->
         <div class="tab-panel" id="panel-grid" role="tabpanel">
             <div class="chart-container">
                 <div id="gridChart" class="chart-area">
@@ -50,25 +73,16 @@
             </div>
         </div>
 
-        <div class="tab-panel" id="panel-weather" role="tabpanel">
-            <div class="chart-container">
-                <div id="weatherChart" class="chart-area">
-                    <div class="chart-loading-fallback">
-                        <div class="loading-spinner"></div>
-                        <p>Loading weather data...</p>
-                    </div>
+        <!-- Market: slow-moving context -->
+        <div class="tab-panel" id="panel-market" role="tabpanel">
+            <div id="marketCards" class="market-cards">
+                <div class="chart-loading-fallback">
+                    <div class="loading-spinner"></div>
+                    <p>Loading market data...</p>
                 </div>
             </div>
-        </div>
-
-        <div class="tab-panel" id="panel-gas" role="tabpanel">
             <div class="chart-container">
-                <div id="gasChart" class="chart-area">
-                    <div class="chart-loading-fallback">
-                        <div class="loading-spinner"></div>
-                        <p>Loading gas &amp; storage data...</p>
-                    </div>
-                </div>
+                <div id="gasChart" class="chart-area chart-area-sm"></div>
             </div>
         </div>
     </div>
