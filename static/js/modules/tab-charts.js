@@ -6,7 +6,6 @@
 
 import { addNoise } from './noise.js';
 
-// Color palette for consistent styling across tabs
 const COLORS = {
     blue: '#60a5fa',
     green: '#10b981',
@@ -21,202 +20,288 @@ const COLORS = {
 };
 
 /**
- * Extract datasets from a data file (schema v2.1).
- * Returns array of { key, metadata, data } for each dataset in the file.
- */
-function extractDatasets(fileData) {
-    if (!fileData || typeof fileData !== 'object') return [];
-    const datasets = [];
-    for (const [key, value] of Object.entries(fileData)) {
-        if (key === 'version') continue;
-        if (value && typeof value === 'object' && value.data) {
-            datasets.push({ key, metadata: value.metadata || {}, data: value.data });
-        }
-    }
-    return datasets;
-}
-
-/**
- * Convert a dataset's data object into sorted x/y arrays with noise.
- */
-function datasetToXY(data) {
-    const entries = Object.entries(data)
-        .map(([ts, val]) => ({ ts, val: typeof val === 'number' ? addNoise(val) : val }))
-        .filter(d => typeof d.val === 'number')
-        .sort((a, b) => new Date(a.ts) - new Date(b.ts));
-    return {
-        x: entries.map(d => d.ts),
-        y: entries.map(d => d.val),
-    };
-}
-
-/**
  * Create a standard line trace.
  */
-function lineTrace(name, xy, color, opts = {}) {
+function lineTrace(name, x, y, color, unit = '') {
     return {
-        x: xy.x,
-        y: xy.y,
+        x, y,
         type: 'scatter',
         mode: 'lines',
         name,
-        line: { width: 2, color, ...opts.line },
-        hovertemplate: `<b>${name}</b><br>%{x}<br>%{y:.2f} ${opts.unit || ''}<extra></extra>`,
-        ...opts.extra,
+        line: { width: 2, color },
+        hovertemplate: `<b>${name}</b><br>%{x}<br>%{y:.2f} ${unit}<extra></extra>`,
     };
+}
+
+/**
+ * Extract time series from a nested object: { timestamp: { field: value } }
+ * Returns sorted { x, y } for a specific field.
+ */
+function fieldTimeSeries(data, field) {
+    const entries = Object.entries(data)
+        .filter(([, obj]) => obj && typeof obj === 'object' && typeof obj[field] === 'number')
+        .map(([ts, obj]) => ({ ts, val: addNoise(obj[field]) }))
+        .sort((a, b) => new Date(a.ts) - new Date(b.ts));
+    return { x: entries.map(d => d.ts), y: entries.map(d => d.val) };
+}
+
+/**
+ * Extract time series from { timestamp: number }
+ */
+function simpleTimeSeries(data) {
+    const entries = Object.entries(data)
+        .filter(([, v]) => typeof v === 'number')
+        .map(([ts, v]) => ({ ts, val: addNoise(v) }))
+        .sort((a, b) => new Date(a.ts) - new Date(b.ts));
+    return { x: entries.map(d => d.ts), y: entries.map(d => d.val) };
 }
 
 // ── Renewables ──────────────────────────────────────────────
+// wind_forecast.json: { version, entsoe_wind_generation: { metadata, data: { NL: { ts: {wind_total, ...} }, ... } }, offshore_wind: ... }
+// solar_forecast.json: { metadata, data: { location: { ts: {fields} } } }
+// generation_forecast.json: { metadata, data: ... }
 
 export function processRenewables(files) {
     const traces = [];
-    const colorMap = {
-        wind: COLORS.blue,
-        solar: COLORS.amber,
-        generation: COLORS.green,
-    };
-    const fileMap = {
-        'wind_forecast.json': { label: 'Wind', color: colorMap.wind },
-        'solar_forecast.json': { label: 'Solar', color: colorMap.solar },
-        'generation_forecast.json': { label: 'Generation', color: colorMap.generation },
-    };
 
-    for (const [filename, cfg] of Object.entries(fileMap)) {
-        const fileData = files[filename];
-        if (!fileData) continue;
-        const datasets = extractDatasets(fileData);
-        datasets.forEach((ds, i) => {
-            const xy = datasetToXY(ds.data);
-            if (xy.x.length === 0) return;
-            const unit = ds.metadata.units || 'MW';
-            const name = datasets.length > 1 ? `${cfg.label} (${ds.key})` : cfg.label;
-            traces.push(lineTrace(name, xy, cfg.color, { unit, line: { width: i === 0 ? 2 : 1 } }));
-        });
-    }
+    // Wind: show NL wind_total from entsoe_wind_generation
+    const wind = files['wind_forecast.json'];
+    if (wind) {
+        // Schema v2.0: datasets under named keys
+        for (const [dsKey, dsVal] of Object.entries(wind)) {
+            if (dsKey === 'version' || typeof dsVal !== 'object' || !dsVal.data) continue;
+            const nlData = dsVal.data['NL'] || dsVal.data[Object.keys(dsVal.data)[0]];
+            if (!nlData) continue;
 
-    return {
-        traces,
-        layout: {
-            yaxis: { title: 'Generation (MW)' },
-        },
-    };
-}
-
-// ── Grid ────────────────────────────────────────────────────
-
-export function processGrid(files) {
-    const traces = [];
-    const configs = [
-        { file: 'grid_imbalance.json', label: 'Imbalance', color: COLORS.red },
-        { file: 'cross_border_flows.json', label: 'Cross-border', color: COLORS.cyan },
-        { file: 'load_forecast.json', label: 'Load', color: COLORS.purple },
-    ];
-
-    for (const cfg of configs) {
-        const fileData = files[cfg.file];
-        if (!fileData) continue;
-        const datasets = extractDatasets(fileData);
-        datasets.forEach(ds => {
-            const xy = datasetToXY(ds.data);
-            if (xy.x.length === 0) return;
-            const unit = ds.metadata.units || 'MW';
-            const name = datasets.length > 1 ? `${cfg.label} (${ds.key})` : cfg.label;
-            traces.push(lineTrace(name, xy, cfg.color, { unit }));
-        });
-    }
-
-    return {
-        traces,
-        layout: {
-            yaxis: { title: 'MW' },
-        },
-    };
-}
-
-// ── Weather ─────────────────────────────────────────────────
-
-export function processWeather(files, selectedLocation = null) {
-    const traces = [];
-    const fileData = files['weather_forecast_multi_location.json'];
-    if (!fileData) return { traces, layout: {}, locations: [] };
-
-    const datasets = extractDatasets(fileData);
-    const locations = datasets.map(ds => ds.key);
-
-    // Pick a default location (De Bilt is the Dutch reference station)
-    const location = selectedLocation || locations.find(l => l.toLowerCase().includes('bilt')) || locations[0];
-    const ds = datasets.find(d => d.key === location);
-
-    if (ds) {
-        // Weather data may have nested objects per timestamp (temp, wind, etc.)
-        // or simple numeric values. Handle both.
-        const firstValue = Object.values(ds.data)[0];
-
-        if (typeof firstValue === 'object' && firstValue !== null) {
-            // Nested: { timestamp: { temperature: X, wind_speed: Y, ... } }
-            const fields = Object.keys(firstValue).filter(k => typeof firstValue[k] === 'number');
-            const fieldColors = [COLORS.red, COLORS.blue, COLORS.amber, COLORS.green, COLORS.purple];
-
-            fields.forEach((field, i) => {
-                const entries = Object.entries(ds.data)
-                    .map(([ts, obj]) => ({ ts, val: typeof obj[field] === 'number' ? addNoise(obj[field]) : null }))
-                    .filter(d => d.val !== null)
-                    .sort((a, b) => new Date(a.ts) - new Date(b.ts));
-
-                if (entries.length > 0) {
-                    traces.push(lineTrace(
-                        field.replace(/_/g, ' '),
-                        { x: entries.map(d => d.ts), y: entries.map(d => d.val) },
-                        fieldColors[i % fieldColors.length],
-                        { unit: '' }
-                    ));
+            const firstVal = Object.values(nlData)[0];
+            if (typeof firstVal === 'object' && firstVal !== null) {
+                // Pick wind_total if available, otherwise first numeric field
+                const field = 'wind_total' in firstVal ? 'wind_total' :
+                    Object.keys(firstVal).find(k => typeof firstVal[k] === 'number');
+                if (field) {
+                    const xy = fieldTimeSeries(nlData, field);
+                    if (xy.x.length > 0) {
+                        const label = dsKey.replace(/_/g, ' ').replace(/entsoe /i, '');
+                        traces.push(lineTrace(label, xy.x, xy.y, COLORS.blue, 'MW'));
+                    }
                 }
-            });
-        } else {
-            // Simple numeric: { timestamp: value }
-            const xy = datasetToXY(ds.data);
-            if (xy.x.length > 0) {
-                traces.push(lineTrace(location, xy, COLORS.red, { unit: ds.metadata.units || '' }));
             }
         }
     }
 
+    // Solar: { metadata, data: { location: { ts: {fields} } } }
+    const solar = files['solar_forecast.json'];
+    if (solar && solar.data) {
+        // Pick a NL location
+        const locKey = Object.keys(solar.data).find(k => k.includes('NL')) || Object.keys(solar.data)[0];
+        if (locKey) {
+            const locData = solar.data[locKey];
+            const firstVal = Object.values(locData)[0];
+            if (typeof firstVal === 'object' && firstVal !== null) {
+                const field = 'solar_irradiance' in firstVal ? 'solar_irradiance' :
+                    Object.keys(firstVal).find(k => typeof firstVal[k] === 'number');
+                if (field) {
+                    const xy = fieldTimeSeries(locData, field);
+                    if (xy.x.length > 0) {
+                        traces.push(lineTrace(`Solar (${locKey})`, xy.x, xy.y, COLORS.amber, 'W/m²'));
+                    }
+                }
+            }
+        }
+    }
+
+    // Generation forecast
+    const gen = files['generation_forecast.json'];
+    if (gen && gen.data) {
+        const dataSection = gen.data;
+        // Could be { country: { ts: {fields} } } or { ts: value }
+        const firstKey = Object.keys(dataSection)[0];
+        const firstVal = dataSection[firstKey];
+        if (typeof firstVal === 'object' && !Array.isArray(firstVal)) {
+            // Nested by country or by timestamp
+            const isTimestamp = /^\d{4}-\d{2}/.test(firstKey);
+            if (isTimestamp) {
+                // { ts: { fields } }
+                const field = Object.keys(firstVal).find(k => typeof firstVal[k] === 'number');
+                if (field) {
+                    const xy = fieldTimeSeries(dataSection, field);
+                    if (xy.x.length > 0) traces.push(lineTrace('Generation', xy.x, xy.y, COLORS.green, 'MW'));
+                }
+            } else {
+                // { country: { ts: ... } }
+                const nlData = dataSection['NL'] || dataSection[firstKey];
+                const innerFirst = Object.values(nlData)[0];
+                if (typeof innerFirst === 'number') {
+                    const xy = simpleTimeSeries(nlData);
+                    if (xy.x.length > 0) traces.push(lineTrace('Generation (NL)', xy.x, xy.y, COLORS.green, 'MW'));
+                } else if (typeof innerFirst === 'object') {
+                    const field = Object.keys(innerFirst).find(k => typeof innerFirst[k] === 'number');
+                    if (field) {
+                        const xy = fieldTimeSeries(nlData, field);
+                        if (xy.x.length > 0) traces.push(lineTrace('Generation (NL)', xy.x, xy.y, COLORS.green, 'MW'));
+                    }
+                }
+            }
+        }
+    }
+
+    return { traces, layout: { yaxis: { title: 'MW' } } };
+}
+
+// ── Grid ────────────────────────────────────────────────────
+// grid_imbalance.json: { metadata, data: { imbalance_price: { ts: val }, balance_delta: { ts: val } } }
+// cross_border_flows.json: { metadata, data: { flows: { ts: { border: val } }, summary: ... } }
+// load_forecast.json: { metadata, data: { NL: { ts: { load_forecast: val, ... } }, ... } }
+
+export function processGrid(files) {
+    const traces = [];
+    const colorCycle = [COLORS.red, COLORS.blue, COLORS.cyan, COLORS.purple, COLORS.green, COLORS.amber];
+    let colorIdx = 0;
+
+    // Grid imbalance: { data: { series_name: { ts: value } } }
+    const imbalance = files['grid_imbalance.json'];
+    if (imbalance && imbalance.data) {
+        for (const [series, tsData] of Object.entries(imbalance.data)) {
+            if (typeof tsData !== 'object') continue;
+            const firstVal = Object.values(tsData)[0];
+            if (typeof firstVal === 'number') {
+                const xy = simpleTimeSeries(tsData);
+                if (xy.x.length > 0) {
+                    traces.push(lineTrace(series.replace(/_/g, ' '), xy.x, xy.y, colorCycle[colorIdx++ % colorCycle.length], imbalance.metadata?.units || ''));
+                }
+            }
+        }
+    }
+
+    // Cross-border flows: { data: { flows: { ts: { border: val } } } }
+    const flows = files['cross_border_flows.json'];
+    if (flows && flows.data && flows.data.flows) {
+        const flowData = flows.data.flows;
+        const firstTs = Object.values(flowData)[0];
+        if (firstTs && typeof firstTs === 'object') {
+            // Show top NL borders
+            const borders = Object.keys(firstTs).filter(b => b.includes('NL'));
+            borders.slice(0, 4).forEach(border => {
+                const xy = fieldTimeSeries(flowData, border);
+                if (xy.x.length > 0) {
+                    traces.push(lineTrace(border, xy.x, xy.y, colorCycle[colorIdx++ % colorCycle.length], 'MW'));
+                }
+            });
+        }
+    }
+
+    // Load forecast: { data: { NL: { ts: { load_forecast: val } } } }
+    const load = files['load_forecast.json'];
+    if (load && load.data) {
+        const nlData = load.data['NL'] || load.data[Object.keys(load.data)[0]];
+        if (nlData) {
+            const firstVal = Object.values(nlData)[0];
+            if (typeof firstVal === 'object') {
+                const field = 'load_forecast' in firstVal ? 'load_forecast' :
+                    Object.keys(firstVal).find(k => typeof firstVal[k] === 'number');
+                if (field) {
+                    const xy = fieldTimeSeries(nlData, field);
+                    if (xy.x.length > 0) traces.push(lineTrace('Load Forecast (NL)', xy.x, xy.y, COLORS.purple, 'MW'));
+                }
+            }
+        }
+    }
+
+    return { traces, layout: { yaxis: { title: 'MW / EUR' } } };
+}
+
+// ── Weather ─────────────────────────────────────────────────
+// { metadata, data: { location: { ts: { temp, wind, etc } } } }
+
+export function processWeather(files, selectedLocation = null) {
+    const traces = [];
+    const fileData = files['weather_forecast_multi_location.json'];
+    if (!fileData || !fileData.data) return { traces, layout: {}, locations: [] };
+
+    const locations = Object.keys(fileData.data);
+    const location = selectedLocation
+        || locations.find(l => l.toLowerCase().includes('bilt'))
+        || locations.find(l => l.includes('NL'))
+        || locations[0];
+
+    const locData = fileData.data[location];
+    if (!locData) return { traces, layout: {}, locations, selectedLocation: location };
+
+    const firstVal = Object.values(locData)[0];
+    if (typeof firstVal === 'object' && firstVal !== null) {
+        const fields = Object.keys(firstVal).filter(k => typeof firstVal[k] === 'number');
+        const fieldColors = [COLORS.red, COLORS.blue, COLORS.amber, COLORS.green, COLORS.purple, COLORS.cyan];
+
+        // Show key weather fields (limit to avoid clutter)
+        const priorityFields = ['temperature_2m', 'wind_speed_10m', 'solar_irradiance', 'cloud_cover',
+            'temperature', 'wind_speed', 'humidity', 'pressure'];
+        const displayFields = fields.filter(f => priorityFields.some(p => f.includes(p))).slice(0, 5)
+            || fields.slice(0, 5);
+
+        (displayFields.length > 0 ? displayFields : fields.slice(0, 5)).forEach((field, i) => {
+            const xy = fieldTimeSeries(locData, field);
+            if (xy.x.length > 0) {
+                traces.push(lineTrace(
+                    field.replace(/_/g, ' '),
+                    xy.x, xy.y,
+                    fieldColors[i % fieldColors.length],
+                ));
+            }
+        });
+    }
+
     return {
         traces,
-        layout: {
-            yaxis: { title: ds?.metadata?.units || 'Value' },
-        },
+        layout: { yaxis: { title: 'Value' } },
         locations,
         selectedLocation: location,
     };
 }
 
 // ── Gas & Storage ───────────────────────────────────────────
+// gas_storage.json: { metadata, data: { "0": { fill_level_pct, ... }, "1": {...} } } — indexed records
+// gas_flows.json: { metadata, data: { ts: { entry_total_gwh, exit_total_gwh, ... } } }
 
 export function processGas(files) {
     const traces = [];
-    const configs = [
-        { file: 'gas_storage.json', label: 'Gas Storage', color: COLORS.orange },
-        { file: 'gas_flows.json', label: 'Gas Flows', color: COLORS.teal },
-    ];
 
-    for (const cfg of configs) {
-        const fileData = files[cfg.file];
-        if (!fileData) continue;
-        const datasets = extractDatasets(fileData);
-        datasets.forEach(ds => {
-            const xy = datasetToXY(ds.data);
-            if (xy.x.length === 0) return;
-            const unit = ds.metadata.units || '';
-            const name = datasets.length > 1 ? `${cfg.label} (${ds.key})` : cfg.label;
-            traces.push(lineTrace(name, xy, cfg.color, { unit }));
-        });
+    // Gas storage: indexed records, pick fill_level_pct
+    const storage = files['gas_storage.json'];
+    if (storage && storage.data) {
+        const entries = Object.values(storage.data)
+            .filter(d => typeof d === 'object' && typeof d.fill_level_pct === 'number');
+        if (entries.length > 0) {
+            // These are daily records but have no timestamp key — use index as x
+            const x = entries.map((_, i) => `Day ${i + 1}`);
+            const y = entries.map(d => addNoise(d.fill_level_pct));
+            traces.push({
+                x, y,
+                type: 'bar',
+                name: 'Fill Level (%)',
+                marker: { color: COLORS.orange },
+                hovertemplate: '<b>Fill Level</b><br>%{x}<br>%{y:.1f}%<extra></extra>',
+            });
+        }
     }
 
-    return {
-        traces,
-        layout: {
-            yaxis: { title: 'Volume' },
-        },
-    };
+    // Gas flows: { ts: { entry_total_gwh, exit_total_gwh, net_flow_gwh } }
+    const flowsFile = files['gas_flows.json'];
+    if (flowsFile && flowsFile.data) {
+        const firstKey = Object.keys(flowsFile.data)[0];
+        const firstVal = flowsFile.data[firstKey];
+        const isTimestamp = /^\d{4}-\d{2}/.test(firstKey);
+
+        if (isTimestamp && typeof firstVal === 'object') {
+            for (const [field, color] of [['net_flow_gwh', COLORS.teal], ['entry_total_gwh', COLORS.green], ['exit_total_gwh', COLORS.red]]) {
+                if (typeof firstVal[field] === 'number') {
+                    const xy = fieldTimeSeries(flowsFile.data, field);
+                    if (xy.x.length > 0) {
+                        traces.push(lineTrace(field.replace(/_/g, ' '), xy.x, xy.y, color, 'GWh'));
+                    }
+                }
+            }
+        }
+    }
+
+    return { traces, layout: { yaxis: { title: 'GWh / %' } } };
 }
