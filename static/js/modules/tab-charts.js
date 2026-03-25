@@ -72,78 +72,51 @@ function resolveNumericValue(val) {
 export function processRenewables(files) {
     const traces = [];
 
-    // Wind: show NL wind_total from entsoe_wind_generation dataset
+    // Wind: show NL onshore + offshore separately (both MW, left Y axis)
     const wind = files['wind_forecast.json'];
     if (wind) {
-        for (const [dsKey, dsVal] of Object.entries(wind)) {
-            if (dsKey === 'version' || typeof dsVal !== 'object' || !dsVal.data) continue;
-            const nlData = dsVal.data['NL'];
-            if (!nlData) continue;
-
-            const firstVal = Object.values(nlData)[0];
-            if (typeof firstVal === 'object' && firstVal !== null) {
-                const field = 'wind_total' in firstVal ? 'wind_total' :
-                    Object.keys(firstVal).find(k => typeof firstVal[k] === 'number');
-                if (field) {
-                    const xy = fieldTimeSeries(nlData, field);
-                    if (xy.x.length > 0) {
-                        const label = dsKey.includes('offshore') ? 'Offshore Wind' : 'Wind Total (NL)';
-                        traces.push(lineTrace(label, xy.x, xy.y, dsKey.includes('offshore') ? COLORS.cyan : COLORS.blue, 'MW'));
-                    }
+        const windGen = wind['entsoe_wind_generation'];
+        if (windGen && windGen.data && windGen.data['NL']) {
+            const nlData = windGen.data['NL'];
+            for (const [field, label, color] of [
+                ['wind_onshore', 'Wind Onshore (NL)', COLORS.blue],
+                ['wind_offshore', 'Wind Offshore (NL)', COLORS.cyan],
+            ]) {
+                const xy = fieldTimeSeries(nlData, field);
+                if (xy.x.length > 0) {
+                    traces.push(lineTrace(label, xy.x, xy.y, color, 'MW'));
                 }
             }
         }
     }
 
-    // Solar: { metadata, data: { location: { ts: { ghi, direct, ... } } } }
+    // Solar GHI on secondary Y axis (W/m² vs MW)
     const solar = files['solar_forecast.json'];
     if (solar && solar.data) {
         const nlLoc = Object.keys(solar.data).find(k => k.includes('NL')) || Object.keys(solar.data)[0];
         if (nlLoc) {
             const locData = solar.data[nlLoc];
-            // Show GHI (global horizontal irradiance) as the primary solar metric
             const xy = fieldTimeSeries(locData, 'ghi');
             if (xy.x.length > 0) {
-                traces.push(lineTrace(`Solar GHI (${nlLoc})`, xy.x, xy.y, COLORS.amber, 'W/m²'));
+                const trace = lineTrace(`Solar GHI (${nlLoc})`, xy.x, xy.y, COLORS.amber, 'W/m²');
+                trace.yaxis = 'y2';
+                traces.push(trace);
             }
         }
     }
 
-    // Generation forecast
-    const gen = files['generation_forecast.json'];
-    if (gen && gen.data) {
-        const data = gen.data;
-        const firstKey = Object.keys(data)[0];
-        if (firstKey) {
-            const firstVal = data[firstKey];
-            const isTimestamp = /^\d{4}-\d{2}/.test(firstKey);
-            if (isTimestamp && typeof firstVal === 'object') {
-                const field = Object.keys(firstVal).find(k => typeof firstVal[k] === 'number');
-                if (field) {
-                    const xy = fieldTimeSeries(data, field);
-                    if (xy.x.length > 0) traces.push(lineTrace('Generation', xy.x, xy.y, COLORS.green, 'MW'));
-                }
-            } else if (!isTimestamp && typeof firstVal === 'object') {
-                // Nested by country
-                const nlData = data['NL'] || data[firstKey];
-                if (nlData) {
-                    const innerFirst = Object.values(nlData)[0];
-                    if (typeof innerFirst === 'number') {
-                        const xy = simpleTimeSeries(nlData);
-                        if (xy.x.length > 0) traces.push(lineTrace('Generation (NL)', xy.x, xy.y, COLORS.green, 'MW'));
-                    } else if (typeof innerFirst === 'object') {
-                        const field = Object.keys(innerFirst).find(k => typeof innerFirst[k] === 'number');
-                        if (field) {
-                            const xy = fieldTimeSeries(nlData, field);
-                            if (xy.x.length > 0) traces.push(lineTrace('Generation (NL)', xy.x, xy.y, COLORS.green, 'MW'));
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    return { traces, layout: { yaxis: { title: 'MW / W/m²' } } };
+    return {
+        traces,
+        layout: {
+            yaxis: { title: 'Wind Generation (MW)' },
+            yaxis2: {
+                title: 'Solar Irradiance (W/m²)',
+                overlaying: 'y',
+                side: 'right',
+                gridcolor: 'rgba(0,0,0,0)',
+            },
+        },
+    };
 }
 
 // ── Grid ────────────────────────────────────────────────────
@@ -263,7 +236,7 @@ export function processWeather(files, selectedLocation = null) {
 export function processGas(files) {
     const traces = [];
 
-    // Gas storage: indexed daily records — derive dates from metadata
+    // Gas storage on left Y axis (%)
     const storage = files['gas_storage.json'];
     if (storage && storage.data) {
         const records = Object.keys(storage.data)
@@ -272,7 +245,6 @@ export function processGas(files) {
             .filter(d => typeof d === 'object' && typeof d.fill_level_pct === 'number');
 
         if (records.length > 0) {
-            // Generate dates from metadata start_time
             const startDate = new Date(storage.metadata?.start_time || Date.now());
             const x = records.map((_, i) => {
                 const d = new Date(startDate);
@@ -284,7 +256,7 @@ export function processGas(files) {
                 x, y,
                 type: 'scatter',
                 mode: 'lines+markers',
-                name: 'Storage Fill Level',
+                name: 'Storage Fill Level (%)',
                 line: { width: 2, color: COLORS.orange },
                 marker: { size: 6, color: COLORS.orange },
                 hovertemplate: '<b>Storage Fill Level</b><br>%{x}<br>%{y:.1f}%<extra></extra>',
@@ -292,7 +264,7 @@ export function processGas(files) {
         }
     }
 
-    // Gas flows: { ts: { entry_total_gwh, exit_total_gwh, net_flow_gwh } }
+    // Gas flows on right Y axis (GWh)
     const flowsFile = files['gas_flows.json'];
     if (flowsFile && flowsFile.data) {
         const firstKey = Object.keys(flowsFile.data)[0];
@@ -309,12 +281,25 @@ export function processGas(files) {
                 if (typeof firstVal[field] === 'number') {
                     const xy = fieldTimeSeries(flowsFile.data, field);
                     if (xy.x.length > 0) {
-                        traces.push(lineTrace(label, xy.x, xy.y, color, 'GWh'));
+                        const trace = lineTrace(label, xy.x, xy.y, color, 'GWh');
+                        trace.yaxis = 'y2';
+                        traces.push(trace);
                     }
                 }
             }
         }
     }
 
-    return { traces, layout: { yaxis: { title: 'GWh / %' } } };
+    return {
+        traces,
+        layout: {
+            yaxis: { title: 'Fill Level (%)' },
+            yaxis2: {
+                title: 'Gas Flow (GWh)',
+                overlaying: 'y',
+                side: 'right',
+                gridcolor: 'rgba(0,0,0,0)',
+            },
+        },
+    };
 }

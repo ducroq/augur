@@ -302,6 +302,7 @@ class EnergyDashboard {
             return;
         }
 
+        const hasSecondAxis = !!result.layout?.yaxis2;
         const layout = {
             paper_bgcolor: '#111111',
             plot_bgcolor: '#111111',
@@ -323,9 +324,17 @@ class EnergyDashboard {
                 xanchor: 'center',
                 x: 0.5,
             },
-            margin: { l: 60, r: 30, t: 40, b: 50 },
+            margin: { l: 60, r: hasSecondAxis ? 80 : 30, t: 40, b: 50 },
             hovermode: 'x unified',
         };
+
+        if (hasSecondAxis) {
+            layout.yaxis2 = {
+                gridcolor: 'rgba(0,0,0,0)',
+                linecolor: '#333333',
+                ...result.layout.yaxis2,
+            };
+        }
 
         const config = {
             responsive: true,
