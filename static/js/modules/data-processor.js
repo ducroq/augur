@@ -5,6 +5,7 @@
 
 import { CONSTANTS, DATA_SOURCES } from './constants.js';
 import { convertUTCToAmsterdam } from './timezone-utils.js';
+import { addNoise } from './noise.js';
 
 /**
  * Process Energy Zero API response data
@@ -148,11 +149,7 @@ export function processEnergyDataForChart(energyData, energyZeroData, cutoffTime
                     }
                 }
 
-                let noisyPrice = price * multiplier;
-                if (noisyPrice !== 0) {
-                    const noisePercent = (Math.random() - 0.5) * CONSTANTS.NOISE_PERCENTAGE;
-                    noisyPrice = noisyPrice * (1 + noisePercent);
-                }
+                const noisyPrice = addNoise(price * multiplier);
 
                 return {
                     datetime: normalizedDatetime,
