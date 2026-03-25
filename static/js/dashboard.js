@@ -418,6 +418,14 @@ class EnergyDashboard {
             },
             margin: { l: 60, r: hasSecondAxis ? 80 : 30, t: 30, b: 50 },
             hovermode: 'x unified',
+            annotations: [{
+                text: 'Data includes ±5% random noise',
+                xref: 'paper', yref: 'paper',
+                x: 1, y: -0.12,
+                showarrow: false,
+                font: { size: 10, color: '#666666' },
+                xanchor: 'right',
+            }],
         };
 
         if (hasSecondAxis) {

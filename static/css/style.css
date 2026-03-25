@@ -42,6 +42,13 @@ body {
     color: #999999;
 }
 
+.noise-disclaimer {
+    font-size: 0.8rem;
+    color: #f59e0b;
+    opacity: 0.8;
+    margin-top: 4px;
+}
+
 .controls {
     display: flex;
     justify-content: center;
