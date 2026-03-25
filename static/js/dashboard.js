@@ -16,8 +16,8 @@ import { DataLoader } from './modules/data-loader.js';
 import {
     getWindLocations, processWind,
     getSolarLocations, processSolar,
-    getWeatherLocations, processWeather,
-    processGrid,
+    getWeatherLocations, processWeatherTemp, processWeatherCloud,
+    processImbalance, processFlows, processLoad,
     buildMarketCards, processGasChart,
 } from './modules/tab-charts.js';
 
@@ -282,7 +282,9 @@ class EnergyDashboard {
             if (tabKey === 'forecast') {
                 this.initForecastTab(files);
             } else if (tabKey === 'grid') {
-                this.renderPlotlyChart('gridChart', processGrid(files));
+                this.renderPlotlyChart('imbalanceChart', processImbalance(files));
+                this.renderPlotlyChart('flowsChart', processFlows(files));
+                this.renderPlotlyChart('loadChart', processLoad(files));
             } else if (tabKey === 'market') {
                 this.renderMarketTab(files);
             }
@@ -315,16 +317,17 @@ class EnergyDashboard {
             this.renderPlotlyChart('solarChart', processSolar(files, solarSelect.value));
         }
 
-        // Weather
+        // Weather (two charts, one dropdown controls both)
         const weatherLocs = getWeatherLocations(files);
         const weatherSelect = document.getElementById('weather-location');
         this.populateSelect(weatherSelect, weatherLocs, loc => loc.includes('NL'));
-        weatherSelect.addEventListener('change', () => {
-            this.renderPlotlyChart('weatherChart', processWeather(files, weatherSelect.value));
-        });
-        if (weatherLocs.length > 0) {
-            this.renderPlotlyChart('weatherChart', processWeather(files, weatherSelect.value));
-        }
+        const renderWeather = () => {
+            const loc = weatherSelect.value;
+            this.renderPlotlyChart('weatherTempChart', processWeatherTemp(files, loc));
+            this.renderPlotlyChart('weatherCloudChart', processWeatherCloud(files, loc));
+        };
+        weatherSelect.addEventListener('change', renderWeather);
+        if (weatherLocs.length > 0) renderWeather();
     }
 
     /**

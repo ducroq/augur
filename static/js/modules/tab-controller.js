@@ -60,8 +60,8 @@ export class TabController {
     getChartElements(tabKey) {
         const map = {
             prices: ['energyChart'],
-            forecast: ['windChart', 'solarChart', 'weatherChart'],
-            grid: ['gridChart'],
+            forecast: ['windChart', 'solarChart', 'weatherTempChart', 'weatherCloudChart'],
+            grid: ['imbalanceChart', 'flowsChart', 'loadChart'],
             market: ['gasChart'],
         };
         return (map[tabKey] || []).map(id => document.getElementById(id)).filter(Boolean);

@@ -127,89 +127,138 @@ export function getWeatherLocations(files) {
     return Object.keys(weather.data);
 }
 
-export function processWeather(files, location) {
+function weatherFieldSeries(locData, field) {
+    const entries = Object.entries(locData)
+        .map(([ts, obj]) => {
+            if (!obj || typeof obj !== 'object') return null;
+            const val = resolveNumericValue(obj[field]);
+            return val !== null ? { ts, val: addNoise(val) } : null;
+        })
+        .filter(Boolean)
+        .sort((a, b) => new Date(a.ts) - new Date(b.ts));
+    return { x: entries.map(d => d.ts), y: entries.map(d => d.val) };
+}
+
+export function processWeatherTemp(files, location) {
     const traces = [];
     const weather = files['weather_forecast_multi_location.json'];
     if (!weather || !weather.data || !weather.data[location]) return { traces, layout: {} };
 
     const locData = weather.data[location];
-    const displayConfig = [
-        { field: 'temperature', label: 'Temperature (°C)', color: COLORS.red },
-        { field: 'wind_speed', label: 'Wind Speed (km/h)', color: COLORS.blue },
-        { field: 'humidity', label: 'Humidity (%)', color: COLORS.cyan },
-        { field: 'cloud_cover', label: 'Cloud Cover (%)', color: COLORS.purple },
-    ];
 
-    for (const cfg of displayConfig) {
-        const entries = Object.entries(locData)
-            .map(([ts, obj]) => {
-                if (!obj || typeof obj !== 'object') return null;
-                const val = resolveNumericValue(obj[cfg.field]);
-                return val !== null ? { ts, val: addNoise(val) } : null;
-            })
-            .filter(Boolean)
-            .sort((a, b) => new Date(a.ts) - new Date(b.ts));
+    // Temperature on left axis
+    const tempXY = weatherFieldSeries(locData, 'temperature');
+    if (tempXY.x.length > 0) traces.push(lineTrace('Temperature', tempXY.x, tempXY.y, COLORS.red, '°C'));
 
-        if (entries.length > 0) {
-            traces.push(lineTrace(cfg.label, entries.map(d => d.ts), entries.map(d => d.val), cfg.color));
-        }
+    // Wind speed on right axis
+    const windXY = weatherFieldSeries(locData, 'wind_speed');
+    if (windXY.x.length > 0) {
+        const trace = lineTrace('Wind Speed', windXY.x, windXY.y, COLORS.blue, 'km/h');
+        trace.yaxis = 'y2';
+        traces.push(trace);
     }
 
-    return { traces, layout: { yaxis: { title: '°C / % / km/h' } } };
+    return {
+        traces,
+        layout: {
+            yaxis: { title: 'Temperature (°C)' },
+            yaxis2: { title: 'Wind Speed (km/h)', overlaying: 'y', side: 'right', gridcolor: 'rgba(0,0,0,0)' },
+        },
+    };
 }
 
-// ── Grid Tab (yesterday) ────────────────────────────────────
-
-export function processGrid(files) {
+export function processWeatherCloud(files, location) {
     const traces = [];
-    const colorCycle = [COLORS.red, COLORS.blue, COLORS.cyan, COLORS.purple, COLORS.green, COLORS.amber];
-    let colorIdx = 0;
+    const weather = files['weather_forecast_multi_location.json'];
+    if (!weather || !weather.data || !weather.data[location]) return { traces, layout: {} };
 
-    // Grid imbalance
+    const locData = weather.data[location];
+
+    const fields = [
+        { field: 'cloud_cover', label: 'Cloud Cover', color: COLORS.purple },
+        { field: 'humidity', label: 'Humidity', color: COLORS.cyan },
+    ];
+
+    for (const cfg of fields) {
+        const xy = weatherFieldSeries(locData, cfg.field);
+        if (xy.x.length > 0) traces.push(lineTrace(cfg.label, xy.x, xy.y, cfg.color, '%'));
+    }
+
+    return { traces, layout: { yaxis: { title: 'Percentage (%)' } } };
+}
+
+// ── Grid Tab (3 separate charts) ────────────────────────────
+
+export function processImbalance(files) {
+    const traces = [];
     const imbalance = files['grid_imbalance.json'];
-    if (imbalance && imbalance.data) {
-        const seriesConfig = {
-            'imbalance_price': { color: COLORS.red, unit: 'EUR/MWh' },
-            'balance_delta': { color: COLORS.blue, unit: 'MW' },
-        };
-        for (const [series, cfg] of Object.entries(seriesConfig)) {
-            const tsData = imbalance.data[series];
-            if (!tsData) continue;
-            const xy = simpleTimeSeries(tsData);
-            if (xy.x.length > 0) {
-                traces.push(lineTrace(series.replace(/_/g, ' '), xy.x, xy.y, cfg.color, cfg.unit));
-            }
+    if (!imbalance || !imbalance.data) return { traces, layout: {} };
+
+    // Balance delta on left axis (MW)
+    const deltaData = imbalance.data['balance_delta'];
+    if (deltaData) {
+        const xy = simpleTimeSeries(deltaData);
+        if (xy.x.length > 0) traces.push(lineTrace('Balance Delta', xy.x, xy.y, COLORS.blue, 'MW'));
+    }
+
+    // Imbalance price on right axis (EUR/MWh)
+    const priceData = imbalance.data['imbalance_price'];
+    if (priceData) {
+        const xy = simpleTimeSeries(priceData);
+        if (xy.x.length > 0) {
+            const trace = lineTrace('Imbalance Price', xy.x, xy.y, COLORS.red, 'EUR/MWh');
+            trace.yaxis = 'y2';
+            traces.push(trace);
         }
     }
 
-    // Cross-border flows
+    return {
+        traces,
+        layout: {
+            yaxis: { title: 'Balance Delta (MW)' },
+            yaxis2: { title: 'Imbalance Price (EUR/MWh)', overlaying: 'y', side: 'right', gridcolor: 'rgba(0,0,0,0)' },
+        },
+    };
+}
+
+export function processFlows(files) {
+    const traces = [];
     const flows = files['cross_border_flows.json'];
-    if (flows && flows.data && flows.data.flows) {
-        const flowData = flows.data.flows;
-        const firstTs = Object.values(flowData)[0];
-        if (firstTs && typeof firstTs === 'object') {
-            const nlBorders = Object.keys(firstTs).filter(b => b.includes('NL')).slice(0, 4);
-            const borderColors = [COLORS.cyan, COLORS.teal, COLORS.purple, COLORS.pink];
-            nlBorders.forEach((border, i) => {
-                const xy = fieldTimeSeries(flowData, border);
-                if (xy.x.length > 0) {
-                    traces.push(lineTrace(border, xy.x, xy.y, borderColors[i % borderColors.length], 'MW'));
-                }
-            });
-        }
-    }
+    if (!flows || !flows.data || !flows.data.flows) return { traces, layout: {} };
 
-    // Load forecast
+    const flowData = flows.data.flows;
+    const firstTs = Object.values(flowData)[0];
+    if (!firstTs || typeof firstTs !== 'object') return { traces, layout: {} };
+
+    const nlBorders = Object.keys(firstTs).filter(b => b.includes('NL'));
+    const borderColors = [COLORS.cyan, COLORS.teal, COLORS.blue, COLORS.purple, COLORS.green, COLORS.amber, COLORS.pink, COLORS.orange, COLORS.red, COLORS.lime];
+    nlBorders.forEach((border, i) => {
+        const xy = fieldTimeSeries(flowData, border);
+        if (xy.x.length > 0) {
+            traces.push(lineTrace(border, xy.x, xy.y, borderColors[i % borderColors.length], 'MW'));
+        }
+    });
+
+    return { traces, layout: { yaxis: { title: 'Flow (MW)' } } };
+}
+
+export function processLoad(files) {
+    const traces = [];
     const load = files['load_forecast.json'];
-    if (load && load.data) {
-        const nlData = load.data['NL'];
-        if (nlData) {
-            const xy = fieldTimeSeries(nlData, 'load_forecast');
-            if (xy.x.length > 0) traces.push(lineTrace('Load Forecast (NL)', xy.x, xy.y, COLORS.green, 'MW'));
-        }
+    if (!load || !load.data || !load.data['NL']) return { traces, layout: {} };
+
+    const nlData = load.data['NL'];
+    const forecastXY = fieldTimeSeries(nlData, 'load_forecast');
+    if (forecastXY.x.length > 0) traces.push(lineTrace('Forecast', forecastXY.x, forecastXY.y, COLORS.blue, 'MW'));
+
+    const actualXY = fieldTimeSeries(nlData, 'load_actual');
+    if (actualXY.x.length > 0) {
+        const trace = lineTrace('Actual', actualXY.x, actualXY.y, COLORS.green, 'MW');
+        trace.line = { width: 2, color: COLORS.green, dash: 'dot' };
+        traces.push(trace);
     }
 
-    return { traces, layout: { yaxis: { title: 'MW / EUR' } } };
+    return { traces, layout: { yaxis: { title: 'Load (MW)' } } };
 }
 
 // ── Market Tab ──────────────────────────────────────────────

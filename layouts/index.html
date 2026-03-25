@@ -52,23 +52,39 @@
 
             <div class="forecast-section">
                 <div class="forecast-header">
-                    <h3>Weather (10-day)</h3>
+                    <h3>Weather — Temperature &amp; Wind (10-day)</h3>
                     <select id="weather-location" class="location-select" aria-label="Weather location"></select>
                 </div>
                 <div class="chart-container">
-                    <div id="weatherChart" class="chart-area"></div>
+                    <div id="weatherTempChart" class="chart-area"></div>
+                </div>
+                <div class="forecast-header" style="margin-top:12px">
+                    <h3>Weather — Cloud Cover &amp; Humidity</h3>
+                </div>
+                <div class="chart-container">
+                    <div id="weatherCloudChart" class="chart-area"></div>
                 </div>
             </div>
         </div>
 
         <!-- Grid: yesterday's operational data -->
         <div class="tab-panel" id="panel-grid" role="tabpanel">
-            <div class="chart-container">
-                <div id="gridChart" class="chart-area">
-                    <div class="chart-loading-fallback">
-                        <div class="loading-spinner"></div>
-                        <p>Loading grid data...</p>
-                    </div>
+            <div class="forecast-section">
+                <div class="forecast-header"><h3>System Imbalance (yesterday)</h3></div>
+                <div class="chart-container">
+                    <div id="imbalanceChart" class="chart-area"></div>
+                </div>
+            </div>
+            <div class="forecast-section">
+                <div class="forecast-header"><h3>Cross-border Flows (yesterday)</h3></div>
+                <div class="chart-container">
+                    <div id="flowsChart" class="chart-area"></div>
+                </div>
+            </div>
+            <div class="forecast-section">
+                <div class="forecast-header"><h3>Load Forecast vs Actual (today+tomorrow)</h3></div>
+                <div class="chart-container">
+                    <div id="loadChart" class="chart-area"></div>
                 </div>
             </div>
         </div>
