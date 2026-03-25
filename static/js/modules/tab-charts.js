@@ -72,31 +72,41 @@ function resolveNumericValue(val) {
 export function processRenewables(files) {
     const traces = [];
 
-    // Wind: show NL onshore + offshore separately (both MW, left Y axis)
     const wind = files['wind_forecast.json'];
     if (wind) {
+        // Offshore wind speed forecast (10-day, left Y axis, m/s)
+        const offshore = wind['offshore_wind'];
+        if (offshore && offshore.data) {
+            const nlFarms = Object.keys(offshore.data).filter(k => k.includes('NL'));
+            const farmColors = [COLORS.blue, COLORS.cyan];
+            nlFarms.forEach((farm, i) => {
+                const xy = fieldTimeSeries(offshore.data[farm], 'wind_speed_80m');
+                if (xy.x.length > 0) {
+                    const label = farm.replace('_NL', '').replace(/([A-Z])/g, ' $1').trim();
+                    traces.push(lineTrace(`${label} wind 80m`, xy.x, xy.y, farmColors[i % farmColors.length], 'm/s'));
+                }
+            });
+        }
+
+        // Actual ENTSO-E generation as context (1 day, right Y axis, MW)
         const windGen = wind['entsoe_wind_generation'];
         if (windGen && windGen.data && windGen.data['NL']) {
-            const nlData = windGen.data['NL'];
-            for (const [field, label, color] of [
-                ['wind_onshore', 'Wind Onshore (NL)', COLORS.blue],
-                ['wind_offshore', 'Wind Offshore (NL)', COLORS.cyan],
-            ]) {
-                const xy = fieldTimeSeries(nlData, field);
-                if (xy.x.length > 0) {
-                    traces.push(lineTrace(label, xy.x, xy.y, color, 'MW'));
-                }
+            const xy = fieldTimeSeries(windGen.data['NL'], 'wind_total');
+            if (xy.x.length > 0) {
+                const trace = lineTrace('Actual Generation (NL)', xy.x, xy.y, COLORS.green, 'MW');
+                trace.yaxis = 'y2';
+                trace.line = { width: 2, color: COLORS.green, dash: 'dot' };
+                traces.push(trace);
             }
         }
     }
 
-    // Solar GHI on secondary Y axis (W/m² vs MW)
+    // Solar GHI on right Y axis alongside generation
     const solar = files['solar_forecast.json'];
     if (solar && solar.data) {
         const nlLoc = Object.keys(solar.data).find(k => k.includes('NL')) || Object.keys(solar.data)[0];
         if (nlLoc) {
-            const locData = solar.data[nlLoc];
-            const xy = fieldTimeSeries(locData, 'ghi');
+            const xy = fieldTimeSeries(solar.data[nlLoc], 'ghi');
             if (xy.x.length > 0) {
                 const trace = lineTrace(`Solar GHI (${nlLoc})`, xy.x, xy.y, COLORS.amber, 'W/m²');
                 trace.yaxis = 'y2';
@@ -108,9 +118,9 @@ export function processRenewables(files) {
     return {
         traces,
         layout: {
-            yaxis: { title: 'Wind Generation (MW)' },
+            yaxis: { title: 'Wind Speed (m/s)' },
             yaxis2: {
-                title: 'Solar Irradiance (W/m²)',
+                title: 'Generation (MW) / Irradiance (W/m²)',
                 overlaying: 'y',
                 side: 'right',
                 gridcolor: 'rgba(0,0,0,0)',
