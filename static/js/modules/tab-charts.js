@@ -19,9 +19,6 @@ const COLORS = {
     teal: '#2dd4bf',
 };
 
-/**
- * Create a standard line trace.
- */
 function lineTrace(name, x, y, color, unit = '') {
     return {
         x, y,
@@ -34,8 +31,7 @@ function lineTrace(name, x, y, color, unit = '') {
 }
 
 /**
- * Extract time series from a nested object: { timestamp: { field: value } }
- * Returns sorted { x, y } for a specific field.
+ * Extract time series from { timestamp: { field: value } } for a specific field.
  */
 function fieldTimeSeries(data, field) {
     const entries = Object.entries(data)
@@ -56,56 +52,59 @@ function simpleTimeSeries(data) {
     return { x: entries.map(d => d.ts), y: entries.map(d => d.val) };
 }
 
+/**
+ * Resolve a nested weather value to a number.
+ * Handles: plain number, { degrees: N }, { distance: N }, { percent: N }, { meanSeaLevelMillibars: N }
+ */
+function resolveNumericValue(val) {
+    if (typeof val === 'number') return val;
+    if (val && typeof val === 'object') {
+        if (typeof val.degrees === 'number') return val.degrees;
+        if (typeof val.distance === 'number') return val.distance;
+        if (typeof val.percent === 'number') return val.percent;
+        if (typeof val.meanSeaLevelMillibars === 'number') return val.meanSeaLevelMillibars;
+    }
+    return null;
+}
+
 // ── Renewables ──────────────────────────────────────────────
-// wind_forecast.json: { version, entsoe_wind_generation: { metadata, data: { NL: { ts: {wind_total, ...} }, ... } }, offshore_wind: ... }
-// solar_forecast.json: { metadata, data: { location: { ts: {fields} } } }
-// generation_forecast.json: { metadata, data: ... }
 
 export function processRenewables(files) {
     const traces = [];
 
-    // Wind: show NL wind_total from entsoe_wind_generation
+    // Wind: show NL wind_total from entsoe_wind_generation dataset
     const wind = files['wind_forecast.json'];
     if (wind) {
-        // Schema v2.0: datasets under named keys
         for (const [dsKey, dsVal] of Object.entries(wind)) {
             if (dsKey === 'version' || typeof dsVal !== 'object' || !dsVal.data) continue;
-            const nlData = dsVal.data['NL'] || dsVal.data[Object.keys(dsVal.data)[0]];
+            const nlData = dsVal.data['NL'];
             if (!nlData) continue;
 
             const firstVal = Object.values(nlData)[0];
             if (typeof firstVal === 'object' && firstVal !== null) {
-                // Pick wind_total if available, otherwise first numeric field
                 const field = 'wind_total' in firstVal ? 'wind_total' :
                     Object.keys(firstVal).find(k => typeof firstVal[k] === 'number');
                 if (field) {
                     const xy = fieldTimeSeries(nlData, field);
                     if (xy.x.length > 0) {
-                        const label = dsKey.replace(/_/g, ' ').replace(/entsoe /i, '');
-                        traces.push(lineTrace(label, xy.x, xy.y, COLORS.blue, 'MW'));
+                        const label = dsKey.includes('offshore') ? 'Offshore Wind' : 'Wind Total (NL)';
+                        traces.push(lineTrace(label, xy.x, xy.y, dsKey.includes('offshore') ? COLORS.cyan : COLORS.blue, 'MW'));
                     }
                 }
             }
         }
     }
 
-    // Solar: { metadata, data: { location: { ts: {fields} } } }
+    // Solar: { metadata, data: { location: { ts: { ghi, direct, ... } } } }
     const solar = files['solar_forecast.json'];
     if (solar && solar.data) {
-        // Pick a NL location
-        const locKey = Object.keys(solar.data).find(k => k.includes('NL')) || Object.keys(solar.data)[0];
-        if (locKey) {
-            const locData = solar.data[locKey];
-            const firstVal = Object.values(locData)[0];
-            if (typeof firstVal === 'object' && firstVal !== null) {
-                const field = 'solar_irradiance' in firstVal ? 'solar_irradiance' :
-                    Object.keys(firstVal).find(k => typeof firstVal[k] === 'number');
-                if (field) {
-                    const xy = fieldTimeSeries(locData, field);
-                    if (xy.x.length > 0) {
-                        traces.push(lineTrace(`Solar (${locKey})`, xy.x, xy.y, COLORS.amber, 'W/m²'));
-                    }
-                }
+        const nlLoc = Object.keys(solar.data).find(k => k.includes('NL')) || Object.keys(solar.data)[0];
+        if (nlLoc) {
+            const locData = solar.data[nlLoc];
+            // Show GHI (global horizontal irradiance) as the primary solar metric
+            const xy = fieldTimeSeries(locData, 'ghi');
+            if (xy.x.length > 0) {
+                traces.push(lineTrace(`Solar GHI (${nlLoc})`, xy.x, xy.y, COLORS.amber, 'W/m²'));
             }
         }
     }
@@ -113,78 +112,75 @@ export function processRenewables(files) {
     // Generation forecast
     const gen = files['generation_forecast.json'];
     if (gen && gen.data) {
-        const dataSection = gen.data;
-        // Could be { country: { ts: {fields} } } or { ts: value }
-        const firstKey = Object.keys(dataSection)[0];
-        const firstVal = dataSection[firstKey];
-        if (typeof firstVal === 'object' && !Array.isArray(firstVal)) {
-            // Nested by country or by timestamp
+        const data = gen.data;
+        const firstKey = Object.keys(data)[0];
+        if (firstKey) {
+            const firstVal = data[firstKey];
             const isTimestamp = /^\d{4}-\d{2}/.test(firstKey);
-            if (isTimestamp) {
-                // { ts: { fields } }
+            if (isTimestamp && typeof firstVal === 'object') {
                 const field = Object.keys(firstVal).find(k => typeof firstVal[k] === 'number');
                 if (field) {
-                    const xy = fieldTimeSeries(dataSection, field);
+                    const xy = fieldTimeSeries(data, field);
                     if (xy.x.length > 0) traces.push(lineTrace('Generation', xy.x, xy.y, COLORS.green, 'MW'));
                 }
-            } else {
-                // { country: { ts: ... } }
-                const nlData = dataSection['NL'] || dataSection[firstKey];
-                const innerFirst = Object.values(nlData)[0];
-                if (typeof innerFirst === 'number') {
-                    const xy = simpleTimeSeries(nlData);
-                    if (xy.x.length > 0) traces.push(lineTrace('Generation (NL)', xy.x, xy.y, COLORS.green, 'MW'));
-                } else if (typeof innerFirst === 'object') {
-                    const field = Object.keys(innerFirst).find(k => typeof innerFirst[k] === 'number');
-                    if (field) {
-                        const xy = fieldTimeSeries(nlData, field);
+            } else if (!isTimestamp && typeof firstVal === 'object') {
+                // Nested by country
+                const nlData = data['NL'] || data[firstKey];
+                if (nlData) {
+                    const innerFirst = Object.values(nlData)[0];
+                    if (typeof innerFirst === 'number') {
+                        const xy = simpleTimeSeries(nlData);
                         if (xy.x.length > 0) traces.push(lineTrace('Generation (NL)', xy.x, xy.y, COLORS.green, 'MW'));
+                    } else if (typeof innerFirst === 'object') {
+                        const field = Object.keys(innerFirst).find(k => typeof innerFirst[k] === 'number');
+                        if (field) {
+                            const xy = fieldTimeSeries(nlData, field);
+                            if (xy.x.length > 0) traces.push(lineTrace('Generation (NL)', xy.x, xy.y, COLORS.green, 'MW'));
+                        }
                     }
                 }
             }
         }
     }
 
-    return { traces, layout: { yaxis: { title: 'MW' } } };
+    return { traces, layout: { yaxis: { title: 'MW / W/m²' } } };
 }
 
 // ── Grid ────────────────────────────────────────────────────
-// grid_imbalance.json: { metadata, data: { imbalance_price: { ts: val }, balance_delta: { ts: val } } }
-// cross_border_flows.json: { metadata, data: { flows: { ts: { border: val } }, summary: ... } }
-// load_forecast.json: { metadata, data: { NL: { ts: { load_forecast: val, ... } }, ... } }
 
 export function processGrid(files) {
     const traces = [];
-    const colorCycle = [COLORS.red, COLORS.blue, COLORS.cyan, COLORS.purple, COLORS.green, COLORS.amber];
-    let colorIdx = 0;
 
-    // Grid imbalance: { data: { series_name: { ts: value } } }
+    // Grid imbalance: { data: { imbalance_price: { ts: val }, balance_delta: { ts: val }, direction: { ts: str } } }
     const imbalance = files['grid_imbalance.json'];
     if (imbalance && imbalance.data) {
-        for (const [series, tsData] of Object.entries(imbalance.data)) {
-            if (typeof tsData !== 'object') continue;
-            const firstVal = Object.values(tsData)[0];
-            if (typeof firstVal === 'number') {
-                const xy = simpleTimeSeries(tsData);
-                if (xy.x.length > 0) {
-                    traces.push(lineTrace(series.replace(/_/g, ' '), xy.x, xy.y, colorCycle[colorIdx++ % colorCycle.length], imbalance.metadata?.units || ''));
-                }
+        const seriesConfig = {
+            'imbalance_price': { color: COLORS.red, unit: 'EUR/MWh' },
+            'balance_delta': { color: COLORS.blue, unit: 'MW' },
+        };
+        for (const [series, cfg] of Object.entries(seriesConfig)) {
+            const tsData = imbalance.data[series];
+            if (!tsData) continue;
+            const xy = simpleTimeSeries(tsData);
+            if (xy.x.length > 0) {
+                traces.push(lineTrace(series.replace(/_/g, ' '), xy.x, xy.y, cfg.color, cfg.unit));
             }
         }
     }
 
-    // Cross-border flows: { data: { flows: { ts: { border: val } } } }
+    // Cross-border flows: { data: { flows: { ts: { "NL→DE": val } } } }
     const flows = files['cross_border_flows.json'];
     if (flows && flows.data && flows.data.flows) {
         const flowData = flows.data.flows;
         const firstTs = Object.values(flowData)[0];
         if (firstTs && typeof firstTs === 'object') {
-            // Show top NL borders
-            const borders = Object.keys(firstTs).filter(b => b.includes('NL'));
-            borders.slice(0, 4).forEach(border => {
+            // Show NL import/export borders
+            const nlBorders = Object.keys(firstTs).filter(b => b.includes('NL')).slice(0, 4);
+            const borderColors = [COLORS.cyan, COLORS.teal, COLORS.purple, COLORS.pink];
+            nlBorders.forEach((border, i) => {
                 const xy = fieldTimeSeries(flowData, border);
                 if (xy.x.length > 0) {
-                    traces.push(lineTrace(border, xy.x, xy.y, colorCycle[colorIdx++ % colorCycle.length], 'MW'));
+                    traces.push(lineTrace(border, xy.x, xy.y, borderColors[i % borderColors.length], 'MW'));
                 }
             });
         }
@@ -193,16 +189,11 @@ export function processGrid(files) {
     // Load forecast: { data: { NL: { ts: { load_forecast: val } } } }
     const load = files['load_forecast.json'];
     if (load && load.data) {
-        const nlData = load.data['NL'] || load.data[Object.keys(load.data)[0]];
+        const nlData = load.data['NL'];
         if (nlData) {
-            const firstVal = Object.values(nlData)[0];
-            if (typeof firstVal === 'object') {
-                const field = 'load_forecast' in firstVal ? 'load_forecast' :
-                    Object.keys(firstVal).find(k => typeof firstVal[k] === 'number');
-                if (field) {
-                    const xy = fieldTimeSeries(nlData, field);
-                    if (xy.x.length > 0) traces.push(lineTrace('Load Forecast (NL)', xy.x, xy.y, COLORS.purple, 'MW'));
-                }
+            const xy = fieldTimeSeries(nlData, 'load_forecast');
+            if (xy.x.length > 0) {
+                traces.push(lineTrace('Load Forecast (NL)', xy.x, xy.y, COLORS.green, 'MW'));
             }
         }
     }
@@ -211,7 +202,7 @@ export function processGrid(files) {
 }
 
 // ── Weather ─────────────────────────────────────────────────
-// { metadata, data: { location: { ts: { temp, wind, etc } } } }
+// { metadata, data: { location: { ts: { temperature: {degrees: N}, humidity: N, ... } } } }
 
 export function processWeather(files, selectedLocation = null) {
     const traces = [];
@@ -227,27 +218,34 @@ export function processWeather(files, selectedLocation = null) {
     const locData = fileData.data[location];
     if (!locData) return { traces, layout: {}, locations, selectedLocation: location };
 
-    const firstVal = Object.values(locData)[0];
-    if (typeof firstVal === 'object' && firstVal !== null) {
-        const fields = Object.keys(firstVal).filter(k => typeof firstVal[k] === 'number');
-        const fieldColors = [COLORS.red, COLORS.blue, COLORS.amber, COLORS.green, COLORS.purple, COLORS.cyan];
+    // Weather fields we want to display, in priority order
+    const displayConfig = [
+        { field: 'temperature', label: 'Temperature (°C)', color: COLORS.red },
+        { field: 'wind_speed', label: 'Wind Speed (km/h)', color: COLORS.blue },
+        { field: 'humidity', label: 'Humidity (%)', color: COLORS.cyan },
+        { field: 'cloud_cover', label: 'Cloud Cover (%)', color: COLORS.purple },
+        { field: 'uv_index', label: 'UV Index', color: COLORS.amber },
+    ];
 
-        // Show key weather fields (limit to avoid clutter)
-        const priorityFields = ['temperature_2m', 'wind_speed_10m', 'solar_irradiance', 'cloud_cover',
-            'temperature', 'wind_speed', 'humidity', 'pressure'];
-        const displayFields = fields.filter(f => priorityFields.some(p => f.includes(p))).slice(0, 5)
-            || fields.slice(0, 5);
+    for (const cfg of displayConfig) {
+        const entries = Object.entries(locData)
+            .map(([ts, obj]) => {
+                if (!obj || typeof obj !== 'object') return null;
+                const raw = obj[cfg.field];
+                const val = resolveNumericValue(raw);
+                return val !== null ? { ts, val: addNoise(val) } : null;
+            })
+            .filter(Boolean)
+            .sort((a, b) => new Date(a.ts) - new Date(b.ts));
 
-        (displayFields.length > 0 ? displayFields : fields.slice(0, 5)).forEach((field, i) => {
-            const xy = fieldTimeSeries(locData, field);
-            if (xy.x.length > 0) {
-                traces.push(lineTrace(
-                    field.replace(/_/g, ' '),
-                    xy.x, xy.y,
-                    fieldColors[i % fieldColors.length],
-                ));
-            }
-        });
+        if (entries.length > 0) {
+            traces.push(lineTrace(
+                cfg.label,
+                entries.map(d => d.ts),
+                entries.map(d => d.val),
+                cfg.color,
+            ));
+        }
     }
 
     return {
@@ -259,27 +257,37 @@ export function processWeather(files, selectedLocation = null) {
 }
 
 // ── Gas & Storage ───────────────────────────────────────────
-// gas_storage.json: { metadata, data: { "0": { fill_level_pct, ... }, "1": {...} } } — indexed records
-// gas_flows.json: { metadata, data: { ts: { entry_total_gwh, exit_total_gwh, ... } } }
+// gas_storage.json: { metadata: { start_time, end_time }, data: { "0": { fill_level_pct, ... } } }
+// gas_flows.json: { metadata, data: { ts: { entry_total_gwh, ... } } }
 
 export function processGas(files) {
     const traces = [];
 
-    // Gas storage: indexed records, pick fill_level_pct
+    // Gas storage: indexed daily records — derive dates from metadata
     const storage = files['gas_storage.json'];
     if (storage && storage.data) {
-        const entries = Object.values(storage.data)
+        const records = Object.keys(storage.data)
+            .sort((a, b) => Number(a) - Number(b))
+            .map(k => storage.data[k])
             .filter(d => typeof d === 'object' && typeof d.fill_level_pct === 'number');
-        if (entries.length > 0) {
-            // These are daily records but have no timestamp key — use index as x
-            const x = entries.map((_, i) => `Day ${i + 1}`);
-            const y = entries.map(d => addNoise(d.fill_level_pct));
+
+        if (records.length > 0) {
+            // Generate dates from metadata start_time
+            const startDate = new Date(storage.metadata?.start_time || Date.now());
+            const x = records.map((_, i) => {
+                const d = new Date(startDate);
+                d.setDate(d.getDate() + i);
+                return d.toISOString().split('T')[0];
+            });
+            const y = records.map(d => addNoise(d.fill_level_pct));
             traces.push({
                 x, y,
-                type: 'bar',
-                name: 'Fill Level (%)',
-                marker: { color: COLORS.orange },
-                hovertemplate: '<b>Fill Level</b><br>%{x}<br>%{y:.1f}%<extra></extra>',
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: 'Storage Fill Level',
+                line: { width: 2, color: COLORS.orange },
+                marker: { size: 6, color: COLORS.orange },
+                hovertemplate: '<b>Storage Fill Level</b><br>%{x}<br>%{y:.1f}%<extra></extra>',
             });
         }
     }
@@ -292,11 +300,16 @@ export function processGas(files) {
         const isTimestamp = /^\d{4}-\d{2}/.test(firstKey);
 
         if (isTimestamp && typeof firstVal === 'object') {
-            for (const [field, color] of [['net_flow_gwh', COLORS.teal], ['entry_total_gwh', COLORS.green], ['exit_total_gwh', COLORS.red]]) {
+            const fieldConfig = [
+                ['net_flow_gwh', 'Net Flow', COLORS.teal],
+                ['entry_total_gwh', 'Entry', COLORS.green],
+                ['exit_total_gwh', 'Exit', COLORS.red],
+            ];
+            for (const [field, label, color] of fieldConfig) {
                 if (typeof firstVal[field] === 'number') {
                     const xy = fieldTimeSeries(flowsFile.data, field);
                     if (xy.x.length > 0) {
-                        traces.push(lineTrace(field.replace(/_/g, ' '), xy.x, xy.y, color, 'GWh'));
+                        traces.push(lineTrace(label, xy.x, xy.y, color, 'GWh'));
                     }
                 }
             }
