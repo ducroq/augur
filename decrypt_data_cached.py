@@ -30,11 +30,25 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configuration
-DATA_SOURCE_URL = 'https://raw.githubusercontent.com/ducroq/energydatahub/main/docs/energy_price_forecast.json'
+BASE_URL = 'https://raw.githubusercontent.com/ducroq/energydatahub/main/docs/'
 OUTPUT_DIR = 'static/data'
-OUTPUT_FILE = 'energy_price_forecast.json'
 CACHE_MAX_AGE_HOURS = 24  # Re-fetch if data is older than this
 METADATA_FILE = 'energy_data_metadata.json'
+
+DATA_FILES = [
+    'energy_price_forecast.json',
+    'weather_forecast_multi_location.json',
+    'wind_forecast.json',
+    'solar_forecast.json',
+    'grid_imbalance.json',
+    'cross_border_flows.json',
+    'load_forecast.json',
+    'generation_forecast.json',
+    'calendar_features.json',
+    'market_proxies.json',
+    'gas_storage.json',
+    'gas_flows.json',
+]
 
 
 def json_serializer(obj):
@@ -237,100 +251,62 @@ def should_skip_decryption(output_path, metadata_path):
     return True
 
 
-def fetch_and_decrypt_energy_data(force_refresh=False):
+def decrypt_single_file(handler, filename, force_refresh=False):
     """
-    Fetch and decrypt energy price forecast data with intelligent caching.
+    Fetch and decrypt a single data file with intelligent caching.
 
     Args:
+        handler (SecureDataHandler): Initialized handler with keys
+        filename (str): Name of the data file to fetch
         force_refresh (bool): Force refresh even if cache is valid
 
     Returns:
         bool: True if successful, False otherwise
     """
+    source_url = BASE_URL + filename
+    output_path = os.path.join(OUTPUT_DIR, filename)
+    metadata_path = os.path.join(OUTPUT_DIR, f'.meta_{filename}')
+
+    # Check if we can skip decryption
+    if not force_refresh and should_skip_decryption(output_path, metadata_path):
+        logger.info(f"  Skipping {filename} - using cached data")
+        return True
+
     try:
-        # Ensure output directory exists
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-        output_path = os.path.join(OUTPUT_DIR, OUTPUT_FILE)
-        metadata_path = os.path.join(OUTPUT_DIR, METADATA_FILE)
-
-        # Check if we can skip decryption
-        if not force_refresh and should_skip_decryption(output_path, metadata_path):
-            logger.info("Skipping decryption - using cached data")
-            return True
-
-        # Get base64-encoded keys from environment variables
-        encryption_key_b64 = os.environ.get('ENCRYPTION_KEY_B64')
-        hmac_key_b64 = os.environ.get('HMAC_KEY_B64')
-
-        logger.info("Validating environment variables...")
-
-        # Validate and decode the keys
-        try:
-            encryption_key = validate_base64_key(encryption_key_b64, 'ENCRYPTION_KEY_B64', expected_length=32)
-            hmac_key = validate_base64_key(hmac_key_b64, 'HMAC_KEY_B64', expected_length=32)
-            logger.info(f"Encryption key validated: {len(encryption_key)} bytes (256-bit)")
-            logger.info(f"HMAC key validated: {len(hmac_key)} bytes (256-bit)")
-        except ValueError as e:
-            logger.error(f"Environment variable validation failed: {e}")
-            return False
-
-        # Initialize SecureDataHandler
-        handler = SecureDataHandler(encryption_key, hmac_key)
-
         # Fetch encrypted data with retry logic
-        logger.info(f"Fetching energy data from {DATA_SOURCE_URL}")
-        encrypted_data = fetch_with_retry(DATA_SOURCE_URL, max_retries=3, initial_delay=2)
+        logger.info(f"  Fetching {filename}...")
+        encrypted_data = fetch_with_retry(source_url, max_retries=3, initial_delay=2)
 
         # Calculate hash of encrypted data
         data_hash = calculate_data_hash(encrypted_data)
 
-        # Check if data has changed (skip this check if force_refresh is True)
+        # Check if data has changed
         metadata = load_metadata(metadata_path)
         previous_hash = metadata.get('data_hash')
 
         if not force_refresh and previous_hash == data_hash and os.path.exists(output_path):
-            logger.info("Remote data unchanged (hash match), using existing decrypted data")
-            # Update metadata timestamp
+            logger.info(f"  {filename} unchanged (hash match)")
             metadata['last_check_time'] = datetime.now()
             save_metadata(metadata_path, metadata)
             return True
 
-        if force_refresh:
-            logger.info(f"Force refresh enabled - re-decrypting data (hash: {data_hash[:16]}...)")
-        elif previous_hash:
-            logger.info(f"Data has changed (hash: {data_hash[:16]}...)")
-        else:
-            logger.info(f"First fetch (hash: {data_hash[:16]}...)")
-
         # Decrypt the data
-        logger.info("Decrypting data...")
+        logger.info(f"  Decrypting {filename}...")
         decrypted = handler.decrypt_and_verify(encrypted_data)
 
         # Save decrypted data
         with open(output_path, 'w') as f:
             json.dump(decrypted, f, indent=2, default=json_serializer)
 
-        logger.info(f"Successfully decrypted and saved energy data to {output_path}")
+        logger.info(f"  ✓ {filename} ({len(encrypted_data)} bytes)")
 
-        # Log data info
-        if isinstance(decrypted, list):
-            logger.info(f"Data contains {len(decrypted)} records")
-        elif isinstance(decrypted, dict):
-            logger.info(f"Data is a dict with keys: {list(decrypted.keys())}")
-            # Log data point counts
-            for key, value in decrypted.items():
-                if isinstance(value, dict) and 'data' in value:
-                    data_points = len(value.get('data', {}))
-                    logger.info(f"  {key}: {data_points} data points")
-
-        # Save metadata
+        # Save per-file metadata
         new_metadata = {
             'last_fetch_time': datetime.now(),
             'last_check_time': datetime.now(),
             'data_hash': data_hash,
             'file_size_bytes': len(encrypted_data),
-            'source_url': DATA_SOURCE_URL,
+            'source_url': source_url,
             'cache_max_age_hours': CACHE_MAX_AGE_HOURS
         }
         save_metadata(metadata_path, new_metadata)
@@ -338,22 +314,80 @@ def fetch_and_decrypt_energy_data(force_refresh=False):
         return True
 
     except Exception as e:
-        logger.error(f"Error in fetch_and_decrypt_energy_data: {e}", exc_info=True)
+        logger.error(f"  ✗ {filename}: {e}")
 
         # If we have cached data, use it as fallback
-        output_path = os.path.join(OUTPUT_DIR, OUTPUT_FILE)
         if os.path.exists(output_path):
             age_hours = get_file_age_hours(output_path)
-            logger.warning(f"Using cached data as fallback (age: {age_hours:.1f}h)")
+            logger.warning(f"  Using cached {filename} as fallback (age: {age_hours:.1f}h)")
             return True
 
         return False
 
 
+def fetch_and_decrypt_all_data(force_refresh=False):
+    """
+    Fetch and decrypt all energy data files with intelligent caching.
+
+    Args:
+        force_refresh (bool): Force refresh even if cache is valid
+
+    Returns:
+        bool: True if at least energy_price_forecast.json succeeded
+    """
+    # Ensure output directory exists
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    # Get base64-encoded keys from environment variables
+    encryption_key_b64 = os.environ.get('ENCRYPTION_KEY_B64')
+    hmac_key_b64 = os.environ.get('HMAC_KEY_B64')
+
+    logger.info("Validating environment variables...")
+
+    try:
+        encryption_key = validate_base64_key(encryption_key_b64, 'ENCRYPTION_KEY_B64', expected_length=32)
+        hmac_key = validate_base64_key(hmac_key_b64, 'HMAC_KEY_B64', expected_length=32)
+        logger.info(f"Encryption key validated: {len(encryption_key)} bytes (256-bit)")
+        logger.info(f"HMAC key validated: {len(hmac_key)} bytes (256-bit)")
+    except ValueError as e:
+        logger.error(f"Environment variable validation failed: {e}")
+        return False
+
+    handler = SecureDataHandler(encryption_key, hmac_key)
+
+    succeeded = []
+    failed = []
+
+    for filename in DATA_FILES:
+        if decrypt_single_file(handler, filename, force_refresh):
+            succeeded.append(filename)
+        else:
+            failed.append(filename)
+
+    logger.info(f"Results: {len(succeeded)} succeeded, {len(failed)} failed")
+    if failed:
+        logger.warning(f"Failed files: {', '.join(failed)}")
+
+    # Save combined metadata
+    metadata_path = os.path.join(OUTPUT_DIR, METADATA_FILE)
+    combined_metadata = {
+        'last_fetch_time': datetime.now(),
+        'files_succeeded': succeeded,
+        'files_failed': failed,
+        'total_files': len(DATA_FILES),
+        'cache_max_age_hours': CACHE_MAX_AGE_HOURS
+    }
+    save_metadata(metadata_path, combined_metadata)
+
+    # Success if at least the primary price file was decrypted
+    return 'energy_price_forecast.json' in succeeded
+
+
 def main():
     """Main function."""
     logger.info("=" * 70)
-    logger.info("Energy Data Decryption (with intelligent caching)")
+    logger.info("Augur Data Decryption (with intelligent caching)")
+    logger.info(f"Fetching {len(DATA_FILES)} data files")
     logger.info("=" * 70)
 
     # Check for force refresh flag
@@ -361,7 +395,7 @@ def main():
     if force_refresh:
         logger.info("Force refresh requested")
 
-    success = fetch_and_decrypt_energy_data(force_refresh=force_refresh)
+    success = fetch_and_decrypt_all_data(force_refresh=force_refresh)
 
     if success:
         logger.info("✓ Energy data ready!")
