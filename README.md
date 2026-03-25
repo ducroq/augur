@@ -104,6 +104,10 @@ augur/
 └── package.json
 ```
 
+## Live Dashboard
+
+**https://energy.jeroenveen.nl/** — Hosted on Netlify, auto-deploys from this repo.
+
 ## Related Projects
 
 - **[energyDataHub](https://github.com/ducroq/energydatahub)** — Data collection backend (18+ API collectors)
