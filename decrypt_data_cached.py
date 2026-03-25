@@ -43,8 +43,6 @@ DATA_FILES = [
     'grid_imbalance.json',
     'cross_border_flows.json',
     'load_forecast.json',
-    'generation_forecast.json',
-    'calendar_features.json',
     'market_proxies.json',
     'gas_storage.json',
     'gas_flows.json',
