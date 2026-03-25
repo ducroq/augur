@@ -5,15 +5,70 @@
         <p class="subtitle">Energy price forecasting for the Netherlands — week-ahead predictions for smart consumption</p>
     </header>
 
-    <div class="chart-container">
-        <div id="energyChart">
-            <!-- Progressive enhancement: show loading state before JS loads -->
-            <div class="chart-loading-fallback">
-                <div class="loading-spinner"></div>
-                <p>Loading energy price data...</p>
-                <noscript>
-                    <p style="color: #ef4444;">JavaScript is required to view this dashboard. Please enable JavaScript in your browser.</p>
-                </noscript>
+    <nav class="tab-nav" role="tablist" aria-label="Dashboard views">
+        <button class="tab-btn active" role="tab" data-tab="prices" aria-selected="true" aria-controls="panel-prices">Prices</button>
+        <button class="tab-btn" role="tab" data-tab="renewables" aria-selected="false" aria-controls="panel-renewables">Renewables</button>
+        <button class="tab-btn" role="tab" data-tab="grid" aria-selected="false" aria-controls="panel-grid">Grid</button>
+        <button class="tab-btn" role="tab" data-tab="weather" aria-selected="false" aria-controls="panel-weather">Weather</button>
+        <button class="tab-btn" role="tab" data-tab="gas" aria-selected="false" aria-controls="panel-gas">Gas &amp; Storage</button>
+    </nav>
+
+    <div class="tab-panels">
+        <div class="tab-panel active" id="panel-prices" role="tabpanel">
+            <div class="chart-container">
+                <div id="energyChart">
+                    <div class="chart-loading-fallback">
+                        <div class="loading-spinner"></div>
+                        <p>Loading energy price data...</p>
+                        <noscript>
+                            <p style="color: #ef4444;">JavaScript is required to view this dashboard. Please enable JavaScript in your browser.</p>
+                        </noscript>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-panel" id="panel-renewables" role="tabpanel">
+            <div class="chart-container">
+                <div id="renewablesChart" class="chart-area">
+                    <div class="chart-loading-fallback">
+                        <div class="loading-spinner"></div>
+                        <p>Loading renewables data...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-panel" id="panel-grid" role="tabpanel">
+            <div class="chart-container">
+                <div id="gridChart" class="chart-area">
+                    <div class="chart-loading-fallback">
+                        <div class="loading-spinner"></div>
+                        <p>Loading grid data...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-panel" id="panel-weather" role="tabpanel">
+            <div class="chart-container">
+                <div id="weatherChart" class="chart-area">
+                    <div class="chart-loading-fallback">
+                        <div class="loading-spinner"></div>
+                        <p>Loading weather data...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-panel" id="panel-gas" role="tabpanel">
+            <div class="chart-container">
+                <div id="gasChart" class="chart-area">
+                    <div class="chart-loading-fallback">
+                        <div class="loading-spinner"></div>
+                        <p>Loading gas &amp; storage data...</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

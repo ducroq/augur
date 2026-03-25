@@ -503,6 +503,69 @@ body {
     font-style: italic;
 }
 
+/* Tab Navigation */
+.tab-nav {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 20px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+}
+
+.tab-nav::-webkit-scrollbar {
+    display: none;
+}
+
+.tab-btn {
+    padding: 10px 20px;
+    background: #1a1a1a;
+    border: 1px solid #333333;
+    border-bottom: 2px solid transparent;
+    border-radius: 8px 8px 0 0;
+    color: #999999;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.tab-btn:hover {
+    color: #cccccc;
+    background: #222222;
+}
+
+.tab-btn.active {
+    color: #ffffff;
+    border-bottom-color: #60a5fa;
+    background: #111111;
+}
+
+.tab-btn:focus-visible {
+    outline: 2px solid #60a5fa;
+    outline-offset: 2px;
+}
+
+/* Tab Panels */
+.tab-panels {
+    position: relative;
+}
+
+.tab-panel {
+    display: none;
+}
+
+.tab-panel.active {
+    display: block;
+}
+
+.chart-area {
+    width: 100%;
+    height: 600px;
+}
+
 /* Loading Indicator */
 .loading-indicator {
     position: absolute;
@@ -568,8 +631,14 @@ body {
         gap: 15px;
     }
     
-    #energyChart {
+    #energyChart,
+    .chart-area {
         height: 400px;
+    }
+
+    .tab-btn {
+        padding: 8px 14px;
+        font-size: 0.85rem;
     }
     
     .live-data-controls {
