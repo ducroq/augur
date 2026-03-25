@@ -1,10 +1,10 @@
 ---
-title: "Energy Price Dashboard"
+title: "Augur - Energy Price Forecasting"
 date: 2025-06-17
 draft: false
 ---
 
-Interactive energy price forecast dashboard showing real-time electricity prices in the Netherlands.
+Energy price forecasting platform for the Netherlands. Week-ahead predictions for smart energy consumption.
 
 Features:
 - Live energy price forecasts

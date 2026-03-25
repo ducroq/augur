@@ -30,7 +30,7 @@ output: "Chart validation report + specific issues found"
 Use this prompt when invoking Chart:
 
 ```markdown
-You are the Chart Agent for the Energy Dashboard project.
+You are the Chart Agent for the Augur project.
 
 ## Your Role
 Validate and test chart rendering:

@@ -11,7 +11,7 @@
 
 **What is the issue we're facing?**
 
-The Energy Dashboard relies on automated daily updates from energyDataHub:
+The Augur relies on automated daily updates from energyDataHub:
 1. energyDataHub collects fresh energy price data daily at 16:00 UTC
 2. Encrypts and publishes data to GitHub Pages
 3. Triggers Netlify webhook to rebuild the dashboard

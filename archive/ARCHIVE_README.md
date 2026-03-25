@@ -1,6 +1,6 @@
 # Archive Directory
 
-This directory contains archived projects and documentation related to the Energy Dashboard.
+This directory contains archived projects and documentation related to Augur.
 
 ## Contents
 
@@ -10,7 +10,7 @@ This directory contains archived projects and documentation related to the Energ
 **Status:** Planning/Research phase only (minimal implementation)
 
 #### What It Was
-A planned real-time data collection backend to complement the Energy Dashboard with:
+A planned real-time data collection backend to complement Augur with:
 - 15-minute interval data collection (GitHub Actions)
 - Grid status monitoring (TenneT, ENTSO-E)
 - Weather correlation data
@@ -18,12 +18,12 @@ A planned real-time data collection backend to complement the Energy Dashboard w
 - Market transparency analysis
 
 #### Why Archived
-The core functionality (Energy Zero API integration) was implemented **directly in energyDataDashboard** client-side code instead of as a separate backend service. The planning documentation remains valuable for:
+The core functionality (Energy Zero API integration) was implemented **directly in Augur** client-side code instead of as a separate backend service. The planning documentation remains valuable for:
 - Understanding the original architecture vision
 - Reference for potential future enhancements
 - Research context for Energy Zero integration decisions
 
-#### Relevant Features Already in energyDataDashboard
+#### Features Already in Augur
 - ✅ Energy Zero API integration (`static/js/modules/api-client.js`)
 - ✅ Multi-source data visualization
 - ✅ Auto-refresh (10-minute intervals)
@@ -36,7 +36,7 @@ The documentation in `energyLiveData/docs/` contains valuable research on:
 - Forecast validation methodologies
 - Market analysis frameworks
 
-These could be incrementally added to energyDataDashboard if needed.
+These could be incrementally added if needed.
 
 ---
 

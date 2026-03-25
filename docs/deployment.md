@@ -1,6 +1,6 @@
 # Deployment Guide
 
-Complete step-by-step guide for deploying the Energy Price Dashboard to Netlify.
+Complete step-by-step guide for deploying Augur to Netlify.
 
 ## Prerequisites
 
@@ -13,8 +13,8 @@ Complete step-by-step guide for deploying the Energy Price Dashboard to Netlify.
 ### Step 1: Fork Repository
 
 ```bash
-git clone https://github.com/yourusername/energyDataDashboard.git
-cd energyDataDashboard
+git clone https://github.com/ducroq/augur.git
+cd augur
 ```
 
 ### Step 2: Install Dependencies
@@ -244,7 +244,7 @@ If deployment causes problems:
 ### Quick Rollback (5 minutes)
 
 ```bash
-cd C:/local_dev/energyDataDashboard
+cd C:/local_dev/augur
 
 # Restore original files
 cp netlify.toml.backup netlify.toml
@@ -306,7 +306,7 @@ Track these over first week:
 
 - **[Optimization Guide](optimization.md)** - Performance and caching details
 - **[Troubleshooting](troubleshooting.md)** - Common issues and solutions
-- **[GitHub Issues](https://github.com/yourusername/energyDataDashboard/issues)** - Report bugs
+- **[GitHub Issues](https://github.com/ducroq/augur/issues)** - Report bugs
 - **[Netlify Documentation](https://docs.netlify.com/)** - Platform documentation
 
 ## Next Steps
@@ -323,4 +323,4 @@ After successful deployment:
 
 **Deployment Status:** Ready for production
 
-**Last Updated:** 2025-10-25
+**Last Updated:** 2026-03-25

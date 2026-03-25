@@ -24,7 +24,7 @@ resources/
 
 # Hugo cache
 .hugo_build.lock
-energyDataDashboard_project_knowledge.md
+augur_project_knowledge.md
 
 # Node.js
 node_modules/

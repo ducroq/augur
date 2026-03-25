@@ -1,6 +1,6 @@
 # Configuration Files
 
-This folder contains configuration files and templates for the Energy Price Dashboard.
+This folder contains configuration files and templates for Augur.
 
 ## Structure
 

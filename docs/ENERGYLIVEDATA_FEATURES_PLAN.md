@@ -2,13 +2,13 @@
 
 **Created:** 2025-11-15
 **Status:** Planning
-**Target:** Incrementally enhance energyDataDashboard with energyLiveData capabilities
+**Target:** Incrementally enhance Augur with energyLiveData capabilities
 
 ---
 
 ## Executive Summary
 
-This document outlines a **phased approach** to integrating valuable energyLiveData features into the existing energyDataDashboard. Rather than building a separate backend service, we'll add features **incrementally** to the current client-side dashboard.
+This document outlines a **phased approach** to integrating valuable energyLiveData features into the existing Augur. Rather than building a separate backend service, we'll add features **incrementally** to the current client-side dashboard.
 
 ### What We Already Have ✅
 - Energy Zero API integration (client-side)

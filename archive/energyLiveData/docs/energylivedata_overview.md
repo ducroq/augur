@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-**energyLiveData** is a real-time energy data collection system designed to complement the existing **energydatahub** (day-ahead forecasts) and **energyDataDashboard** (visualization) projects. The system collects actual energy market data, weather conditions, and environmental metrics at 15-minute intervals, enabling comprehensive forecast validation, market transparency analysis, and real-time monitoring using **Energy Zero** as the consumer pricing data source.
+**energyLiveData** is a real-time energy data collection system designed to complement the existing **energydatahub** (day-ahead forecasts) and **Augur** (visualization) projects. The system collects actual energy market data, weather conditions, and environmental metrics at 15-minute intervals, enabling comprehensive forecast validation, market transparency analysis, and real-time monitoring using **Energy Zero** as the consumer pricing data source.
 
 ## Project Context & Architecture
 
@@ -10,7 +10,7 @@
 ```
 energydatahub (Day-ahead Forecasts)
     ↓ Daily updates
-energyDataDashboard (Visualization)
+Augur (Visualization)
     ↓ User interface
 Academic Research & Energy Optimization
 ```
@@ -29,7 +29,7 @@ Academic Research & Energy Optimization
          └──────────┬────────────┘
                     ▼
         ┌───────────────────────┐
-        │ energyDataDashboard   │
+        │ Augur   │
         │                       │
         │ • Forecast validation │
         │ • Market transparency │
@@ -73,7 +73,7 @@ Academic Research & Energy Optimization
 ### Update Frequency
 - **Collection**: Every 15 minutes
 - **Storage**: Rolling 24-48 hour window
-- **Integration**: Automatic energyDataDashboard updates
+- **Integration**: Automatic Augur updates
 
 ## Technical Architecture
 
@@ -91,7 +91,7 @@ Academic Research & Energy Optimization
 ### Data Flow
 ```
 ENTSO-E → TenneT → Energy Zero → Weather APIs → energyLiveData Collector → 
-Processing & Validation → Encryption → GitHub Pages → energyDataDashboard → User Interface
+Processing & Validation → Encryption → GitHub Pages → Augur → User Interface
 ```
 
 ## Key Features & Capabilities

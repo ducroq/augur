@@ -19,14 +19,14 @@ energyLiveData/
 
 ## Integration Overview
 
-This document outlines how **energyDataDashboard** integrates with **energyLiveData** using **Energy Zero** consumer pricing data to provide comprehensive market visualization, real-time monitoring, and forecast validation capabilities.
+This document outlines how **Augur** integrates with **energyLiveData** using **Energy Zero** consumer pricing data to provide comprehensive market visualization, real-time monitoring, and forecast validation capabilities.
 
 ## Architecture Integration
 
 ### Data Flow Integration
 ```
 energydatahub (Forecasts) ──┐
-                            ├──► energyDataDashboard
+                            ├──► Augur
 energyLiveData (Actual) ────┘
     │
     └── Energy Zero Consumer Pricing
@@ -43,7 +43,7 @@ energyLiveData (Actual) ────┘
 
 ### Dashboard Enhancement Strategy
 ```
-Current energyDataDashboard:
+Current Augur:
 ├── Forecast visualization (static daily updates)
 ├── Price threshold analysis
 └── Basic statistics
@@ -782,7 +782,7 @@ class EnergyZeroRefreshManager {
 
 ### Complete Dashboard Layout
 ```html
-<!-- Enhanced energyDataDashboard layout with Energy Zero integration -->
+<!-- Enhanced Augur layout with Energy Zero integration -->
 <div class="enhanced-dashboard">
     <header class="dashboard-header">
         <h1>Energy Market Dashboard</h1>
@@ -1059,7 +1059,7 @@ class EnergyZeroDataExporter {
 
 ---
 
-*This comprehensive dashboard integration guide provides detailed instructions for enhancing energyDataDashboard with Energy Zero consumer pricing data, creating a powerful platform for market transparency analysis, forecast validation, and real-time energy market monitoring with authentic Dutch consumer pricing insights.*
+*This comprehensive dashboard integration guide provides detailed instructions for enhancing Augur with Energy Zero consumer pricing data, creating a powerful platform for market transparency analysis, forecast validation, and real-time energy market monitoring with authentic Dutch consumer pricing insights.*
         
 ```
 
@@ -1070,7 +1070,7 @@ class EnergyZeroDataExporter {
 
 ## Executive Summary
 
-**energyLiveData** is a real-time energy data collection system designed to complement the existing **energydatahub** (day-ahead forecasts) and **energyDataDashboard** (visualization) projects. The system collects actual energy market data, weather conditions, and environmental metrics at 15-minute intervals, enabling comprehensive forecast validation, market transparency analysis, and real-time monitoring using **Energy Zero** as the consumer pricing data source.
+**energyLiveData** is a real-time energy data collection system designed to complement the existing **energydatahub** (day-ahead forecasts) and **Augur** (visualization) projects. The system collects actual energy market data, weather conditions, and environmental metrics at 15-minute intervals, enabling comprehensive forecast validation, market transparency analysis, and real-time monitoring using **Energy Zero** as the consumer pricing data source.
 
 ## Project Context & Architecture
 
@@ -1078,7 +1078,7 @@ class EnergyZeroDataExporter {
 ```
 energydatahub (Day-ahead Forecasts)
     ↓ Daily updates
-energyDataDashboard (Visualization)
+Augur (Visualization)
     ↓ User interface
 Academic Research & Energy Optimization
 ```
@@ -1097,7 +1097,7 @@ Academic Research & Energy Optimization
          └──────────┬────────────┘
                     ▼
         ┌───────────────────────┐
-        │ energyDataDashboard   │
+        │ Augur   │
         │                       │
         │ • Forecast validation │
         │ • Market transparency │
@@ -1141,7 +1141,7 @@ Academic Research & Energy Optimization
 ### Update Frequency
 - **Collection**: Every 15 minutes
 - **Storage**: Rolling 24-48 hour window
-- **Integration**: Automatic energyDataDashboard updates
+- **Integration**: Automatic Augur updates
 
 ## Technical Architecture
 
@@ -1159,7 +1159,7 @@ Academic Research & Energy Optimization
 ### Data Flow
 ```
 ENTSO-E → TenneT → Energy Zero → Weather APIs → energyLiveData Collector → 
-Processing & Validation → Encryption → GitHub Pages → energyDataDashboard → User Interface
+Processing & Validation → Encryption → GitHub Pages → Augur → User Interface
 ```
 
 ## Key Features & Capabilities

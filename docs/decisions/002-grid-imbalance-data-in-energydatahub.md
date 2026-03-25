@@ -11,15 +11,15 @@
 
 **What is the issue we're facing?**
 
-The Energy Dashboard roadmap includes displaying TenneT grid imbalance data to provide users with:
+The Augur roadmap includes displaying TenneT grid imbalance data to provide users with:
 - Real-time grid health indicators
 - Historical imbalance patterns for predictive analysis
 - Correlation between grid stress and energy price volatility
 
-Initial consideration was to implement grid status as a client-side feature in energyDataDashboard (Feature 1.2 from ENERGYLIVEDATA_FEATURES_PLAN.md). However, this raised the architectural question: **Where should data collection happen?**
+Initial consideration was to implement grid status as a client-side feature in Augur (Feature 1.2 from ENERGYLIVEDATA_FEATURES_PLAN.md). However, this raised the architectural question: **Where should data collection happen?**
 
 **Forces:**
-- energyDataDashboard is a static Hugo site (client-side only, no backend)
+- Augur is a static Hugo site (client-side only, no backend)
 - energyDataHub is already set up for multi-source data collection with robust infrastructure
 - Grid imbalance data has research value (historical analysis, prediction models)
 - Separation of concerns: Data collection vs visualization
@@ -31,12 +31,12 @@ Initial consideration was to implement grid status as a client-side feature in e
 
 **What did we decide?**
 
-We will implement **TenneT grid imbalance data collection in the energyDataHub repository**, not in energyDataDashboard.
+We will implement **TenneT grid imbalance data collection in the energyDataHub repository**, not in Augur.
 
 **Key aspects:**
 - **Data Collection**: energyDataHub adds a new `TennetCollector` using the existing BaseCollector pattern
 - **Publishing**: Grid imbalance data published as encrypted JSON to GitHub Pages (`grid_imbalance.json`)
-- **Visualization**: energyDataDashboard will consume the published data (Phase 2)
+- **Visualization**: Augur will consume the published data (Phase 2)
 - **Reusability**: Any project can consume the grid imbalance endpoint
 
 **Architecture:**
@@ -47,7 +47,7 @@ energyDataHub/collectors/tennet.py
     ↓ (Daily at 16:00 UTC)
 GitHub Pages: grid_imbalance.json (encrypted)
     ↓
-energyDataDashboard/decrypt_data.py
+Augur/decrypt_data.py
     ↓
 Dashboard visualization (secondary Y-axis chart)
 ```
@@ -71,7 +71,7 @@ Dashboard visualization (secondary Y-axis chart)
 
 - **Cross-repo coordination**: Implementation split across two repositories
 - **Build dependency**: Dashboard must wait for energyDataHub to publish data
-- **Deployment complexity**: Two deployment pipelines (energyDataHub GitHub Actions, energyDataDashboard Netlify)
+- **Deployment complexity**: Two deployment pipelines (energyDataHub GitHub Actions, Augur Netlify)
 
 ### Neutral ⚪
 
@@ -85,7 +85,7 @@ Dashboard visualization (secondary Y-axis chart)
 ### Alternative 1: Implement Grid Status Client-Side in Dashboard
 
 **Description:**
-Add a JavaScript module in energyDataDashboard that fetches TenneT data directly from their API in the browser.
+Add a JavaScript module in Augur that fetches TenneT data directly from their API in the browser.
 
 **Pros:**
 - Single repository (simpler coordination)
@@ -101,7 +101,7 @@ Add a JavaScript module in energyDataDashboard that fetches TenneT data directly
 - Performance impact on dashboard load time
 
 **Why rejected:**
-energyDataDashboard is designed as a lightweight visualization layer. Adding data collection responsibilities violates separation of concerns and loses the benefits of the existing robust collection infrastructure.
+Augur is designed as a lightweight visualization layer. Adding data collection responsibilities violates separation of concerns and loses the benefits of the existing robust collection infrastructure.
 
 ### Alternative 2: Create Separate Grid Data Service
 
@@ -133,12 +133,12 @@ Implement in the archived energyLiveData repository (which was originally planne
 
 **Cons:**
 - energyLiveData was never implemented (planning phase only)
-- Archived for a reason (functionality moved to energyDataDashboard/energyDataHub split)
+- Archived for a reason (functionality moved to Augur/energyDataHub split)
 - Would require building from scratch (no BaseCollector infrastructure)
 - Violates the decision to archive it
 
 **Why rejected:**
-energyLiveData was archived because its core functionality (Energy Zero API) was already implemented in the energyDataHub + energyDataDashboard architecture. Adding grid data to energyDataHub follows the established pattern.
+energyLiveData was archived because its core functionality (Energy Zero API) was already implemented in the energyDataHub + Augur architecture. Adding grid data to energyDataHub follows the established pattern.
 
 ---
 
@@ -187,9 +187,9 @@ energyLiveData was archived because its core functionality (Energy Zero API) was
 - ✅ Encrypted data verified
 - ✅ Circuit breaker and retry logic working
 
-### Phase 2: energyDataDashboard Visualization (2-3 days)
+### Phase 2: Augur Visualization (2-3 days)
 
-**Repository**: `energyDataDashboard`
+**Repository**: `Augur`
 
 **Actions** (deferred until Phase 1 complete):
 1. Update `decrypt_data.py` to fetch `grid_imbalance.json`
@@ -202,7 +202,7 @@ energyLiveData was archived because its core functionality (Energy Zero API) was
 **Timeline:**
 - Week 1: energyDataHub implementation
 - Week 2: Verify data collection, deploy
-- Week 3: energyDataDashboard visualization
+- Week 3: Augur visualization
 
 ---
 
@@ -228,8 +228,8 @@ energyLiveData was archived because its core functionality (Energy Zero API) was
 - Data Format: CSV (4-second resolution, hourly aggregation needed)
 - API: Free, no authentication required
 
-**energyDataDashboard:**
-- Repository: https://github.com/ducroq/energyDataDashboard
+**Augur:**
+- Repository: https://github.com/ducroq/Augur
 - Live: https://energy.jeroenveen.nl
 - Decryption: `decrypt_data.py`
 
@@ -246,7 +246,7 @@ This ADR documents the architectural decision. **Implementation will happen in t
 2. **Pattern**: Use BaseCollector (same as other 8 collectors)
 3. **Data source**: TenneT TSO system imbalance (free, no auth)
 4. **Output**: Publish to `grid_imbalance.json` (encrypted)
-5. **Next**: After data is publishing, return to energyDataDashboard for visualization
+5. **Next**: After data is publishing, return to Augur for visualization
 
 **Open questions:**
 - Should we collect 4-second resolution or hourly aggregation? (Recommend hourly for dashboard use case)

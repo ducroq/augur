@@ -29,7 +29,7 @@ output: "Working JavaScript modules + Hugo templates + validation report"
 ## Agent Prompt Template
 
 ```markdown
-You are the Frontend Agent for the Energy Dashboard project.
+You are the Frontend Agent for the Augur project.
 
 ## Your Role
 Build and maintain frontend features:
@@ -317,7 +317,7 @@ hugo server -D
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Energy Price Dashboard</title>
+  <title>Augur - Energy Price Forecasting</title>
   <link rel="stylesheet" href="/css/style.css">
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>

@@ -2,14 +2,14 @@
 
 ## Integration Overview
 
-This document outlines how **energyDataDashboard** integrates with **energyLiveData** using **Energy Zero** consumer pricing data to provide comprehensive market visualization, real-time monitoring, and forecast validation capabilities.
+This document outlines how **Augur** integrates with **energyLiveData** using **Energy Zero** consumer pricing data to provide comprehensive market visualization, real-time monitoring, and forecast validation capabilities.
 
 ## Architecture Integration
 
 ### Data Flow Integration
 ```
 energydatahub (Forecasts) ──┐
-                            ├──► energyDataDashboard
+                            ├──► Augur
 energyLiveData (Actual) ────┘
     │
     └── Energy Zero Consumer Pricing
@@ -26,7 +26,7 @@ energyLiveData (Actual) ────┘
 
 ### Dashboard Enhancement Strategy
 ```
-Current energyDataDashboard:
+Current Augur:
 ├── Forecast visualization (static daily updates)
 ├── Price threshold analysis
 └── Basic statistics
@@ -765,7 +765,7 @@ class EnergyZeroRefreshManager {
 
 ### Complete Dashboard Layout
 ```html
-<!-- Enhanced energyDataDashboard layout with Energy Zero integration -->
+<!-- Enhanced Augur layout with Energy Zero integration -->
 <div class="enhanced-dashboard">
     <header class="dashboard-header">
         <h1>Energy Market Dashboard</h1>
@@ -1042,5 +1042,5 @@ class EnergyZeroDataExporter {
 
 ---
 
-*This comprehensive dashboard integration guide provides detailed instructions for enhancing energyDataDashboard with Energy Zero consumer pricing data, creating a powerful platform for market transparency analysis, forecast validation, and real-time energy market monitoring with authentic Dutch consumer pricing insights.*
+*This comprehensive dashboard integration guide provides detailed instructions for enhancing Augur with Energy Zero consumer pricing data, creating a powerful platform for market transparency analysis, forecast validation, and real-time energy market monitoring with authentic Dutch consumer pricing insights.*
         

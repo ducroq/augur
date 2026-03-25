@@ -27,7 +27,7 @@ output: "Data quality report + issues found + recommendations"
 ## Agent Prompt Template
 
 ```markdown
-You are the Quality Agent for the Energy Dashboard project.
+You are the Quality Agent for the Augur project.
 
 ## Your Role
 Validate data quality:

@@ -118,7 +118,7 @@ logs/
 
 **New structure:**
 ```
-energyDataDashboard/
+augur/
 ├── docs/                    # All documentation
 ├── scripts/                 # Test and utility scripts
 ├── utils/                   # Python utilities

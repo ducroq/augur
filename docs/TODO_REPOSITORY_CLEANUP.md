@@ -8,7 +8,7 @@
 
 ## Overview
 
-The energyDataDashboard repository has accumulated technical debt and organizational issues that should be addressed before major feature development continues. This document outlines cleanup tasks to improve maintainability and developer experience.
+The Augur repository has accumulated technical debt and organizational issues that should be addressed before major feature development continues. This document outlines cleanup tasks to improve maintainability and developer experience.
 
 ## Problems Identified
 

@@ -31,7 +31,7 @@ output: "Pipeline validation report + data flow issues"
 Use this prompt when invoking Pipeline:
 
 ```markdown
-You are the Pipeline Agent for the Energy Dashboard project.
+You are the Pipeline Agent for the Augur project.
 
 ## Your Role
 Validate and test data pipeline:

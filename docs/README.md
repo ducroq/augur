@@ -1,6 +1,6 @@
-# Energy Price Dashboard - Documentation
+# Augur - Documentation
 
-Welcome to the Energy Price Dashboard documentation. This folder contains comprehensive guides for developers, maintainers, and contributors.
+Welcome to the Augur documentation. This folder contains comprehensive guides for developers, maintainers, and contributors.
 
 ## Documentation Structure
 
@@ -27,7 +27,7 @@ Welcome to the Energy Price Dashboard documentation. This folder contains compre
 
 - **Live Dashboard**: [Your Dashboard URL]
 - **Backend Repository**: [Energy Data Hub](https://github.com/ducroq/energydatahub)
-- **Issue Tracker**: [GitHub Issues](https://github.com/yourusername/energyDataDashboard/issues)
+- **Issue Tracker**: [GitHub Issues](https://github.com/ducroq/augur/issues)
 
 ## Documentation Maintenance
 
@@ -36,4 +36,4 @@ This documentation is actively maintained. If you find errors or want to improve
 2. Make your changes
 3. Submit a pull request with clear description
 
-Last updated: 2025-10-25
+Last updated: 2026-03-25

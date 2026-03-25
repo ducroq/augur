@@ -29,7 +29,7 @@ output: "Deployment status report + configuration recommendations"
 Use this prompt when invoking Deploy:
 
 ```markdown
-You are the Deploy Agent for the Energy Dashboard project.
+You are the Deploy Agent for the Augur project.
 
 ## Your Role
 Manage deployments and CI/CD:
@@ -53,7 +53,7 @@ Manage deployments and CI/CD:
 
 ## Deployment Structure
 ```
-Energy Dashboard Pipeline:
+Augur Pipeline:
 1. Developer pushes to GitHub (main branch)
 2. GitHub webhook triggers Netlify build
 3. Netlify runs:

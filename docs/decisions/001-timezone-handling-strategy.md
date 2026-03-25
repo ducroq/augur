@@ -11,7 +11,7 @@
 
 **What is the issue we're facing?**
 
-The Energy Dashboard displays time-series data from multiple sources (Energy Zero API, ENTSO-E forecasts, EPEX, Elspot) that all use different timezone representations. The dashboard serves Dutch users viewing Amsterdam-local energy prices, so all timestamps must be displayed in Europe/Amsterdam timezone (CET/CEST), which automatically switches between UTC+1 (winter) and UTC+2 (summer) for daylight saving time.
+The Augur displays time-series data from multiple sources (Energy Zero API, ENTSO-E forecasts, EPEX, Elspot) that all use different timezone representations. The dashboard serves Dutch users viewing Amsterdam-local energy prices, so all timestamps must be displayed in Europe/Amsterdam timezone (CET/CEST), which automatically switches between UTC+1 (winter) and UTC+2 (summer) for daylight saving time.
 
 The chart's "now" indicator line was showing 1-2 hours off from the actual current time, causing user confusion about which hour's pricing was currently active.
 

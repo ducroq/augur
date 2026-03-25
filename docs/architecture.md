@@ -2,7 +2,7 @@
 
 ## System Overview
 
-The Energy Price Dashboard is a static web application that visualizes real-time energy price forecasts for the Netherlands. The system consists of three main components working together to provide secure, performant data visualization.
+Augur is a static web application that visualizes real-time energy price forecasts for the Netherlands. The system consists of three main components working together to provide secure, performant data visualization.
 
 ## High-Level Architecture
 
@@ -20,7 +20,7 @@ The Energy Price Dashboard is a static web application that visualizes real-time
                      │ (encrypted JSON)
                      │
 ┌────────────────────▼────────────────────────────────────────┐
-│           Energy Data Dashboard (This Repo)                  │
+│           Augur (This Repo)                                   │
 │  Netlify Build (Triggered by webhook)                       │
 │  ├── Fetch encrypted forecast data                          │
 │  ├── Check cache (skip if < 24h old) ⚡                     │
@@ -61,7 +61,7 @@ The Energy Price Dashboard is a static web application that visualizes real-time
 
 ### 2. Build Process (This Repository)
 
-**Location:** This repository (energyDataDashboard)
+**Location:** This repository (augur)
 **Responsibility:** Decrypt data and build static site
 
 **Process:**
@@ -470,5 +470,5 @@ const localTimestamp = new Date(
 
 ---
 
-**Last Updated:** 2025-10-25
+**Last Updated:** 2026-03-25
 **Architecture Version:** 2.0

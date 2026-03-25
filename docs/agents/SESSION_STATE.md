@@ -1,7 +1,7 @@
-# Energy Dashboard - Session State
+# Augur - Session State
 
 **Last Updated:** 2025-11-15 (ADRs Complete, Handoff to energyDataHub)
-**Project:** Energy Price Dashboard - Real-time and forecasted energy prices for the Netherlands
+**Project:** Augur - Energy price forecasting platform for the Netherlands
 
 ---
 
@@ -69,11 +69,11 @@
 10. **Auto-refresh implementation** - 10-minute interval for live data
 
 ### Agent System Bootstrap (2025-11-15)
-11. **Created agent framework** - Adapted AI_AUGMENTED_WORKFLOW.md for Energy Dashboard
+11. **Created agent framework** - Adapted AI_AUGMENTED_WORKFLOW.md for Augur
 12. **Initialized SESSION_STATE.md** - Running project logbook with current status
 13. **Built 7 specialized agents** - Complete coverage of project domains:
     - Navigator (tested ✅), Deploy, Documentation (universal agents)
-    - Chart, Pipeline, Frontend, Quality (Energy Dashboard-specific)
+    - Chart, Pipeline, Frontend, Quality (Augur-specific)
 14. **Functional naming convention** - Clear, professional agent names
 15. **Copied ADR template** - Ready for architectural decision records
 16. **Tested Navigator agent** - Successful orientation and status summary
@@ -158,7 +158,7 @@ None currently - all core functionality working!
 **Next Action**: Switch to energyDataHub repository to implement TenneT collector
 - Repository: `C:\Users\scbry\HAN\HAN H2 LAB IPKW - Projects - WebBasedControl\01. Software\energyDataHub`
 - Task: Create `collectors/tennet.py` using BaseCollector pattern
-- Timeline: 3-4 days for implementation, then return to energyDataDashboard for visualization
+- Timeline: 3-4 days for implementation, then return to Augur for visualization
 
 **Blocked Until energyDataHub Publishes Data:**
 - Visualization of grid imbalance data (secondary Y-axis on chart)
@@ -280,7 +280,7 @@ None currently - all core functionality working!
 **Key Decisions Made Today:**
 1. Adopted AI-augmented workflow framework from SANTA project
 2. Created docs/agents/ structure for specialized agents
-3. Adapted AI_AUGMENTED_WORKFLOW.md for Energy Dashboard context
+3. Adapted AI_AUGMENTED_WORKFLOW.md for Augur context
 
 **Lessons Learned:**
 1. Progressive disclosure reduces token usage and speeds up context loading

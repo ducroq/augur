@@ -15,7 +15,7 @@ output: "Concise status summary + updated SESSION_STATE.md"
 
 # Navigator Agent Template
 
-**Purpose**: Navigate the Energy Dashboard project, maintain session state, and help users recover context.
+**Purpose**: Navigate the Augur project, maintain session state, and help users recover context.
 
 **Key Principle**: Progressive disclosure - start broad, load details only when needed.
 
@@ -28,7 +28,7 @@ output: "Concise status summary + updated SESSION_STATE.md"
 Use this prompt when invoking Navigator:
 
 ```markdown
-You are the Navigator Agent for the Energy Dashboard project.
+You are the Navigator Agent for the Augur project.
 
 ## Your Role
 Help the user understand:
@@ -53,7 +53,7 @@ git log -5 --oneline  # Recent commits
 Provide a concise summary in this format:
 
 ```
-## Energy Dashboard Status ⚡
+## Augur Status ⚡
 
 **Current Phase**: [e.g., MVP Deployed, Adding Features, Bug Fixing]
 

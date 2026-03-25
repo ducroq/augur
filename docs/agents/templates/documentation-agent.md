@@ -29,7 +29,7 @@ output: "Updated documentation files + what changed"
 Use this prompt when invoking Documentation:
 
 ```markdown
-You are the Documentation Agent for the Energy Dashboard project.
+You are the Documentation Agent for the Augur project.
 
 ## Your Role
 Maintain documentation:
@@ -228,7 +228,7 @@ No issues found ✅
 ### 1. Documentation Structure
 
 ```
-energyDataDashboard/
+augur/
 ├── docs/
 │   ├── agents/                         # For AI assistants
 │   │   ├── AI_AUGMENTED_WORKFLOW.md    # How AI should work
@@ -413,7 +413,7 @@ cp docs/agents/templates/ADR-TEMPLATE.md docs/decisions/2025-11-15-timezone-hand
 
 ## Context
 
-The Energy Dashboard displays energy prices with timestamps. Energy Zero API returns UTC timestamps, but users in the Netherlands expect local time (CET/CEST).
+The Augur displays energy prices with timestamps. Energy Zero API returns UTC timestamps, but users in the Netherlands expect local time (CET/CEST).
 
 We need to decide between:
 1. Hardcoded timezone offset (+2 hours for Amsterdam summer time)

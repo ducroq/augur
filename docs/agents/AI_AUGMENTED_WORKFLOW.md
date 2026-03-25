@@ -1,6 +1,6 @@
-# AI-Augmented Development Workflow - Energy Dashboard
+# AI-Augmented Development Workflow - Augur
 
-**Purpose:** This document defines how AI assistants (Claude Code and others) should work on the Energy Dashboard project. It establishes the philosophy, principles, and operational protocols for AI-augmented solo development.
+**Purpose:** This document defines how AI assistants (Claude Code and others) should work on the Augur project. It establishes the philosophy, principles, and operational protocols for AI-augmented solo development.
 
 **For AI Assistants:** Read this document at the start of each session to understand how to behave.
 
@@ -275,14 +275,14 @@ See SESSION_STATE.md for details."
 
 ---
 
-## Project-Specific Context: Energy Dashboard
+## Project-Specific Context: Augur
 
 ### Key Concepts
 
-**1. Energy Price Dashboard**
-- Purpose: Visualize real-time and forecasted energy prices in the Netherlands
+**1. Augur Energy Price Forecasting Platform**
+- Purpose: Forecast and visualize energy prices in the Netherlands
 - Data Sources: Energy Data Hub (encrypted forecasts), Energy Zero API (live data)
-- Technology: Hugo static site generator + vanilla JavaScript + Plotly.js
+- Technology: Hugo static site generator + vanilla JavaScript + Plotly.js + XGBoost/River ML
 - Deployment: Netlify with build-time data decryption
 
 **2. Data Security**
@@ -313,7 +313,12 @@ See SESSION_STATE.md for details."
 ### Directory Structure
 
 ```
-energyDataDashboard/
+augur/
+├── ml/                            # ML forecasting pipeline
+│   ├── features/builder.py       # Feature engineering
+│   ├── training/trainer.py       # Model training lifecycle
+│   ├── models/                    # Trained artifacts (gitignored)
+│   └── inference.py               # Build-time inference
 ├── docs/
 │   ├── agents/                    # For AI assistants
 │   │   ├── AI_AUGMENTED_WORKFLOW.md  # This file
@@ -340,7 +345,7 @@ energyDataDashboard/
 │   ├── secure_data_handler.py     # Encryption/decryption
 │   ├── timezone_helpers.py
 │   └── data_types.py
-├── decrypt_data.py                # Build-time decryption script
+├── decrypt_data_cached.py         # Build-time decryption script
 ├── hugo.toml                      # Hugo configuration
 ├── netlify.toml                   # Build configuration
 ├── CLAUDE.md                      # Project instructions
@@ -465,11 +470,11 @@ You're doing this right when:
 ## Version History
 
 ### v1.0 (2025-11-15)
-- Initial AI-augmented workflow for Energy Dashboard project
+- Initial AI-augmented workflow for Augur project
 - Adapted from SANTA project framework
 - Core philosophy: effortless docs, single source of truth, progressive disclosure
 - Session protocols: start, during, end
-- Project context: Energy Dashboard specifics
+- Project context: Augur specifics
 
 ---
 
