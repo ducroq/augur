@@ -3,14 +3,17 @@
  * @module dashboard
  */
 
-import { CONSTANTS } from './modules/constants.js';
+import { CONSTANTS, DATA_SOURCES } from './modules/constants.js';
 import { debounce } from './modules/utils.js';
 import { classifyError, showErrorNotification } from './modules/error-handler.js';
 import { ApiClient } from './modules/api-client.js';
 import { processEnergyDataForChart } from './modules/data-processor.js';
-import { renderChart } from './modules/chart-renderer.js';
+import { renderChart, getChartLayout, getChartConfig } from './modules/chart-renderer.js';
 import { UIController } from './modules/ui-controller.js';
 import { initWebVitals } from './modules/web-vitals.js';
+import { TabController } from './modules/tab-controller.js';
+import { DataLoader } from './modules/data-loader.js';
+import { processRenewables, processGrid, processWeather, processGas } from './modules/tab-charts.js';
 
 /**
  * Main Energy Dashboard class
@@ -33,9 +36,11 @@ class EnergyDashboard {
         this.customTimeRange = true;
         this.maxHistoricalDays = CONSTANTS.MAX_HISTORICAL_DAYS;
 
-        // Initialize API client and UI controller
+        // Initialize API client, UI controller, data loader, and tabs
         this.apiClient = new ApiClient();
         this.uiController = new UIController(this);
+        this.dataLoader = new DataLoader();
+        this.tabCharts = {}; // track Plotly init state per tab
 
         // Debounced refresh function (500ms delay)
         this.debouncedRefresh = debounce(
@@ -50,6 +55,11 @@ class EnergyDashboard {
      * Initialize the dashboard
      */
     async init() {
+        // Set up tab controller
+        this.tabController = new TabController((tabKey, firstVisit) => {
+            this.onTabChange(tabKey, firstVisit);
+        });
+
         await Promise.all([
             this.loadEnergyData(),
             this.loadEnergyZeroHistoricalData()
@@ -248,6 +258,87 @@ class EnergyDashboard {
      */
     updateInfo() {
         this.uiController.updateInfo(this.energyData);
+    }
+
+    /**
+     * Handle tab switch — load data and render chart for non-Prices tabs.
+     * @param {string} tabKey
+     * @param {boolean} firstVisit - True if tab has never been opened
+     */
+    async onTabChange(tabKey, firstVisit) {
+        // Prices tab is handled by the existing updateChart flow
+        if (tabKey === 'prices') return;
+
+        const tabConfig = DATA_SOURCES.tabs[tabKey];
+        if (!tabConfig) return;
+
+        const chartEl = this.tabController.getChartElement(tabKey);
+        if (!chartEl) return;
+
+        // Load data on first visit
+        if (firstVisit) {
+            const files = await this.dataLoader.loadFiles(tabConfig.files);
+            this.renderTabChart(tabKey, chartEl, files);
+        }
+    }
+
+    /**
+     * Render a non-Prices tab chart.
+     */
+    renderTabChart(tabKey, chartEl, files) {
+        const processors = {
+            renewables: processRenewables,
+            grid: processGrid,
+            weather: processWeather,
+            gas: processGas,
+        };
+
+        const processor = processors[tabKey];
+        if (!processor) return;
+
+        const result = processor(files);
+        if (!result.traces || result.traces.length === 0) {
+            chartEl.innerHTML = '<p style="color:#999;text-align:center;padding:40px;">No data available for this tab.</p>';
+            return;
+        }
+
+        const layout = {
+            paper_bgcolor: '#111111',
+            plot_bgcolor: '#111111',
+            font: { color: '#cccccc', family: '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif' },
+            xaxis: {
+                type: 'date',
+                gridcolor: '#333333',
+                linecolor: '#333333',
+            },
+            yaxis: {
+                gridcolor: '#333333',
+                linecolor: '#333333',
+                ...result.layout?.yaxis,
+            },
+            legend: {
+                orientation: 'h',
+                yanchor: 'bottom',
+                y: 1.02,
+                xanchor: 'center',
+                x: 0.5,
+            },
+            margin: { l: 60, r: 30, t: 40, b: 50 },
+            hovermode: 'x unified',
+        };
+
+        const config = {
+            responsive: true,
+            displayModeBar: true,
+            modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+        };
+
+        // Clear loading fallback
+        const fallback = chartEl.querySelector('.chart-loading-fallback');
+        if (fallback) fallback.remove();
+
+        Plotly.newPlot(chartEl, result.traces, layout, config);
+        this.tabCharts[tabKey] = true;
     }
 
     /**

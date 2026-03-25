@@ -14,6 +14,9 @@ export const CONSTANTS = {
     // Data noise for educational purposes
     NOISE_PERCENTAGE: 0.1, // ±10%
 
+    // Chart height
+    CHART_HEIGHT: 600,
+
     // Default settings
     DEFAULT_PRICE_THRESHOLD: 0,
     MAX_HISTORICAL_DAYS: 30,
@@ -53,6 +56,25 @@ export const DATA_SOURCES = {
             description: 'Nord Pool day-ahead market'
         }
     ],
+
+    // Tab configuration: which data files to load per tab
+    tabs: {
+        prices: {
+            files: ['energy_price_forecast.json', 'market_proxies.json'],
+        },
+        renewables: {
+            files: ['wind_forecast.json', 'solar_forecast.json', 'generation_forecast.json'],
+        },
+        grid: {
+            files: ['grid_imbalance.json', 'cross_border_flows.json', 'load_forecast.json'],
+        },
+        weather: {
+            files: ['weather_forecast_multi_location.json'],
+        },
+        gas: {
+            files: ['gas_storage.json', 'gas_flows.json'],
+        },
+    },
 
     // Live Energy Zero data configuration
     energyZero: {
