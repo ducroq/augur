@@ -81,3 +81,6 @@ ml/models/*.tmp
 
 # ML training data (derived, rebuild with consolidate.py)
 ml/data/*.parquet
+
+# ML forecast archive (daily copies on sadalsuud, for backtesting)
+ml/forecasts/

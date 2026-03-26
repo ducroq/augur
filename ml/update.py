@@ -346,7 +346,16 @@ def write_forecast_json(forecast, forecast_upper, forecast_lower, state, output_
     with open(output_path, "w") as f:
         json.dump(output, f, indent=2)
 
+    # Save timestamped archive copy for backtesting
+    archive_dir = output_dir.parent / "ml" / "forecasts"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    datestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
+    archive_path = archive_dir / f"{datestamp}_forecast.json"
+    with open(archive_path, "w") as f:
+        json.dump(output, f, indent=2)
+
     logger.info(f"Forecast written to {output_path}")
+    logger.info(f"Archived to {archive_path}")
 
 
 def main():
