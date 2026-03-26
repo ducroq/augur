@@ -145,7 +145,7 @@ export function renderWindScatter(elementId) {
     Plotly.newPlot(elementId, [{
         x: WIND_VS_PRICE.wind,
         y: WIND_VS_PRICE.price,
-        type: 'scattergl',
+        type: 'scatter',
         mode: 'markers',
         marker: {
             size: 5,
