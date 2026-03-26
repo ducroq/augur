@@ -70,8 +70,13 @@ logs/
 coverage/
 .nyc_output/
 
-# ML model artifacts (binary files, tracked via metadata only)
+# ML model artifacts
 ml/models/*.joblib
-ml/models/*.pkl
-ml/models/*.json
+ml/models/*.tmp
 !ml/models/.gitkeep
+# river_model.pkl and state.json are committed daily by sadalsuud
+!ml/models/river_model.pkl
+!ml/models/state.json
+
+# ML training data (derived, rebuild with consolidate.py)
+ml/data/*.parquet

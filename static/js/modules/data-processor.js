@@ -103,7 +103,7 @@ export function processEnergyZeroData(rawData, options = {}) {
  * @param {Date} endDateTime - End of custom range
  * @returns {Array} Plotly traces
  */
-export function processEnergyDataForChart(energyData, energyZeroData, cutoffTime, customTimeRange, startDateTime, endDateTime) {
+export function processEnergyDataForChart(energyData, energyZeroData, cutoffTime, customTimeRange, startDateTime, endDateTime, augurForecast) {
     if (!energyData) {
         return [];
     }
@@ -246,6 +246,30 @@ export function processEnergyDataForChart(energyData, energyZeroData, cutoffTime
             });
 
             allTimestamps.push(...xValues);
+        }
+    }
+
+    // Add Augur ML forecast if available
+    if (augurForecast && augurForecast.forecast) {
+        const forecastData = Object.entries(augurForecast.forecast)
+            .map(([ts, price]) => ({ ts, price: addNoise(price) }))
+            .filter(item => {
+                const d = new Date(item.ts);
+                return d >= cutoffTime;
+            })
+            .sort((a, b) => new Date(a.ts) - new Date(b.ts));
+
+        if (forecastData.length > 0) {
+            traces.push({
+                x: forecastData.map(d => d.ts),
+                y: forecastData.map(d => d.price),
+                type: 'scatter',
+                mode: 'lines',
+                name: 'Augur ML Forecast',
+                line: { width: 3, color: '#a78bfa', dash: 'dash' },
+                hovertemplate: '<b>Augur ML</b><br>%{x}<br>Price: €%{y:.2f}/MWh<extra></extra>',
+            });
+            allTimestamps.push(...forecastData.map(d => d.ts));
         }
     }
 

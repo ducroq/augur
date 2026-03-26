@@ -68,7 +68,8 @@ class EnergyDashboard {
 
         await Promise.all([
             this.loadEnergyData(),
-            this.loadEnergyZeroHistoricalData()
+            this.loadEnergyZeroHistoricalData(),
+            this.loadAugurForecast(),
         ]);
 
         this.uiController.setupLiveDataControls();
@@ -90,6 +91,21 @@ class EnergyDashboard {
      */
     async loadEnergyZeroData() {
         this.energyZeroData = await this.apiClient.loadEnergyZeroData();
+    }
+
+    /**
+     * Load Augur ML forecast (may not exist yet)
+     */
+    async loadAugurForecast() {
+        try {
+            const resp = await fetch('/data/augur_forecast.json');
+            if (resp.ok) {
+                this.augurForecast = await resp.json();
+            }
+        } catch {
+            // Forecast not available yet — that's fine
+            this.augurForecast = null;
+        }
     }
 
     /**
@@ -237,7 +253,8 @@ class EnergyDashboard {
             cutoffTime,
             this.customTimeRange,
             this.startDateTime,
-            this.endDateTime
+            this.endDateTime,
+            this.augurForecast
         );
 
         // Get last update time from energy data
