@@ -82,27 +82,29 @@ def parse_price_file(path: Path) -> pd.Series:
     """Extract ENTSO-E NL hourly prices from an energy_price_forecast file."""
     data = load_json_file(path)
 
-    # Try entsoe first, fall back to energy_zero
-    for source_key in ("entsoe", "energy_zero", "epex"):
+    # Merge all wholesale sources: entsoe preferred, then fill gaps from others
+    merged = {}
+    for source_key in ("energy_zero", "elspot", "epex", "entsoe"):
+        # Process in reverse priority so entsoe overwrites others
         source = data.get(source_key)
-        if source and isinstance(source, dict) and "data" in source:
-            ts_data = source["data"]
-            if isinstance(ts_data, dict):
-                series = {}
-                units = source.get("metadata", {}).get("units", "EUR/MWh")
-                multiplier = 1000 if "kwh" in units.lower() else 1
-                for ts_str, price in ts_data.items():
-                    if not isinstance(price, (int, float)):
-                        continue
-                    # Normalize malformed offsets
-                    ts_str = ts_str.replace("+00:18", "+01:00").replace("+00:09", "+01:00")
-                    try:
-                        ts = pd.Timestamp(ts_str).tz_convert("UTC")
-                        series[ts] = price * multiplier
-                    except Exception:
-                        continue
-                if series:
-                    return pd.Series(series, name="price_eur_mwh")
+        if not source or not isinstance(source, dict) or "data" not in source:
+            continue
+        ts_data = source["data"]
+        if not isinstance(ts_data, dict):
+            continue
+        units = source.get("metadata", {}).get("units", "EUR/MWh")
+        multiplier = 1000 if "kwh" in units.lower() else 1
+        for ts_str, price in ts_data.items():
+            if not isinstance(price, (int, float)):
+                continue
+            ts_str = ts_str.replace("+00:18", "+01:00").replace("+00:09", "+01:00")
+            try:
+                ts = pd.Timestamp(ts_str).tz_convert("UTC")
+                merged[ts] = price * multiplier
+            except Exception:
+                continue
+    if merged:
+        return pd.Series(merged, name="price_eur_mwh")
     return pd.Series(dtype=float, name="price_eur_mwh")
 
 
