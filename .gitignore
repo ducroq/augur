@@ -16,6 +16,7 @@ config/local/
 
 # Decrypted data files
 static/data/*.json
+!static/data/augur_forecast.json
 data/*.json
 
 # Hugo build files
