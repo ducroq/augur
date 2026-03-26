@@ -137,20 +137,24 @@
                 <h2 class="model-title">Model Card</h2>
                 <div class="model-cards-grid">
                     <div class="model-metric-card">
-                        <div class="metric-value" id="metric-mae">17.2</div>
-                        <div class="metric-label">MAE (EUR/MWh)</div>
+                        <div class="metric-value" id="metric-exchange-mae">--</div>
+                        <div class="metric-label">vs Exchange MAE</div>
+                        <div class="metric-detail">EUR/MWh — lower is better</div>
                     </div>
                     <div class="model-metric-card">
-                        <div class="metric-value" id="metric-samples">4,095</div>
+                        <div class="metric-value" id="metric-mae">--</div>
+                        <div class="metric-label">Overall MAE</div>
+                        <div class="metric-detail">EUR/MWh on actuals</div>
+                    </div>
+                    <div class="model-metric-card">
+                        <div class="metric-value" id="metric-samples">--</div>
                         <div class="metric-label">Training Samples</div>
-                    </div>
-                    <div class="model-metric-card">
-                        <div class="metric-value" id="metric-features">26</div>
-                        <div class="metric-label">Features</div>
+                        <div class="metric-detail">hours learned</div>
                     </div>
                     <div class="model-metric-card">
                         <div class="metric-value" id="metric-horizon">48h</div>
                         <div class="metric-label">Forecast Horizon</div>
+                        <div class="metric-detail">29h exchange + 19h ML-only</div>
                     </div>
                 </div>
             </div>
@@ -191,6 +195,37 @@
                 <p class="model-subtitle">Rolling MAE during online learning. The model sees each hour once and never revisits it — this is how it improves over time.</p>
                 <div class="chart-container">
                     <div id="learningCurveChart" class="chart-area chart-area-sm"></div>
+                </div>
+            </div>
+
+            <!-- Strategy -->
+            <div class="model-section">
+                <h2 class="model-title">Strategy: Learning to Match the Market</h2>
+                <div class="model-description">
+                    <div class="info-card" style="grid-column: 1 / -1">
+                        <h3>The Convergence Experiment</h3>
+                        <div>
+                            <p>Day-ahead electricity prices are set by exchanges (EPEX, ENTSO-E) around 13:00 CET, based on aggregated buy/sell bids from hundreds of market participants. Our model predicts these same prices using only publicly available data: weather forecasts, historical prices, and grid conditions.</p>
+                            <p style="margin-top:10px">The key question: <strong>how close can an ML model get to the market consensus, and how fast?</strong></p>
+                            <p style="margin-top:10px">We measure this as "vs Exchange MAE" — the average difference between our prediction and the published exchange price for the same hour. This number should decrease over time as the model learns from more data and seasonal patterns.</p>
+                        </div>
+                    </div>
+                    <div class="info-card">
+                        <h3>Hybrid Forecast Strategy</h3>
+                        <div>
+                            <p>For the first ~29 hours, exchange day-ahead prices are already published. We use these as <strong>lag features</strong> — giving the model perfect recent price information to predict further out.</p>
+                            <p style="margin-top:10px">For hours 30-48, beyond the exchange horizon, the model relies on its own predictions recursively plus weather/wind forecasts. The confidence band widens here to reflect the increased uncertainty.</p>
+                        </div>
+                    </div>
+                    <div class="info-card">
+                        <h3>Expected Convergence</h3>
+                        <div>
+                            <p><strong>Now:</strong> ~16 EUR/MWh vs exchange (6 months of training data)</p>
+                            <p><strong>1-3 months:</strong> ~8-12 EUR/MWh (spring/summer transition learned)</p>
+                            <p><strong>6-12 months:</strong> ~5-8 EUR/MWh (full seasonal cycle observed)</p>
+                            <p style="margin-top:10px">The floor is likely ~5 EUR/MWh — intraday surprises (plant outages, interconnector trips) and private market information are fundamentally unpredictable from public data alone.</p>
+                        </div>
+                    </div>
                 </div>
             </div>
 

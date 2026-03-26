@@ -719,6 +719,12 @@ body {
     margin-top: 6px;
 }
 
+.metric-detail {
+    font-size: 0.7rem;
+    color: #666666;
+    margin-top: 2px;
+}
+
 /* Architecture block diagram */
 .architecture-diagram {
     display: flex;

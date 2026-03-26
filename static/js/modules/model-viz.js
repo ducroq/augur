@@ -182,6 +182,30 @@ export function renderLearningCurve(elementId) {
 }
 
 /**
+ * Load live metrics from augur_forecast.json and update the metric cards.
+ */
+async function loadLiveMetrics() {
+    try {
+        const resp = await fetch('/data/augur_forecast.json');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const m = data.metadata || {};
+        const metrics = m.metrics || {};
+
+        const set = (id, val) => {
+            const el = document.getElementById(id);
+            if (el && val != null) el.textContent = val;
+        };
+
+        set('metric-exchange-mae', metrics.vs_exchange?.mae_vs_exchange?.toFixed(1) || '--');
+        set('metric-mae', metrics.mae?.toFixed(1) || '--');
+        set('metric-samples', m.n_training_samples?.toLocaleString() || '--');
+    } catch {
+        // Forecast not available yet
+    }
+}
+
+/**
  * Render all model visualizations into their containers.
  */
 export function renderAllModelViz() {
@@ -190,4 +214,5 @@ export function renderAllModelViz() {
     renderHourlyProfile('hourlyProfileChart');
     renderWindScatter('windScatterChart');
     renderLearningCurve('learningCurveChart');
+    loadLiveMetrics();
 }
