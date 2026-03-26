@@ -180,32 +180,53 @@ def update_model(model, state, data):
 
 
 def generate_forecast(model, fb, data, state, hours=48):
-    """Generate price forecast with confidence bands for the next N hours."""
+    """Generate price forecast with confidence bands for the next N hours.
+
+    Uses known exchange day-ahead prices as lag features where available,
+    falling back to recursive ML predictions beyond the exchange horizon.
+    """
+    prices = data.get("prices", pd.Series(dtype=float))
     wind = data.get("wind", pd.Series(dtype=float))
     solar = data.get("solar", pd.Series(dtype=float))
-    temp = data.get("temperature", pd.Series(dtype=float))
     load = data.get("load", pd.Series(dtype=float))
 
     # Compute confidence band widths from error history
     error_history = state.get("error_history", [])
     if len(error_history) >= 20:
         abs_errors = sorted(abs(e) for e in error_history)
-        # 80% confidence interval: 10th and 90th percentile of absolute errors
         p80 = abs_errors[int(len(abs_errors) * 0.80)]
         p50 = abs_errors[int(len(abs_errors) * 0.50)]
     else:
-        p80 = 30.0  # fallback before enough history
+        p80 = 30.0
         p50 = 15.0
 
     now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+
+    # Feed known exchange prices into the feature builder first
+    # This gives the ML model real lag values instead of recursive predictions
+    n_exchange = 0
+    if not prices.empty:
+        future_prices = prices[prices.index > now].sort_index()
+        for ts, price in future_prices.items():
+            if not np.isnan(price):
+                fb.push_price(ts.isoformat(), price)
+                n_exchange += 1
+
+    if n_exchange > 0:
+        logger.info(f"Fed {n_exchange} known exchange prices as lag features")
+
     forecast = {}
     forecast_upper = {}
     forecast_lower = {}
+    n_ml_only = 0
 
     for h in range(hours):
         ts = now + timedelta(hours=h)
         ts_utc = ts.replace(tzinfo=timezone.utc)
         ts_iso = ts_utc.isoformat()
+
+        # Check if we have a known exchange price for this hour
+        exchange_price = _nearest(prices, pd.Timestamp(ts_utc), tolerance_hours=0.6)
 
         features = fb.build(
             ts_iso,
@@ -219,18 +240,28 @@ def generate_forecast(model, fb, data, state, hours=48):
 
         pred = model.predict_one(features)
 
-        # Widen confidence band for further-out predictions
-        # Linear growth: at h=0 use p50, at h=48 use p80
-        band_width = p50 + (p80 - p50) * min(h / hours, 1.0)
+        # Narrow band where exchange price is known (model vs exchange comparison)
+        # Wide band where we're forecasting beyond the exchange horizon
+        if exchange_price is not None:
+            band_width = p50 * 0.3  # narrow — exchange price anchors expectations
+        else:
+            # Band widens beyond exchange horizon
+            band_width = p50 + (p80 - p50) * min(h / hours, 1.0)
+            n_ml_only += 1
 
         forecast[ts_iso] = round(pred, 2)
         forecast_upper[ts_iso] = round(pred + band_width, 2)
-        forecast_lower[ts_iso] = round(max(pred - band_width, 0), 2)  # prices can't go far below 0
+        forecast_lower[ts_iso] = round(max(pred - band_width, 0), 2)
 
-        # Feed prediction back as price lag for subsequent hours
-        fb.push_price(ts_iso, pred)
+        # Use exchange price as lag if known, otherwise use prediction
+        fb.push_price(ts_iso, exchange_price if exchange_price is not None else pred)
 
-    logger.info(f"Generated {len(forecast)}-hour forecast (band: ±{p50:.0f} to ±{p80:.0f} EUR/MWh)")
+    logger.info(
+        f"Generated {len(forecast)}-hour forecast: "
+        f"{len(forecast) - n_ml_only} hours with exchange lags, "
+        f"{n_ml_only} hours ML-only "
+        f"(band: ±{p50:.0f} to ±{p80:.0f} EUR/MWh)"
+    )
     return forecast, forecast_upper, forecast_lower
 
 
@@ -267,17 +298,45 @@ def save_model_and_state(model, state):
     logger.info(f"Model and state saved to {MODEL_DIR}")
 
 
-def write_forecast_json(forecast, forecast_upper, forecast_lower, state, output_dir: Path):
+def compute_exchange_comparison(forecast, data):
+    """Compare ML forecast with known exchange prices where they overlap."""
+    prices = data.get("prices", pd.Series(dtype=float))
+    if prices.empty:
+        return None
+
+    errors = []
+    for ts_iso, pred in forecast.items():
+        ts = pd.Timestamp(ts_iso)
+        if ts.tzinfo is None:
+            ts = ts.tz_localize("UTC")
+        exchange = _nearest(prices, ts, tolerance_hours=0.6)
+        if exchange is not None:
+            errors.append(abs(pred - exchange))
+
+    if not errors:
+        return None
+
+    return {
+        "n_overlap_hours": len(errors),
+        "mae_vs_exchange": round(np.mean(errors), 2),
+    }
+
+
+def write_forecast_json(forecast, forecast_upper, forecast_lower, state, output_dir: Path, exchange_comparison=None):
     """Write forecast JSON with confidence bands for the dashboard."""
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / "augur_forecast.json"
+
+    metrics = state.get("metrics", {})
+    if exchange_comparison:
+        metrics["vs_exchange"] = exchange_comparison
 
     output = {
         "metadata": {
             "model": "ARFRegressor",
             "last_updated": datetime.now(timezone.utc).isoformat(),
             "n_training_samples": state.get("n_samples", 0),
-            "metrics": state.get("metrics", {}),
+            "metrics": metrics,
         },
         "forecast": forecast,
         "forecast_upper": forecast_upper,
@@ -316,9 +375,17 @@ def main():
     # Generate forecast with confidence bands
     forecast, forecast_upper, forecast_lower = generate_forecast(model, fb, data, state)
 
+    # Compare forecast with exchange prices where they overlap
+    exchange_comparison = compute_exchange_comparison(forecast, data)
+    if exchange_comparison:
+        logger.info(
+            f"Forecast vs exchange: MAE {exchange_comparison['mae_vs_exchange']:.1f} EUR/MWh "
+            f"over {exchange_comparison['n_overlap_hours']} hours"
+        )
+
     # Save everything
     save_model_and_state(model, state)
-    write_forecast_json(forecast, forecast_upper, forecast_lower, state, augur_dir / "static" / "data")
+    write_forecast_json(forecast, forecast_upper, forecast_lower, state, augur_dir / "static" / "data", exchange_comparison)
 
     logger.info("=" * 60)
     logger.info("Update complete")
