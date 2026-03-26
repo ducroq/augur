@@ -253,6 +253,7 @@ export function processEnergyDataForChart(energyData, energyZeroData, cutoffTime
     if (augurForecast && augurForecast.forecast) {
         const tsFilter = (ts) => new Date(ts) >= cutoffTime;
         const sortByTs = (a, b) => new Date(a.ts) - new Date(b.ts);
+        const now = new Date();
 
         const forecastData = Object.entries(augurForecast.forecast)
             .filter(([ts]) => tsFilter(ts))
@@ -260,22 +261,21 @@ export function processEnergyDataForChart(energyData, energyZeroData, cutoffTime
             .sort(sortByTs);
 
         if (forecastData.length > 0) {
-            // Confidence band (80% interval) as shaded area
+            // Confidence band only for future hours
             const upper = augurForecast.forecast_upper || {};
             const lower = augurForecast.forecast_lower || {};
             const bandX = [];
             const bandY = [];
 
-            // Upper bound forward, then lower bound reversed (creates filled polygon)
-            const sortedTs = forecastData.map(d => d.ts);
-            for (const ts of sortedTs) {
+            const futureTs = forecastData.filter(d => new Date(d.ts) >= now).map(d => d.ts);
+            for (const ts of futureTs) {
                 if (upper[ts] != null) {
                     bandX.push(ts);
                     bandY.push(addNoise(upper[ts]));
                 }
             }
-            for (let i = sortedTs.length - 1; i >= 0; i--) {
-                const ts = sortedTs[i];
+            for (let i = futureTs.length - 1; i >= 0; i--) {
+                const ts = futureTs[i];
                 if (lower[ts] != null) {
                     bandX.push(ts);
                     bandY.push(Math.max(addNoise(lower[ts]), 0));
