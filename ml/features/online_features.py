@@ -3,6 +3,11 @@ Online feature builder for River-based continuous learning.
 
 Maintains a rolling price buffer and builds feature dicts one row at a time.
 Used by both warmup (historical replay) and daily update (live).
+
+Feature selection based on Lasso/Ridge analysis (R²=0.934):
+- Top features: rolling_mean_6h, price lags (1,2,3,6h), hour, wind_speed
+- Dropped: temperature (no signal after controlling for calendar)
+- Added: rolling mean/std, raw hour (more predictive than sin/cos alone)
 """
 
 import math
@@ -10,9 +15,11 @@ from collections import deque
 from datetime import datetime, timezone
 
 
-# Lag offsets in hours
-REQUIRED_LAGS = [1, 24, 168]
-OPTIONAL_LAGS = [2, 3, 6, 12, 48]
+# Lag offsets in hours — all required for good autoregressive signal
+PRICE_LAGS = [1, 2, 3, 6, 12, 24, 48, 168]
+
+# Rolling windows for statistics
+ROLLING_WINDOWS = [6, 24, 168]
 
 
 def _safe(val: float | None) -> float:
@@ -61,53 +68,78 @@ class OnlineFeatureBuilder:
             return best
         return None
 
+    def _get_recent_prices(self, current_ts: datetime, hours: int) -> list[float]:
+        """Get the last N hours of prices for rolling stats."""
+        cutoff = current_ts.timestamp() - hours * 3600
+        prices = []
+        for ts_iso, price in self.price_history:
+            ts = datetime.fromisoformat(ts_iso)
+            if ts.timestamp() >= cutoff:
+                prices.append(price)
+        return prices
+
     def build(
         self,
         timestamp_iso: str,
         wind_speed_80m: float | None = None,
         solar_ghi: float | None = None,
-        temperature: float | None = None,
         load_forecast: float | None = None,
     ) -> dict | None:
         """
         Build a feature dict for one timestamp.
 
-        Returns None if required lag features are unavailable.
+        Returns None if required lag features (1h, 24h) are unavailable.
         """
         ts = datetime.fromisoformat(timestamp_iso)
 
-        # Required lags — return None if any missing
-        lags = {}
-        for h in REQUIRED_LAGS:
-            val = self._get_lag(ts, h)
-            if val is None:
-                return None
-            lags[f"price_lag_{h}h"] = val
+        # Required lags — must have at least 1h and 24h
+        lag_1h = self._get_lag(ts, 1)
+        lag_24h = self._get_lag(ts, 24)
+        if lag_1h is None or lag_24h is None:
+            return None
 
-        # Optional lags — fill with 0 if missing
-        for h in OPTIONAL_LAGS:
+        # All lags
+        lags = {}
+        for h in PRICE_LAGS:
             val = self._get_lag(ts, h)
             lags[f"price_lag_{h}h"] = val if val is not None else 0.0
 
-        # Calendar features
+        # Rolling statistics (the #1 feature per Lasso analysis)
+        rolling = {}
+        for w in ROLLING_WINDOWS:
+            recent = self._get_recent_prices(ts, w)
+            if len(recent) >= max(w // 4, 2):  # need at least 25% coverage
+                rolling[f"price_rolling_mean_{w}h"] = sum(recent) / len(recent)
+                if len(recent) >= 3:
+                    mean = rolling[f"price_rolling_mean_{w}h"]
+                    rolling[f"price_rolling_std_{w}h"] = (
+                        sum((p - mean) ** 2 for p in recent) / len(recent)
+                    ) ** 0.5
+                else:
+                    rolling[f"price_rolling_std_{w}h"] = 0.0
+            else:
+                rolling[f"price_rolling_mean_{w}h"] = 0.0
+                rolling[f"price_rolling_std_{w}h"] = 0.0
+
+        # Calendar features — raw hour is more predictive than sin/cos alone
         hour = ts.hour
         dow = ts.weekday()
         features = {
+            "hour": float(hour),
             "hour_sin": math.sin(2 * math.pi * hour / 24),
             "hour_cos": math.cos(2 * math.pi * hour / 24),
             "dow_sin": math.sin(2 * math.pi * dow / 7),
             "dow_cos": math.cos(2 * math.pi * dow / 7),
             "is_weekend": 1.0 if dow >= 5 else 0.0,
             "month_sin": math.sin(2 * math.pi * ts.month / 12),
-            "month_cos": math.cos(2 * math.pi * ts.month / 12),
         }
 
         features.update(lags)
+        features.update(rolling)
 
-        # Exogenous features — use 0 if unavailable or NaN
+        # Exogenous features (temperature dropped per Lasso — no signal)
         features["wind_speed_80m"] = _safe(wind_speed_80m)
         features["solar_ghi"] = _safe(solar_ghi)
-        features["temperature"] = _safe(temperature)
         features["load_forecast"] = _safe(load_forecast)
 
         return features

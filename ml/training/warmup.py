@@ -19,7 +19,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from river import compose, preprocessing, tree
+from river import compose, forest, preprocessing
 
 from ml.features.online_features import OnlineFeatureBuilder
 
@@ -33,7 +33,7 @@ def create_model():
     """Create the River online learning pipeline."""
     return compose.Pipeline(
         preprocessing.StandardScaler(),
-        tree.HoeffdingAdaptiveTreeRegressor(seed=42),
+        forest.ARFRegressor(n_models=10, seed=42),
     )
 
 
@@ -64,7 +64,6 @@ def warmup(data_path: Path):
             ts_iso,
             wind_speed_80m=row.get("wind_speed_80m"),
             solar_ghi=row.get("solar_ghi"),
-            temperature=row.get("temperature"),
             load_forecast=row.get("load_forecast"),
         )
 

@@ -129,7 +129,6 @@ def update_model(model, state, data):
     # Build aligned exogenous data
     wind = data.get("wind", pd.Series(dtype=float))
     solar = data.get("solar", pd.Series(dtype=float))
-    temp = data.get("temperature", pd.Series(dtype=float))
     load = data.get("load", pd.Series(dtype=float))
 
     # Rolling error history for confidence bands (keep last 500 errors)
@@ -145,7 +144,6 @@ def update_model(model, state, data):
             ts_iso,
             wind_speed_80m=_nearest(wind, ts),
             solar_ghi=_nearest(solar, ts),
-            temperature=_nearest(temp, ts),
             load_forecast=_nearest(load, ts),
         )
 
@@ -213,7 +211,6 @@ def generate_forecast(model, fb, data, state, hours=48):
             ts_iso,
             wind_speed_80m=_nearest(wind, pd.Timestamp(ts_utc)),
             solar_ghi=_nearest(solar, pd.Timestamp(ts_utc)),
-            temperature=_nearest(temp, pd.Timestamp(ts_utc)),
             load_forecast=_nearest(load, pd.Timestamp(ts_utc)),
         )
 
@@ -277,7 +274,7 @@ def write_forecast_json(forecast, forecast_upper, forecast_lower, state, output_
 
     output = {
         "metadata": {
-            "model": "HoeffdingAdaptiveTreeRegressor",
+            "model": "ARFRegressor",
             "last_updated": datetime.now(timezone.utc).isoformat(),
             "n_training_samples": state.get("n_samples", 0),
             "metrics": state.get("metrics", {}),
