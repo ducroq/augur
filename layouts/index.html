@@ -158,16 +158,14 @@
             <!-- Feature Importance + Correlation side by side -->
             <div class="model-section">
                 <h2 class="model-title">Feature Analysis</h2>
-                <p class="model-subtitle">Lasso regression (L1) identifies the most predictive features. Correlation heatmap shows linear relationships between all variables.</p>
-                <div class="model-two-col">
-                    <div class="chart-container">
-                        <h3 class="forecast-header-text">Feature Importance (Lasso)</h3>
-                        <div id="featureImportanceChart" class="chart-area"></div>
-                    </div>
-                    <div class="chart-container">
-                        <h3 class="forecast-header-text">Correlation Matrix</h3>
-                        <div id="correlationChart" class="chart-area"></div>
-                    </div>
+                <p class="model-subtitle">Feature importance changes dramatically with forecast horizon. At 1h, recent price momentum dominates (R&sup2;=0.81). At 48h, only weekly patterns and load forecast survive (R&sup2;=0.21).</p>
+                <div class="chart-container">
+                    <h3 class="forecast-header-text">Feature Importance by Forecast Horizon (Lasso L1)</h3>
+                    <div id="featureImportanceChart" class="chart-area"></div>
+                </div>
+                <div class="chart-container" style="margin-top: 16px">
+                    <h3 class="forecast-header-text">Correlation Matrix</h3>
+                    <div id="correlationChart" class="chart-area"></div>
                 </div>
             </div>
 
@@ -205,16 +203,56 @@
                         <div>The model uses River's Adaptive Random Forest (ARF) — an ensemble of 10 Hoeffding trees that adapt to concept drift. Each day, new price observations arrive and the model updates incrementally via <code>predict_one()</code> then <code>learn_one()</code>. It never retrains from scratch.</div>
                     </div>
                     <div class="info-card">
-                        <h3>Feature Engineering</h3>
-                        <div>Features are selected via Lasso (L1) regularization on 6 months of data (R&sup2;=0.934). The dominant signal is autoregressive: recent prices predict future prices. Wind speed and load forecast provide the exogenous context that helps predict price regime shifts.</div>
-                    </div>
-                    <div class="info-card">
                         <h3>Confidence Bands</h3>
                         <div>The 80% confidence interval is computed empirically from the last 500 prediction errors. The band widens linearly over the forecast horizon to reflect increasing uncertainty. Prices below 0 are clamped.</div>
                     </div>
                     <div class="info-card">
                         <h3>Data Pipeline</h3>
                         <div>energyDataHub collects from 18+ APIs daily at 16:00 UTC. A cron job on sadalsuud pulls the data, updates the model, generates the forecast, and pushes to GitHub — triggering a Netlify rebuild. The full cycle takes under 30 seconds.</div>
+                    </div>
+                    <div class="info-card">
+                        <h3>Target Variable</h3>
+                        <div>We predict <strong>ENTSO-E NL wholesale day-ahead prices</strong> (EUR/MWh). Consumer prices (e.g., EnergyZero) include taxes and grid fees that add a roughly constant markup — the price <em>shape</em> (when cheap vs expensive) is driven entirely by the wholesale market.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data sources documentation -->
+            <div class="model-section">
+                <h2 class="model-title">Feature Decisions</h2>
+                <p class="model-subtitle">What data we use, what we don't, and why.</p>
+                <div class="model-description">
+                    <div class="info-card">
+                        <h3>Used: Price Lags &amp; Rolling Stats</h3>
+                        <div>Autoregressive features (lag 1h-168h, rolling mean/std 6h-168h) are the dominant predictors at all horizons. The 6h rolling mean is the single best feature for 1h-ahead; the 168h lag captures weekly seasonality for 24-48h ahead.</div>
+                    </div>
+                    <div class="info-card">
+                        <h3>Used: Wind Speed (Gemini NL, 80m)</h3>
+                        <div>Offshore wind speed from Open-Meteo at the Gemini wind farm. Only one of 4 NL farms and one height is used — adding more locations adds noise without improving prediction, because NL offshore wind is highly correlated across farms. Raw correlation with price is low (r=0.01) because the effect is nonlinear: wind suppresses prices only above ~12 m/s.</div>
+                    </div>
+                    <div class="info-card">
+                        <h3>Used: Solar GHI (Eindhoven NL)</h3>
+                        <div>Global Horizontal Irradiance from Open-Meteo. One NL location is representative — solar irradiance varies little across the Netherlands. Matters most at the 6h horizon where daytime solar surplus creates negative/zero prices.</div>
+                    </div>
+                    <div class="info-card">
+                        <h3>Used: Load Forecast (ENTSO-E NL)</h3>
+                        <div>TSO demand forecast. The most stable exogenous predictor across all horizons — high demand means high prices regardless of supply mix.</div>
+                    </div>
+                    <div class="info-card">
+                        <h3>Dropped: Temperature</h3>
+                        <div>Lasso assigns zero weight. Temperature affects prices indirectly through heating/cooling demand, but this signal is already captured by the load forecast and calendar features.</div>
+                    </div>
+                    <div class="info-card">
+                        <h3>Not Used: Gas/Carbon Prices</h3>
+                        <div>Gas TTF and carbon EUA prices from Alpha Vantage are single daily snapshots with no intraday variation. They set the long-term price floor (marginal cost of gas plants) but don't help predict hourly price swings. Could improve multi-day forecasts if historical time series were available.</div>
+                    </div>
+                    <div class="info-card">
+                        <h3>Not Used: Grid Imbalance &amp; Flows</h3>
+                        <div>TenneT imbalance data and ENTSO-E cross-border flows are published with a 1-day lag — by the time we have yesterday's imbalance, today's prices are already known. Useful for analysis but not for forecasting.</div>
+                    </div>
+                    <div class="info-card">
+                        <h3>Not Used: Multiple Locations</h3>
+                        <div>energyDataHub provides wind data from 9 offshore farms, solar from 7 locations, and weather from 6 cities. We use one NL site per type because: (a) NL is small — weather is highly correlated across locations, (b) more features increase overfitting risk with limited training data (6 months), (c) Lasso confirms additional locations add no predictive value.</div>
                     </div>
                 </div>
             </div>

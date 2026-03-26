@@ -5,7 +5,7 @@
  */
 
 import {
-    CORRELATION, FEATURE_IMPORTANCE, HOURLY_PROFILE,
+    CORRELATION, FEATURE_IMPORTANCE_BY_HORIZON, HOURLY_PROFILE,
     LEARNING_CURVE, WIND_VS_PRICE,
 } from './model-viz-data.js';
 
@@ -29,32 +29,34 @@ function darkLayout(overrides = {}) {
 
 const plotConfig = { responsive: true, displayModeBar: false };
 
-// ── 1. Feature Importance (horizontal bar) ──────────────────
+// ── 1. Feature Importance by Horizon (grouped bar) ──────────
 
 export function renderFeatureImportance(elementId) {
-    const { features, values } = FEATURE_IMPORTANCE;
+    const { horizons, r2, features, values } = FEATURE_IMPORTANCE_BY_HORIZON;
 
-    // Color gradient: low = dim, high = bright purple
-    const maxVal = Math.max(...values);
-    const colors = values.map(v => {
-        const t = v / maxVal;
-        const r = Math.round(96 + t * 71);  // 96 -> 167
-        const g = Math.round(60 + t * 79);   // 60 -> 139
-        const b = Math.round(180 + t * 70);  // 180 -> 250
-        return `rgb(${r},${g},${b})`;
-    });
+    const colors = {
+        '1h': '#60a5fa',
+        '6h': '#10b981',
+        '24h': '#f59e0b',
+        '48h': '#ef4444',
+    };
 
-    Plotly.newPlot(elementId, [{
+    const traces = horizons.map(h => ({
         type: 'bar',
         orientation: 'h',
-        y: features.map(f => f.replace(/_/g, ' ')),
-        x: values,
-        marker: { color: colors },
-        hovertemplate: '<b>%{y}</b><br>Importance: %{x:.1f}<extra></extra>',
-    }], darkLayout({
+        name: `${h} ahead (R²=${r2[horizons.indexOf(h)].toFixed(2)})`,
+        y: features,
+        x: values[h],
+        marker: { color: colors[h], opacity: 0.85 },
+        hovertemplate: `<b>%{y}</b><br>${h}: %{x:.1f}<extra></extra>`,
+    }));
+
+    Plotly.newPlot(elementId, traces, darkLayout({
+        barmode: 'group',
         xaxis: { title: 'Lasso |coefficient|', gridcolor: DARK.grid },
-        yaxis: { autorange: 'reversed', gridcolor: DARK.grid },
-        margin: { l: 150, r: 30, t: 10, b: 40 },
+        yaxis: { autorange: 'reversed', gridcolor: DARK.grid, tickfont: { size: 10 } },
+        legend: { orientation: 'h', y: 1.08, xanchor: 'center', x: 0.5, font: { size: 10 } },
+        margin: { l: 140, r: 30, t: 40, b: 40 },
     }), plotConfig);
 }
 
