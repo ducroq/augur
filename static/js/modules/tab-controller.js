@@ -63,6 +63,7 @@ export class TabController {
             forecast: ['windChart', 'solarChart', 'weatherTempChart', 'weatherCloudChart'],
             grid: ['imbalanceChart', 'flowsChart', 'loadChart'],
             market: ['gasChart'],
+            model: ['featureImportanceChart', 'correlationChart', 'hourlyProfileChart', 'windScatterChart', 'learningCurveChart'],
         };
         return (map[tabKey] || []).map(id => document.getElementById(id)).filter(Boolean);
     }

@@ -11,6 +11,7 @@
         <button class="tab-btn" role="tab" data-tab="forecast" aria-selected="false" aria-controls="panel-forecast">Forecast</button>
         <button class="tab-btn" role="tab" data-tab="grid" aria-selected="false" aria-controls="panel-grid">Grid</button>
         <button class="tab-btn" role="tab" data-tab="market" aria-selected="false" aria-controls="panel-market">Market</button>
+        <button class="tab-btn" role="tab" data-tab="model" aria-selected="false" aria-controls="panel-model">Model</button>
     </nav>
 
     <div class="tab-panels">
@@ -100,6 +101,123 @@
             </div>
             <div class="chart-container">
                 <div id="gasChart" class="chart-area chart-area-sm"></div>
+            </div>
+        </div>
+    </div>
+
+        <!-- Model: ML explanation and diagnostics -->
+        <div class="tab-panel" id="panel-model" role="tabpanel">
+            <!-- Architecture diagram -->
+            <div class="model-section">
+                <h2 class="model-title">Architecture</h2>
+                <div class="architecture-diagram">
+                    <div class="arch-node arch-data">
+                        <div class="arch-label">energyDataHub</div>
+                        <div class="arch-detail">18+ APIs, daily 16:00 UTC</div>
+                    </div>
+                    <div class="arch-arrow"></div>
+                    <div class="arch-node arch-features">
+                        <div class="arch-label">Feature Builder</div>
+                        <div class="arch-detail">26 features: lags, rolling stats, calendar, wind, solar, load</div>
+                    </div>
+                    <div class="arch-arrow"></div>
+                    <div class="arch-node arch-model">
+                        <div class="arch-label">ARF Regressor</div>
+                        <div class="arch-detail">10-tree adaptive forest, continuous learning via River</div>
+                    </div>
+                    <div class="arch-arrow"></div>
+                    <div class="arch-node arch-output">
+                        <div class="arch-label">48h Forecast</div>
+                        <div class="arch-detail">Price + 80% confidence band, updated daily</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Model card metrics -->
+            <div class="model-section">
+                <h2 class="model-title">Model Card</h2>
+                <div class="model-cards-grid">
+                    <div class="model-metric-card">
+                        <div class="metric-value" id="metric-mae">17.2</div>
+                        <div class="metric-label">MAE (EUR/MWh)</div>
+                    </div>
+                    <div class="model-metric-card">
+                        <div class="metric-value" id="metric-samples">4,095</div>
+                        <div class="metric-label">Training Samples</div>
+                    </div>
+                    <div class="model-metric-card">
+                        <div class="metric-value" id="metric-features">26</div>
+                        <div class="metric-label">Features</div>
+                    </div>
+                    <div class="model-metric-card">
+                        <div class="metric-value" id="metric-horizon">48h</div>
+                        <div class="metric-label">Forecast Horizon</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Feature Importance + Correlation side by side -->
+            <div class="model-section">
+                <h2 class="model-title">Feature Analysis</h2>
+                <p class="model-subtitle">Lasso regression (L1) identifies the most predictive features. Correlation heatmap shows linear relationships between all variables.</p>
+                <div class="model-two-col">
+                    <div class="chart-container">
+                        <h3 class="forecast-header-text">Feature Importance (Lasso)</h3>
+                        <div id="featureImportanceChart" class="chart-area"></div>
+                    </div>
+                    <div class="chart-container">
+                        <h3 class="forecast-header-text">Correlation Matrix</h3>
+                        <div id="correlationChart" class="chart-area"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Price Profile + Wind Scatter side by side -->
+            <div class="model-section">
+                <h2 class="model-title">Data Patterns</h2>
+                <p class="model-subtitle">Average NL electricity price by hour shows the daily demand cycle. Wind speed scatter reveals the nonlinear wind-price relationship.</p>
+                <div class="model-two-col">
+                    <div class="chart-container">
+                        <h3 class="forecast-header-text">Daily Price Profile (6 months avg)</h3>
+                        <div id="hourlyProfileChart" class="chart-area"></div>
+                    </div>
+                    <div class="chart-container">
+                        <h3 class="forecast-header-text">Offshore Wind vs Price</h3>
+                        <div id="windScatterChart" class="chart-area"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Learning Curve -->
+            <div class="model-section">
+                <h2 class="model-title">Learning Curve</h2>
+                <p class="model-subtitle">Rolling MAE during online learning. The model sees each hour once and never revisits it — this is how it improves over time.</p>
+                <div class="chart-container">
+                    <div id="learningCurveChart" class="chart-area chart-area-sm"></div>
+                </div>
+            </div>
+
+            <!-- Methodology description -->
+            <div class="model-section">
+                <h2 class="model-title">How It Works</h2>
+                <div class="model-description">
+                    <div class="info-card">
+                        <h3>Continuous Learning</h3>
+                        <div>The model uses River's Adaptive Random Forest (ARF) — an ensemble of 10 Hoeffding trees that adapt to concept drift. Each day, new price observations arrive and the model updates incrementally via <code>predict_one()</code> then <code>learn_one()</code>. It never retrains from scratch.</div>
+                    </div>
+                    <div class="info-card">
+                        <h3>Feature Engineering</h3>
+                        <div>Features are selected via Lasso (L1) regularization on 6 months of data (R&sup2;=0.934). The dominant signal is autoregressive: recent prices predict future prices. Wind speed and load forecast provide the exogenous context that helps predict price regime shifts.</div>
+                    </div>
+                    <div class="info-card">
+                        <h3>Confidence Bands</h3>
+                        <div>The 80% confidence interval is computed empirically from the last 500 prediction errors. The band widens linearly over the forecast horizon to reflect increasing uncertainty. Prices below 0 are clamped.</div>
+                    </div>
+                    <div class="info-card">
+                        <h3>Data Pipeline</h3>
+                        <div>energyDataHub collects from 18+ APIs daily at 16:00 UTC. A cron job on sadalsuud pulls the data, updates the model, generates the forecast, and pushes to GitHub — triggering a Netlify rebuild. The full cycle takes under 30 seconds.</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

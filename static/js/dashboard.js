@@ -20,6 +20,7 @@ import {
     processImbalance, processFlows, processLoad,
     buildMarketCards, processGasChart,
 } from './modules/tab-charts.js';
+import { renderAllModelViz } from './modules/model-viz.js';
 
 /**
  * Main Energy Dashboard class
@@ -288,6 +289,12 @@ class EnergyDashboard {
      */
     async onTabChange(tabKey, firstVisit) {
         if (tabKey === 'prices') return;
+
+        // Model tab has no data files to load
+        if (tabKey === 'model') {
+            if (firstVisit) renderAllModelViz();
+            return;
+        }
 
         const tabConfig = DATA_SOURCES.tabs[tabKey];
         if (!tabConfig) return;

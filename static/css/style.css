@@ -658,6 +658,183 @@ body {
     margin-top: 8px;
 }
 
+/* Model Tab */
+.model-section {
+    margin-bottom: 32px;
+}
+
+.model-title {
+    font-size: 1.3rem;
+    font-weight: 500;
+    color: #ffffff;
+    margin-bottom: 8px;
+}
+
+.model-subtitle {
+    font-size: 0.85rem;
+    color: #999999;
+    margin-bottom: 16px;
+    line-height: 1.5;
+}
+
+.forecast-header-text {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #cccccc;
+    margin-bottom: 8px;
+    padding: 0 4px;
+}
+
+.model-two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.model-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 8px;
+}
+
+.model-metric-card {
+    background: #111111;
+    border: 1px solid #333333;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+}
+
+.metric-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #a78bfa;
+    line-height: 1.2;
+}
+
+.metric-label {
+    font-size: 0.8rem;
+    color: #999999;
+    margin-top: 6px;
+}
+
+/* Architecture block diagram */
+.architecture-diagram {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 24px 16px;
+    overflow-x: auto;
+}
+
+.arch-node {
+    background: #111111;
+    border: 1px solid #333333;
+    border-radius: 12px;
+    padding: 16px 20px;
+    text-align: center;
+    min-width: 160px;
+    flex-shrink: 0;
+}
+
+.arch-node.arch-data { border-color: #60a5fa; }
+.arch-node.arch-features { border-color: #10b981; }
+.arch-node.arch-model { border-color: #a78bfa; }
+.arch-node.arch-output { border-color: #f59e0b; }
+
+.arch-label {
+    font-weight: 600;
+    color: #ffffff;
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+}
+
+.arch-detail {
+    font-size: 0.75rem;
+    color: #999999;
+    line-height: 1.3;
+    max-width: 180px;
+}
+
+.arch-arrow {
+    width: 40px;
+    height: 2px;
+    background: #666666;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.arch-arrow::after {
+    content: '';
+    position: absolute;
+    right: -1px;
+    top: -4px;
+    border: 5px solid transparent;
+    border-left-color: #666666;
+}
+
+/* Model description cards */
+.model-description {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.model-description .info-card h3 {
+    color: #a78bfa;
+    font-size: 1rem;
+    margin-bottom: 10px;
+}
+
+.model-description .info-card div {
+    font-size: 0.85rem;
+    line-height: 1.6;
+}
+
+.model-description .info-card code {
+    background: #1a1a1a;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.8rem;
+    color: #a78bfa;
+}
+
+/* Model tab mobile */
+@media (max-width: 768px) {
+    .model-two-col {
+        grid-template-columns: 1fr;
+    }
+
+    .model-cards-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .model-description {
+        grid-template-columns: 1fr;
+    }
+
+    .architecture-diagram {
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .arch-arrow {
+        width: 2px;
+        height: 24px;
+    }
+
+    .arch-arrow::after {
+        right: -4px;
+        top: auto;
+        bottom: -1px;
+        border: 5px solid transparent;
+        border-top-color: #666666;
+        border-left-color: transparent;
+    }
+}
+
 /* Loading Indicator */
 .loading-indicator {
     position: absolute;
