@@ -132,6 +132,9 @@ def update_model(model, state, data):
     temp = data.get("temperature", pd.Series(dtype=float))
     load = data.get("load", pd.Series(dtype=float))
 
+    # Rolling error history for confidence bands (keep last 500 errors)
+    error_history = state.get("error_history", [])
+
     errors = []
     for ts, price in new_prices.items():
         if np.isnan(price):
@@ -154,7 +157,12 @@ def update_model(model, state, data):
         model.learn_one(features, price)
         fb.push_price(ts_iso, price)
 
-        errors.append(abs(price - y_pred))
+        err = price - y_pred  # signed error (not abs)
+        errors.append(abs(err))
+        error_history.append(err)
+
+    # Trim to last 500
+    error_history = error_history[-500:]
 
     # Update state
     n_new = len(errors)
@@ -164,6 +172,7 @@ def update_model(model, state, data):
     state["last_timestamp"] = new_prices.index.max().isoformat()
     state["n_samples"] = prev_n + n_new
     state["price_buffer"] = fb.get_price_buffer()
+    state["error_history"] = error_history
     if mae is not None:
         state.setdefault("metrics", {})["update_mae"] = round(mae, 2)
 
@@ -172,15 +181,28 @@ def update_model(model, state, data):
     return model, state, fb
 
 
-def generate_forecast(model, fb, data, hours=48):
-    """Generate price forecast for the next N hours."""
+def generate_forecast(model, fb, data, state, hours=48):
+    """Generate price forecast with confidence bands for the next N hours."""
     wind = data.get("wind", pd.Series(dtype=float))
     solar = data.get("solar", pd.Series(dtype=float))
     temp = data.get("temperature", pd.Series(dtype=float))
     load = data.get("load", pd.Series(dtype=float))
 
+    # Compute confidence band widths from error history
+    error_history = state.get("error_history", [])
+    if len(error_history) >= 20:
+        abs_errors = sorted(abs(e) for e in error_history)
+        # 80% confidence interval: 10th and 90th percentile of absolute errors
+        p80 = abs_errors[int(len(abs_errors) * 0.80)]
+        p50 = abs_errors[int(len(abs_errors) * 0.50)]
+    else:
+        p80 = 30.0  # fallback before enough history
+        p50 = 15.0
+
     now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
     forecast = {}
+    forecast_upper = {}
+    forecast_lower = {}
 
     for h in range(hours):
         ts = now + timedelta(hours=h)
@@ -199,13 +221,20 @@ def generate_forecast(model, fb, data, hours=48):
             continue
 
         pred = model.predict_one(features)
+
+        # Widen confidence band for further-out predictions
+        # Linear growth: at h=0 use p50, at h=48 use p80
+        band_width = p50 + (p80 - p50) * min(h / hours, 1.0)
+
         forecast[ts_iso] = round(pred, 2)
+        forecast_upper[ts_iso] = round(pred + band_width, 2)
+        forecast_lower[ts_iso] = round(max(pred - band_width, 0), 2)  # prices can't go far below 0
 
         # Feed prediction back as price lag for subsequent hours
         fb.push_price(ts_iso, pred)
 
-    logger.info(f"Generated {len(forecast)}-hour forecast")
-    return forecast
+    logger.info(f"Generated {len(forecast)}-hour forecast (band: ±{p50:.0f} to ±{p80:.0f} EUR/MWh)")
+    return forecast, forecast_upper, forecast_lower
 
 
 def _nearest(series: pd.Series, target_ts: pd.Timestamp, tolerance_hours=3) -> float | None:
@@ -241,8 +270,8 @@ def save_model_and_state(model, state):
     logger.info(f"Model and state saved to {MODEL_DIR}")
 
 
-def write_forecast_json(forecast, state, output_dir: Path):
-    """Write forecast JSON for the dashboard."""
+def write_forecast_json(forecast, forecast_upper, forecast_lower, state, output_dir: Path):
+    """Write forecast JSON with confidence bands for the dashboard."""
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / "augur_forecast.json"
 
@@ -254,6 +283,8 @@ def write_forecast_json(forecast, state, output_dir: Path):
             "metrics": state.get("metrics", {}),
         },
         "forecast": forecast,
+        "forecast_upper": forecast_upper,
+        "forecast_lower": forecast_lower,
     }
 
     with open(output_path, "w") as f:
@@ -285,12 +316,12 @@ def main():
     # Update model with new observations
     model, state, fb = update_model(model, state, data)
 
-    # Generate forecast
-    forecast = generate_forecast(model, fb, data)
+    # Generate forecast with confidence bands
+    forecast, forecast_upper, forecast_lower = generate_forecast(model, fb, data, state)
 
     # Save everything
     save_model_and_state(model, state)
-    write_forecast_json(forecast, state, augur_dir / "static" / "data")
+    write_forecast_json(forecast, forecast_upper, forecast_lower, state, augur_dir / "static" / "data")
 
     logger.info("=" * 60)
     logger.info("Update complete")

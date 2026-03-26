@@ -79,9 +79,10 @@ def warmup(data_path: Path):
         model.learn_one(features, price)
         fb.push_price(ts_iso, price)
 
-        error = abs(price - y_pred)
+        signed_error = price - y_pred
+        error = abs(signed_error)
         errors.append(error)
-        all_errors.append(error)
+        all_errors.append(signed_error)
         n_learned += 1
 
         # Log progress every 500 rows
@@ -94,11 +95,11 @@ def warmup(data_path: Path):
 
     # Final metrics
     if all_errors:
-        overall_mae = np.mean(all_errors)
+        overall_mae = np.mean([abs(e) for e in all_errors])
         last_week_mae = np.mean(list(errors))
         # MAPE (avoid division by zero)
         prices = df["price_eur_mwh"].dropna().values[-len(all_errors):]
-        mape_vals = [abs(e / p) * 100 for e, p in zip(all_errors, prices) if abs(p) > 1.0]
+        mape_vals = [abs(e / p) * 100 for e, p in zip([abs(x) for x in all_errors], prices) if abs(p) > 1.0]
         overall_mape = np.mean(mape_vals) if mape_vals else float("nan")
 
         logger.info(f"\n{'='*60}")
@@ -134,6 +135,7 @@ def warmup(data_path: Path):
             "last_week_mae": round(last_week_mae, 2) if not np.isnan(last_week_mae) else None,
         },
         "price_buffer": fb.get_price_buffer(),
+        "error_history": [round(e, 2) for e in all_errors[-500:]],
     }
     state_path = MODEL_DIR / "state.json"
     with open(state_path, "w") as f:

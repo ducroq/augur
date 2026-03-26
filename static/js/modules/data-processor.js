@@ -249,17 +249,54 @@ export function processEnergyDataForChart(energyData, energyZeroData, cutoffTime
         }
     }
 
-    // Add Augur ML forecast if available
+    // Add Augur ML forecast with confidence band if available
     if (augurForecast && augurForecast.forecast) {
+        const tsFilter = (ts) => new Date(ts) >= cutoffTime;
+        const sortByTs = (a, b) => new Date(a.ts) - new Date(b.ts);
+
         const forecastData = Object.entries(augurForecast.forecast)
+            .filter(([ts]) => tsFilter(ts))
             .map(([ts, price]) => ({ ts, price: addNoise(price) }))
-            .filter(item => {
-                const d = new Date(item.ts);
-                return d >= cutoffTime;
-            })
-            .sort((a, b) => new Date(a.ts) - new Date(b.ts));
+            .sort(sortByTs);
 
         if (forecastData.length > 0) {
+            // Confidence band (80% interval) as shaded area
+            const upper = augurForecast.forecast_upper || {};
+            const lower = augurForecast.forecast_lower || {};
+            const bandX = [];
+            const bandY = [];
+
+            // Upper bound forward, then lower bound reversed (creates filled polygon)
+            const sortedTs = forecastData.map(d => d.ts);
+            for (const ts of sortedTs) {
+                if (upper[ts] != null) {
+                    bandX.push(ts);
+                    bandY.push(addNoise(upper[ts]));
+                }
+            }
+            for (let i = sortedTs.length - 1; i >= 0; i--) {
+                const ts = sortedTs[i];
+                if (lower[ts] != null) {
+                    bandX.push(ts);
+                    bandY.push(Math.max(addNoise(lower[ts]), 0));
+                }
+            }
+
+            if (bandX.length > 0) {
+                traces.push({
+                    x: bandX,
+                    y: bandY,
+                    type: 'scatter',
+                    fill: 'toself',
+                    fillcolor: 'rgba(167, 139, 250, 0.15)',
+                    line: { color: 'transparent' },
+                    name: '80% confidence',
+                    showlegend: true,
+                    hoverinfo: 'skip',
+                });
+            }
+
+            // Forecast line on top
             traces.push({
                 x: forecastData.map(d => d.ts),
                 y: forecastData.map(d => d.price),
