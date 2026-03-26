@@ -290,9 +290,9 @@ class EnergyDashboard {
     async onTabChange(tabKey, firstVisit) {
         if (tabKey === 'prices') return;
 
-        // Model tab has no data files to load
+        // Model tab has no data files to load — delay to let panel become visible
         if (tabKey === 'model') {
-            if (firstVisit) renderAllModelViz();
+            if (firstVisit) setTimeout(() => renderAllModelViz(), 50);
             return;
         }
 
