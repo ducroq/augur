@@ -31,6 +31,7 @@ from ml.data.consolidate import (
     parse_weather_file,
     parse_load_file,
     glob_sorted,
+    _get_handler,  # ensure decryption keys are loaded
 )
 from ml.features.online_features import OnlineFeatureBuilder
 

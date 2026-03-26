@@ -10,8 +10,10 @@ Usage:
 """
 
 import argparse
+import base64
 import json
 import logging
+import os
 from pathlib import Path
 from datetime import datetime
 
@@ -22,6 +24,47 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 OUTPUT_DEFAULT = Path(__file__).parent / "training_history.parquet"
+
+# Lazy-loaded decryption handler
+_handler = None
+
+
+def _get_handler():
+    """Get or create SecureDataHandler from environment variables."""
+    global _handler
+    if _handler is not None:
+        return _handler
+
+    from utils.secure_data_handler import SecureDataHandler
+
+    enc_key = os.environ.get("ENCRYPTION_KEY_B64")
+    hmac_key = os.environ.get("HMAC_KEY_B64")
+    if not enc_key or not hmac_key:
+        raise RuntimeError(
+            "ENCRYPTION_KEY_B64 and HMAC_KEY_B64 must be set. "
+            "Source your .env file: export $(cat .env | xargs)"
+        )
+    _handler = SecureDataHandler(
+        base64.b64decode(enc_key),
+        base64.b64decode(hmac_key),
+    )
+    return _handler
+
+
+def load_json_file(path: Path) -> dict:
+    """Load a JSON file, decrypting if necessary."""
+    with open(path) as f:
+        raw = f.read().strip()
+
+    # Try plain JSON first
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+
+    # Must be encrypted — decrypt
+    handler = _get_handler()
+    return handler.decrypt_and_verify(raw)
 
 
 def resolve_weather_value(val):
@@ -37,8 +80,7 @@ def resolve_weather_value(val):
 
 def parse_price_file(path: Path) -> pd.Series:
     """Extract ENTSO-E NL hourly prices from an energy_price_forecast file."""
-    with open(path) as f:
-        data = json.load(f)
+    data = load_json_file(path)
 
     # Try entsoe first, fall back to energy_zero
     for source_key in ("entsoe", "energy_zero", "epex"):
@@ -66,8 +108,7 @@ def parse_price_file(path: Path) -> pd.Series:
 
 def parse_wind_file(path: Path) -> pd.Series:
     """Extract NL offshore wind speed (80m) from a wind_forecast file."""
-    with open(path) as f:
-        data = json.load(f)
+    data = load_json_file(path)
 
     offshore = data.get("offshore_wind", {})
     if not isinstance(offshore, dict) or "data" not in offshore:
@@ -91,8 +132,7 @@ def parse_wind_file(path: Path) -> pd.Series:
 
 def parse_solar_file(path: Path) -> pd.Series:
     """Extract NL solar GHI from a solar_forecast file."""
-    with open(path) as f:
-        data = json.load(f)
+    data = load_json_file(path)
 
     solar_data = data.get("data", {})
     nl_key = next((k for k in solar_data if "NL" in k), None)
@@ -112,8 +152,7 @@ def parse_solar_file(path: Path) -> pd.Series:
 
 def parse_weather_file(path: Path) -> pd.Series:
     """Extract NL temperature from a weather_forecast file."""
-    with open(path) as f:
-        data = json.load(f)
+    data = load_json_file(path)
 
     weather_data = data.get("data", {})
     nl_key = next((k for k in weather_data if "NL" in k), None)
@@ -135,8 +174,7 @@ def parse_weather_file(path: Path) -> pd.Series:
 
 def parse_load_file(path: Path) -> pd.Series:
     """Extract NL load forecast from a load_forecast file."""
-    with open(path) as f:
-        data = json.load(f)
+    data = load_json_file(path)
 
     load_data = data.get("data", {})
     nl_data = load_data.get("NL", {})
