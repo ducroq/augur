@@ -43,32 +43,42 @@ energyDataHub (separate repo, 18+ API collectors)
     │ daily 16:00 UTC, encrypted JSON → GitHub Pages
     │
     ▼
-Augur (this repo)
-    ├── decrypt_data_cached.py --force     → static/data/*.json
-    ├── ml/inference.py                    → static/data/augur_forecast.json
-    ├── hugo --minify                      → public/
+sadalsuud (daily cron 16:45 UTC)
+    ├── git pull energyDataHub
+    ├── python -m ml.update              → learn new prices, generate forecast
+    ├── git push augur                   → triggers Netlify rebuild
+    │
+    ▼
+Augur Netlify build
+    ├── decrypt_data_cached.py --force   → static/data/*.json (10 files)
+    ├── hugo --minify                    → public/
     └── Netlify CDN deploy
 
-Client browser:
-    ├── loads forecast data from /data/
+Client browser (https://energy.jeroenveen.nl):
+    ├── 5 tabs: Prices, Forecast, Grid, Market, Model
+    ├── loads forecast + augur_forecast.json from /data/
     ├── fetches live Energy Zero API (every 10 min)
-    └── renders Plotly.js charts
+    └── renders Plotly.js charts with noise
 ```
 
-### ML Pipeline Phases
-1. **Phase 1** (next): XGBoost batch baseline on ~160 days accumulated history
-2. **Phase 2**: River online learning — `predict_one()` then `learn_one()` daily
-3. **Phase 3**: Drift detection (ADWIN + Page-Hinkley) on residuals
-4. **Phase 4**: Model performance monitoring dashboard
+### ML Pipeline (live)
+- **Model**: River ARFRegressor (10 trees), continuous online learning
+- **Features**: Lasso-selected — price lags, rolling stats, wind speed, solar GHI, load forecast
+- **Target**: ENTSO-E NL wholesale day-ahead price (EUR/MWh)
+- **Forecast**: 48h with 80% confidence band, exchange-informed lags
+- **Convergence metric**: vs Exchange MAE (tracking daily)
+- **Forecast archive**: timestamped copies in `ml/forecasts/` on sadalsuud
 
 ## Key Paths
 
 | Path | What it is |
 |------|-----------|
-| `ml/features/builder.py` | Feature engineering — lags, calendar, weather, grid, market |
-| `ml/training/trainer.py` | Model training lifecycle (batch + online) |
-| `ml/inference.py` | Build-time inference, outputs augur_forecast.json |
-| `ml/models/` | Trained model artifacts (gitignored) |
+| `ml/features/online_features.py` | Shared feature builder for warmup + daily update |
+| `ml/data/consolidate.py` | Parses encrypted energyDataHub history into training parquet |
+| `ml/training/warmup.py` | One-time historical replay through River ARF |
+| `ml/update.py` | Daily entry point: learn + forecast + archive |
+| `ml/models/river_model.pkl` | Trained model artifact (committed daily by sadalsuud) |
+| `ml/models/state.json` | Model state: timestamps, error history, price buffer |
 | `static/js/dashboard.js` | Modular dashboard entry point (preferred) |
 | `static/js/modules/` | ES6 modules: api-client, chart-renderer, data-processor, etc. |
 | `static/js/chart.js` | Legacy monolith — DO NOT MODIFY, pending deprecation |

@@ -6,31 +6,43 @@
 |------|-------------|-------------|
 | `memory/gotcha-log.md` | Stuck or debugging | Problem-fix archive |
 | `memory/data-formats.md` | Working with energyDataHub data | Schema v2.1 structure, units, timezone conventions |
-| `memory/ml-decisions.md` | ML architecture choices | Why XGBoost first, why week-ahead, online learning rationale |
+| `memory/ml-decisions.md` | ML architecture choices | Original XGBoost plan (superseded by River ARF) |
 
 ## Current State
 
 - Restructured from energyDataDashboard to Augur (2026-03-25)
-- Dashboard: production on Netlify, modular JS architecture in place
-- ML pipeline: scaffolded (`ml/`), not yet wired to data — Phase 1 (XGBoost baseline) is next
-- energyDataHub: stable, collecting daily, ~160 days of history
-
-## Recently Promoted
-
-- (none yet — framework just adopted)
+- Dashboard: 5 tabs (Prices, Forecast, Grid, Market, Model) on Netlify
+- ML pipeline: **live** — River ARF on sadalsuud, daily cron at 16:45 UTC
+- Forecast: 48h with confidence bands, exchange-informed lags
+- Key metric: vs Exchange MAE = 16.1 EUR/MWh (tracking convergence)
+- energyDataHub: stable, collecting daily, ~220 days of history
 
 ## Key File Paths
 
 | Path | Why it matters |
 |------|---------------|
-| `ml/features/builder.py` | First file to implement for Phase 1 — needs energyDataHub JSON wiring |
-| `decrypt_data_cached.py` | The --force flag is critical for webhook builds (see ADR-003) |
-| `netlify.toml` | Build pipeline — will need `python -m ml.inference` added after Phase 1 |
+| `ml/features/online_features.py` | Shared feature builder for warmup + daily update |
+| `ml/data/consolidate.py` | Parses 220 days of encrypted energyDataHub history |
+| `ml/training/warmup.py` | Replays history through River ARF (one-time) |
+| `ml/update.py` | Daily entry point: learn + forecast + archive |
+| `ml/models/river_model.pkl` | Trained model (committed daily by sadalsuud) |
+| `ml/models/state.json` | Model state: last timestamp, error history, price buffer |
+| `static/data/augur_forecast.json` | Dashboard forecast output with confidence bands |
+| `decrypt_data_cached.py` | Decrypts 10 data files from energyDataHub |
+| `scripts/daily_update.sh` | Cron script on sadalsuud |
 
 ## Active Decisions
 
-- ADR-001: Timezone handling strategy — use `Intl.DateTimeFormat` with Europe/Amsterdam, not hardcoded offsets
-- ADR-003: Netlify cache --force flag fix — ensures webhook-triggered builds always decrypt fresh data
-- Adopted agent-ready-projects v1.2.0 framework for project structure (2026-03-25)
-- Week-ahead (168h) prediction horizon chosen over day-ahead for practical scheduling value
-- XGBoost batch baseline before River online learning — need working baseline first
+- ADR-001: Timezone handling — use `Intl.DateTimeFormat` with Europe/Amsterdam
+- ADR-003: Netlify cache --force flag — ensures fresh data on webhook builds
+- Target: ENTSO-E NL wholesale day-ahead price (not consumer)
+- Model: River ARF (10 trees), not XGBoost — continuous learning over batch
+- Features: selected by Lasso at multiple horizons (1h/6h/24h/48h)
+- Dropped temperature (no signal per Lasso), using one NL location per data type
+- Exchange prices fed as lag features for first ~29h of forecast
+- Noise: client-side Math.random ±5%, transparent to users
+
+## Open Issues
+
+- energyDataHub #5: Gas TTF time series, #6: NED production, #7: Generation mix
+- Augur #2-4: New features (NED, gas, flows), #5: Backtesting, #6-7: Model variants
