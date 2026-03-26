@@ -15,6 +15,18 @@ REQUIRED_LAGS = [1, 24, 168]
 OPTIONAL_LAGS = [2, 3, 6, 12, 48]
 
 
+def _safe(val: float | None) -> float:
+    """Return 0.0 if value is None or NaN."""
+    if val is None:
+        return 0.0
+    try:
+        if val != val:  # NaN check
+            return 0.0
+    except (TypeError, ValueError):
+        return 0.0
+    return float(val)
+
+
 class OnlineFeatureBuilder:
     """Builds feature dicts for River's predict_one/learn_one interface."""
 
@@ -92,11 +104,11 @@ class OnlineFeatureBuilder:
 
         features.update(lags)
 
-        # Exogenous features — use 0 if unavailable
-        features["wind_speed_80m"] = wind_speed_80m if wind_speed_80m is not None else 0.0
-        features["solar_ghi"] = solar_ghi if solar_ghi is not None else 0.0
-        features["temperature"] = temperature if temperature is not None else 0.0
-        features["load_forecast"] = load_forecast if load_forecast is not None else 0.0
+        # Exogenous features — use 0 if unavailable or NaN
+        features["wind_speed_80m"] = _safe(wind_speed_80m)
+        features["solar_ghi"] = _safe(solar_ghi)
+        features["temperature"] = _safe(temperature)
+        features["load_forecast"] = _safe(load_forecast)
 
         return features
 
