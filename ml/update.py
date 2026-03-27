@@ -16,6 +16,7 @@ Usage:
 import argparse
 import json
 import logging
+import math
 import os
 import pickle
 from datetime import datetime, timedelta, timezone
@@ -190,15 +191,22 @@ def generate_forecast(model, fb, data, state, hours=48):
     solar = data.get("solar", pd.Series(dtype=float))
     load = data.get("load", pd.Series(dtype=float))
 
-    # Compute confidence band widths from error history
+    # Confidence bands from exponentially-weighted error stats
+    # Half-life 24 samples (~1 day) — recent errors dominate
     error_history = state.get("error_history", [])
-    if len(error_history) >= 20:
-        abs_errors = sorted(abs(e) for e in error_history)
-        p80 = abs_errors[int(len(abs_errors) * 0.80)]
-        p50 = abs_errors[int(len(abs_errors) * 0.50)]
+    MIN_BAND = 8.0  # EUR/MWh floor
+
+    if len(error_history) >= 2:
+        alpha = 1 - math.exp(-math.log(2) / 24)
+        ewm_abs = abs(error_history[0])
+        ewm_sq = error_history[0] ** 2
+        for e in error_history[1:]:
+            ewm_abs = alpha * abs(e) + (1 - alpha) * ewm_abs
+            ewm_sq = alpha * e ** 2 + (1 - alpha) * ewm_sq
+        ewm_std = max(0.0, ewm_sq - ewm_abs ** 2) ** 0.5
     else:
-        p80 = 30.0
-        p50 = 15.0
+        ewm_abs = 30.0
+        ewm_std = 15.0
 
     now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
 
@@ -240,14 +248,19 @@ def generate_forecast(model, fb, data, state, hours=48):
 
         pred = model.predict_one(features)
 
-        # Narrow band where exchange price is known (model vs exchange comparison)
-        # Wide band where we're forecasting beyond the exchange horizon
+        # Current price volatility (already computed by feature builder)
+        vol_6h = features.get("price_rolling_std_6h", 0.0)
+        vol_scale = max(1.0, min(vol_6h / max(ewm_abs, 1.0), 5.0))
+
+        # Narrow band where exchange price is known, wide beyond exchange horizon
         if exchange_price is not None:
-            band_width = p50 * 0.3  # narrow — exchange price anchors expectations
+            band_width = ewm_abs * 0.5 * vol_scale
         else:
-            # Band widens beyond exchange horizon
-            band_width = p50 + (p80 - p50) * min(h / hours, 1.0)
+            horizon_factor = 1.0 + (ewm_std / max(ewm_abs, 1.0)) * min(h / hours, 1.0)
+            band_width = ewm_abs * horizon_factor * vol_scale
             n_ml_only += 1
+
+        band_width = max(band_width, MIN_BAND)
 
         forecast[ts_iso] = round(pred, 2)
         forecast_upper[ts_iso] = round(pred + band_width, 2)
@@ -260,7 +273,8 @@ def generate_forecast(model, fb, data, state, hours=48):
         f"Generated {len(forecast)}-hour forecast: "
         f"{len(forecast) - n_ml_only} hours with exchange lags, "
         f"{n_ml_only} hours ML-only "
-        f"(band: ±{p50:.0f} to ±{p80:.0f} EUR/MWh)"
+        f"(ewm_abs={ewm_abs:.1f}, ewm_std={ewm_std:.1f}, "
+        f"min_band={MIN_BAND} EUR/MWh)"
     )
     return forecast, forecast_upper, forecast_lower
 
