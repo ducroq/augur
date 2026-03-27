@@ -13,9 +13,12 @@
 - Restructured from energyDataDashboard to Augur (2026-03-25)
 - Dashboard: 5 tabs (Prices, Forecast, Grid, Market, Model) on Netlify
 - ML pipeline: **live** — River ARF on sadalsuud, daily cron at 16:45 UTC
-- Forecast: 48h with confidence bands, exchange-informed lags
+- Forecast: 48h wholesale + consumer (auto-derived surcharge), exchange-informed lags
+- Confidence bands: EWM error stats (half-life 24h) + volatility scaling (2026-03-27)
+- Consumer forecast: orange dotted line, derived from EZ/ENTSO-E overlap (2026-03-27)
 - Key metric: vs Exchange MAE = 16.1 EUR/MWh (tracking convergence)
 - energyDataHub: stable, collecting daily, ~220 days of history
+- energyDataHub issues #5, #6, #7 all resolved (gas TTF, NED, generation mix)
 
 ## Key File Paths
 
@@ -35,7 +38,7 @@
 
 - ADR-001: Timezone handling — use `Intl.DateTimeFormat` with Europe/Amsterdam
 - ADR-003: Netlify cache --force flag — ensures fresh data on webhook builds
-- Target: ENTSO-E NL wholesale day-ahead price (not consumer)
+- Target: ENTSO-E NL wholesale day-ahead price + derived consumer forecast
 - Model: River ARF (10 trees), not XGBoost — continuous learning over batch
 - Features: selected by Lasso at multiple horizons (1h/6h/24h/48h)
 - Dropped temperature (no signal per Lasso), using one NL location per data type
@@ -44,5 +47,6 @@
 
 ## Open Issues
 
-- energyDataHub #5: Gas TTF time series, #6: NED production, #7: Generation mix
+- energyDataHub #5, #6, #7: All resolved (gas TTF, NED, generation mix now collecting)
 - Augur #2-4: New features (NED, gas, flows), #5: Backtesting, #6-7: Model variants
+- Planned ~2026-04-17: Re-warmup with new features (TTF gas, gen mix, gas storage, NED production)

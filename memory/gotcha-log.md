@@ -17,8 +17,8 @@
 ### Elspot timezone offset malformed (2026-03, pre-Augur)
 **Problem**: Elspot data had `+00:09` timezone offset instead of `+02:00`.
 **Root cause**: Bug in energyDataHub's Elspot collector producing malformed timezone strings.
-**Fix**: Client-side normalization in chart.js as workaround. Backend fix needed in energyDataHub.
-**Status**: Active — workaround in dashboard, root cause unfixed in energyDataHub.
+**Fix**: energyDataHub migrated from nordpool to pynordpool (API v2) in 40632f6, and upstream entsoe-py/tenneteu-py timezone bugs fixed in 33fc596.
+**Status**: [RESOLVED] — root cause fixed in energyDataHub. Client-side workaround in legacy chart.js can be removed when chart.js is deprecated.
 
 ### Energy Zero hardcoded +2h offset assumes summer time (ongoing)
 **Problem**: `chart.js:185-186` adds fixed +2 hours for NL timezone, incorrect during winter (UTC+1).

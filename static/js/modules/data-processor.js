@@ -310,5 +310,63 @@ export function processEnergyDataForChart(energyData, energyZeroData, cutoffTime
         }
     }
 
+    // Add Augur consumer price forecast if available
+    if (augurForecast && augurForecast.consumer_forecast) {
+        const now = new Date();
+        const consumerData = Object.entries(augurForecast.consumer_forecast)
+            .filter(([ts]) => cutoffTime ? new Date(ts) >= cutoffTime : true)
+            .map(([ts, price]) => ({ ts, price: addNoise(price) }))
+            .sort((a, b) => new Date(a.ts) - new Date(b.ts));
+
+        if (consumerData.length > 0) {
+            // Consumer confidence band (future hours only)
+            const cUpper = augurForecast.consumer_forecast_upper || {};
+            const cLower = augurForecast.consumer_forecast_lower || {};
+            const cBandX = [];
+            const cBandY = [];
+
+            const futureTs = consumerData.filter(d => new Date(d.ts) >= now).map(d => d.ts);
+            for (const ts of futureTs) {
+                if (cUpper[ts] != null) {
+                    cBandX.push(ts);
+                    cBandY.push(addNoise(cUpper[ts]));
+                }
+            }
+            for (let i = futureTs.length - 1; i >= 0; i--) {
+                const ts = futureTs[i];
+                if (cLower[ts] != null) {
+                    cBandX.push(ts);
+                    cBandY.push(Math.max(addNoise(cLower[ts]), 0));
+                }
+            }
+
+            if (cBandX.length > 0) {
+                traces.push({
+                    x: cBandX,
+                    y: cBandY,
+                    type: 'scatter',
+                    fill: 'toself',
+                    fillcolor: 'rgba(249, 115, 22, 0.12)',
+                    line: { color: 'transparent' },
+                    name: '80% consumer confidence',
+                    showlegend: true,
+                    hoverinfo: 'skip',
+                });
+            }
+
+            // Consumer forecast line
+            traces.push({
+                x: consumerData.map(d => d.ts),
+                y: consumerData.map(d => d.price),
+                type: 'scatter',
+                mode: 'lines',
+                name: 'Augur Consumer Forecast',
+                line: { width: 3, color: '#f97316', dash: 'dot' },
+                hovertemplate: '<b>Augur Consumer</b><br>%{x}<br>Price: €%{y:.2f}/MWh (incl. VAT)<extra></extra>',
+            });
+            allTimestamps.push(...consumerData.map(d => d.ts));
+        }
+    }
+
     return { traces, allTimestamps: [...new Set(allTimestamps)].sort() };
 }

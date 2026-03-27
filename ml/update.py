@@ -27,6 +27,8 @@ import pandas as pd
 
 from ml.data.consolidate import (
     parse_price_file,
+    parse_energy_zero_consumer,
+    parse_entsoe_wholesale,
     parse_wind_file,
     parse_solar_file,
     parse_weather_file,
@@ -40,6 +42,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 MODEL_DIR = Path(__file__).parent / "models"
+VAT_RATE = 1.21
 
 
 def load_model_and_state():
@@ -295,6 +298,60 @@ def _nearest(series: pd.Series, target_ts: pd.Timestamp, tolerance_hours=3) -> f
     return float(val) if not np.isnan(val) else None
 
 
+def derive_surcharge(data_dir: Path, state: dict) -> float | None:
+    """Derive consumer surcharge (incl. VAT, EUR/MWh) from overlapping EZ/ENTSO-E data.
+
+    surcharge = median(ez_consumer - entsoe_wholesale * VAT_RATE)
+    Falls back to last known surcharge from state if derivation fails.
+    """
+    price_files = glob_sorted(data_dir, "*_energy_price_forecast.json")
+    if not price_files:
+        return state.get("consumer_surcharge", {}).get("value_eur_mwh")
+
+    latest = price_files[-1]
+    ez = parse_energy_zero_consumer(latest)
+    ws = parse_entsoe_wholesale(latest)
+
+    if ez.empty or ws.empty:
+        logger.info("Surcharge: no EZ or ENTSO-E data available")
+        return state.get("consumer_surcharge", {}).get("value_eur_mwh")
+
+    # Resample to hourly to align 15-min ENTSO-E with hourly EZ
+    ez_hourly = ez.resample("h").mean().dropna()
+    ws_hourly = ws.resample("h").mean().dropna()
+
+    overlap_idx = ez_hourly.index.intersection(ws_hourly.index)
+    if len(overlap_idx) < 3:
+        logger.warning(f"Surcharge: only {len(overlap_idx)} overlapping hours, need >= 3")
+        return state.get("consumer_surcharge", {}).get("value_eur_mwh")
+
+    surcharges = ez_hourly[overlap_idx] - ws_hourly[overlap_idx] * VAT_RATE
+    surcharge = float(np.median(surcharges))
+
+    logger.info(
+        f"Surcharge derived: {surcharge:.2f} EUR/MWh (incl. VAT) "
+        f"from {len(overlap_idx)} overlapping hours, "
+        f"range [{surcharges.min():.2f}, {surcharges.max():.2f}]"
+    )
+    return surcharge
+
+
+def generate_consumer_forecast(forecast, forecast_upper, forecast_lower, surcharge):
+    """Transform wholesale forecast into consumer forecast (incl. VAT + surcharges)."""
+    consumer = {}
+    consumer_upper = {}
+    consumer_lower = {}
+
+    for ts, price in forecast.items():
+        consumer[ts] = round(price * VAT_RATE + surcharge, 2)
+    for ts, price in forecast_upper.items():
+        consumer_upper[ts] = round(price * VAT_RATE + surcharge, 2)
+    for ts, price in forecast_lower.items():
+        consumer_lower[ts] = round(max(price * VAT_RATE + surcharge, 0), 2)
+
+    return consumer, consumer_upper, consumer_lower
+
+
 def save_model_and_state(model, state):
     """Persist model and state with atomic writes."""
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
@@ -336,7 +393,9 @@ def compute_exchange_comparison(forecast, data):
     }
 
 
-def write_forecast_json(forecast, forecast_upper, forecast_lower, state, output_dir: Path, exchange_comparison=None):
+def write_forecast_json(forecast, forecast_upper, forecast_lower, state, output_dir: Path,
+                        exchange_comparison=None, consumer_forecast=None,
+                        consumer_upper=None, consumer_lower=None):
     """Write forecast JSON with confidence bands for the dashboard."""
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / "augur_forecast.json"
@@ -356,6 +415,11 @@ def write_forecast_json(forecast, forecast_upper, forecast_lower, state, output_
         "forecast_upper": forecast_upper,
         "forecast_lower": forecast_lower,
     }
+
+    if consumer_forecast:
+        output["consumer_forecast"] = consumer_forecast
+        output["consumer_forecast_upper"] = consumer_upper
+        output["consumer_forecast_lower"] = consumer_lower
 
     with open(output_path, "w") as f:
         json.dump(output, f, indent=2)
@@ -406,9 +470,33 @@ def main():
             f"over {exchange_comparison['n_overlap_hours']} hours"
         )
 
+    # Derive consumer surcharge and generate consumer forecast
+    surcharge = derive_surcharge(data_dir, state)
+    consumer_forecast = None
+    consumer_upper = None
+    consumer_lower = None
+
+    if surcharge is not None:
+        consumer_forecast, consumer_upper, consumer_lower = generate_consumer_forecast(
+            forecast, forecast_upper, forecast_lower, surcharge
+        )
+        state["consumer_surcharge"] = {
+            "value_eur_mwh": round(surcharge, 2),
+            "last_updated": datetime.now(timezone.utc).isoformat(),
+        }
+        logger.info(f"Consumer forecast generated with surcharge {surcharge:.2f} EUR/MWh")
+    else:
+        logger.warning("Consumer forecast skipped — no surcharge available")
+
     # Save everything
     save_model_and_state(model, state)
-    write_forecast_json(forecast, forecast_upper, forecast_lower, state, augur_dir / "static" / "data", exchange_comparison)
+    write_forecast_json(
+        forecast, forecast_upper, forecast_lower, state,
+        augur_dir / "static" / "data", exchange_comparison,
+        consumer_forecast=consumer_forecast,
+        consumer_upper=consumer_upper,
+        consumer_lower=consumer_lower,
+    )
 
     logger.info("=" * 60)
     logger.info("Update complete")

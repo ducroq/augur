@@ -3,7 +3,7 @@
 Energy price forecasting platform for the Netherlands. Combines data from 18+ APIs (via energyDataHub), ML-based week-ahead price predictions, and an interactive dashboard for smart consumption (heat pumps, EV charging, industrial thermal).
 
 - **Stack**: Python 3.12 (ML pipeline), Hugo + Plotly.js (dashboard), XGBoost + River (forecasting)
-- **Status**: Restructuring — dashboard production, ML pipeline scaffolded
+- **Status**: Production — dashboard live, ML pipeline daily on sadalsuud
 - **Repo**: github.com/ducroq/augur
 - **agent-ready-projects**: v1.2.0
 
@@ -11,7 +11,7 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 
 | When | Read |
 |------|------|
-| Working on ML features or training | `ml/features/builder.py` — feature engineering, `ml/training/trainer.py` — model lifecycle |
+| Working on ML features or training | `ml/features/online_features.py` — feature engineering, `ml/training/warmup.py` — model lifecycle |
 | Changing the dashboard or chart rendering | `static/js/modules/` — use modular JS, NOT legacy `chart.js` |
 | Changing deployment or build pipeline | `docs/RUNBOOK.md` — Netlify build, --force flag, webhook flow |
 | Making architectural decisions | `docs/decisions/` — ADR index |
@@ -65,7 +65,9 @@ Client browser (https://energy.jeroenveen.nl):
 - **Model**: River ARFRegressor (10 trees), continuous online learning
 - **Features**: Lasso-selected — price lags, rolling stats, wind speed, solar GHI, load forecast
 - **Target**: ENTSO-E NL wholesale day-ahead price (EUR/MWh)
+- **Consumer forecast**: derived from wholesale via auto-computed surcharge (EZ consumer - ENTSO-E × 1.21)
 - **Forecast**: 48h with 80% confidence band, exchange-informed lags
+- **Confidence bands**: EWM error stats (half-life 24h) + volatility scaling from price_rolling_std_6h
 - **Convergence metric**: vs Exchange MAE (tracking daily)
 - **Forecast archive**: timestamped copies in `ml/forecasts/` on sadalsuud
 

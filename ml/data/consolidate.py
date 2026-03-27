@@ -108,6 +108,42 @@ def parse_price_file(path: Path) -> pd.Series:
     return pd.Series(dtype=float, name="price_eur_mwh")
 
 
+def _parse_single_source(path: Path, source_key: str, name: str) -> pd.Series:
+    """Extract a single price source from an energy_price_forecast file."""
+    data = load_json_file(path)
+    source = data.get(source_key)
+    if not source or not isinstance(source, dict) or "data" not in source:
+        return pd.Series(dtype=float, name=name)
+    ts_data = source["data"]
+    if not isinstance(ts_data, dict):
+        return pd.Series(dtype=float, name=name)
+    units = source.get("metadata", {}).get("units", "EUR/MWh")
+    multiplier = 1000 if "kwh" in units.lower() else 1
+    series = {}
+    for ts_str, price in ts_data.items():
+        if not isinstance(price, (int, float)):
+            continue
+        ts_str = ts_str.replace("+00:18", "+01:00").replace("+00:09", "+01:00")
+        try:
+            ts = pd.Timestamp(ts_str).tz_convert("UTC")
+            series[ts] = price * multiplier
+        except Exception:
+            continue
+    if series:
+        return pd.Series(series, name=name)
+    return pd.Series(dtype=float, name=name)
+
+
+def parse_energy_zero_consumer(path: Path) -> pd.Series:
+    """Extract Energy Zero consumer prices (EUR/MWh incl. VAT) from a price file."""
+    return _parse_single_source(path, "energy_zero", "ez_consumer_eur_mwh")
+
+
+def parse_entsoe_wholesale(path: Path) -> pd.Series:
+    """Extract ENTSO-E wholesale prices (EUR/MWh excl. VAT) from a price file."""
+    return _parse_single_source(path, "entsoe", "entsoe_wholesale_eur_mwh")
+
+
 def parse_wind_file(path: Path) -> pd.Series:
     """Extract NL offshore wind speed (80m) from a wind_forecast file."""
     data = load_json_file(path)
