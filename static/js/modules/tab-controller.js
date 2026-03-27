@@ -61,7 +61,7 @@ export class TabController {
         const map = {
             prices: ['energyChart'],
             forecast: ['windChart', 'solarChart', 'weatherTempChart', 'weatherCloudChart'],
-            grid: ['imbalanceChart', 'flowsChart', 'loadChart'],
+            grid: ['imbalanceChart', 'flowsChart', 'loadChart', 'nedProductionChart'],
             market: ['gasChart'],
             model: ['featureImportanceChart', 'correlationChart', 'hourlyProfileChart', 'windScatterChart', 'learningCurveChart'],
         };

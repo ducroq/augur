@@ -8,7 +8,7 @@
 
     <nav class="tab-nav" role="tablist" aria-label="Dashboard views">
         <button class="tab-btn active" role="tab" data-tab="prices" aria-selected="true" aria-controls="panel-prices">Prices</button>
-        <button class="tab-btn" role="tab" data-tab="forecast" aria-selected="false" aria-controls="panel-forecast">Forecast</button>
+        <button class="tab-btn" role="tab" data-tab="forecast" aria-selected="false" aria-controls="panel-forecast">Weather</button>
         <button class="tab-btn" role="tab" data-tab="grid" aria-selected="false" aria-controls="panel-grid">Grid</button>
         <button class="tab-btn" role="tab" data-tab="market" aria-selected="false" aria-controls="panel-market">Market</button>
         <button class="tab-btn" role="tab" data-tab="model" aria-selected="false" aria-controls="panel-model">Model</button>
@@ -54,14 +54,14 @@
 
             <div class="forecast-section">
                 <div class="forecast-header">
-                    <h3>Weather — Temperature &amp; Wind (10-day)</h3>
+                    <h3>Temperature &amp; Wind (10-day)</h3>
                     <select id="weather-location" class="location-select" aria-label="Weather location"></select>
                 </div>
                 <div class="chart-container">
                     <div id="weatherTempChart" class="chart-area"></div>
                 </div>
                 <div class="forecast-header" style="margin-top:12px">
-                    <h3>Weather — Cloud Cover &amp; Humidity</h3>
+                    <h3>Cloud Cover &amp; Humidity</h3>
                 </div>
                 <div class="chart-container">
                     <div id="weatherCloudChart" class="chart-area"></div>
@@ -87,6 +87,12 @@
                 <div class="forecast-header"><h3>Load Forecast vs Actual (today+tomorrow)</h3></div>
                 <div class="chart-container">
                     <div id="loadChart" class="chart-area"></div>
+                </div>
+            </div>
+            <div class="forecast-section">
+                <div class="forecast-header"><h3>NL Renewable Production — Forecast vs Actual (NED)</h3></div>
+                <div class="chart-container">
+                    <div id="nedProductionChart" class="chart-area"></div>
                 </div>
             </div>
         </div>

@@ -46,6 +46,7 @@ DATA_FILES = [
     'market_proxies.json',
     'gas_storage.json',
     'gas_flows.json',
+    'ned_production.json',
 ]
 
 

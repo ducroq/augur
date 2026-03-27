@@ -55,7 +55,7 @@ Augur Netlify build
     └── Netlify CDN deploy
 
 Client browser (https://energy.jeroenveen.nl):
-    ├── 5 tabs: Prices, Forecast, Grid, Market, Model
+    ├── 5 tabs: Prices, Weather, Grid, Market, Model
     ├── loads forecast + augur_forecast.json from /data/
     ├── fetches live Energy Zero API (every 10 min)
     └── renders Plotly.js charts with noise
@@ -65,7 +65,7 @@ Client browser (https://energy.jeroenveen.nl):
 - **Model**: River ARFRegressor (10 trees), continuous online learning
 - **Features**: Lasso-selected — price lags, rolling stats, wind speed, solar GHI, load forecast
 - **Target**: ENTSO-E NL wholesale day-ahead price (EUR/MWh)
-- **Consumer forecast**: derived from wholesale via auto-computed surcharge (EZ consumer - ENTSO-E × 1.21)
+- **Consumer forecast**: derived from wholesale via auto-computed surcharge (EZ consumer - ENTSO-E × 1.21), with fallback chain (recent files → state → default 95 EUR/MWh)
 - **Forecast**: 48h with 80% confidence band, exchange-informed lags
 - **Confidence bands**: EWM error stats (half-life 24h) + volatility scaling from price_rolling_std_6h
 - **Convergence metric**: vs Exchange MAE (tracking daily)

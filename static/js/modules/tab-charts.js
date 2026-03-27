@@ -261,6 +261,81 @@ export function processLoad(files) {
     return { traces, layout: { yaxis: { title: 'Load (MW)' } } };
 }
 
+// ── Grid Tab: NED Production ───────────────────────────────
+
+/**
+ * Process NED.nl renewable production data (solar, wind onshore, wind offshore).
+ * Shows forecast vs actual as stacked area, converted from kW to MW.
+ */
+export function processNedProduction(files) {
+    const traces = [];
+    const ned = files['ned_production.json'];
+    if (!ned || !ned.data) return { traces, layout: {} };
+
+    const typeConfig = [
+        { key: 'solar', label: 'Solar', color: COLORS.amber },
+        { key: 'wind_onshore', label: 'Wind Onshore', color: COLORS.green },
+        { key: 'wind_offshore', label: 'Wind Offshore', color: COLORS.cyan },
+    ];
+
+    // Actual production — stacked area
+    for (const { key, label, color } of typeConfig) {
+        const typeData = ned.data[key];
+        if (!typeData || !typeData.actual) continue;
+
+        const entries = Object.entries(typeData.actual)
+            .filter(([, v]) => v && typeof v.volume_kwh === 'number')
+            .map(([ts, v]) => ({ ts, val: addNoise(v.volume_kwh / 250) }))  // 15-min kWh → MW
+            .sort((a, b) => new Date(a.ts) - new Date(b.ts));
+
+        if (entries.length > 0) {
+            traces.push({
+                x: entries.map(d => d.ts),
+                y: entries.map(d => d.val),
+                type: 'scatter',
+                mode: 'lines',
+                name: `${label} (actual)`,
+                line: { width: 0, color },
+                fill: 'tonexty',
+                fillcolor: color + '44',
+                stackgroup: 'actual',
+                hovertemplate: `<b>${label} Actual</b><br>%{x}<br>%{y:.0f} MW<extra></extra>`,
+            });
+        }
+    }
+
+    // Forecast total — dashed line overlay
+    const forecastTotals = {};
+    for (const { key } of typeConfig) {
+        const typeData = ned.data[key];
+        if (!typeData || !typeData.forecast) continue;
+
+        for (const [ts, v] of Object.entries(typeData.forecast)) {
+            if (v && typeof v.volume_kwh === 'number') {
+                forecastTotals[ts] = (forecastTotals[ts] || 0) + v.volume_kwh / 250;
+            }
+        }
+    }
+
+    const forecastEntries = Object.entries(forecastTotals)
+        .map(([ts, val]) => ({ ts, val: addNoise(val) }))
+        .sort((a, b) => new Date(a.ts) - new Date(b.ts));
+
+    if (forecastEntries.length > 0) {
+        traces.push({
+            x: forecastEntries.map(d => d.ts),
+            y: forecastEntries.map(d => d.val),
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Total Forecast',
+            line: { width: 2, color: '#ffffff', dash: 'dot' },
+            hovertemplate: '<b>Total Forecast</b><br>%{x}<br>%{y:.0f} MW<extra></extra>',
+        });
+    }
+
+    return { traces, layout: { yaxis: { title: 'Production (MW)' } } };
+}
+
 // ── Market Tab ──────────────────────────────────────────────
 
 /**

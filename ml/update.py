@@ -43,6 +43,9 @@ logger = logging.getLogger(__name__)
 
 MODEL_DIR = Path(__file__).parent / "models"
 VAT_RATE = 1.21
+# Fallback surcharge (EUR/MWh incl. VAT) when no EZ/ENTSO-E overlap is available.
+# Based on typical NL energy tax + ODE + transport costs. Updated 2026-03.
+DEFAULT_SURCHARGE_EUR_MWH = 95.0
 
 
 def load_model_and_state():
@@ -298,42 +301,48 @@ def _nearest(series: pd.Series, target_ts: pd.Timestamp, tolerance_hours=3) -> f
     return float(val) if not np.isnan(val) else None
 
 
-def derive_surcharge(data_dir: Path, state: dict) -> float | None:
+def derive_surcharge(data_dir: Path, state: dict) -> float:
     """Derive consumer surcharge (incl. VAT, EUR/MWh) from overlapping EZ/ENTSO-E data.
 
     surcharge = median(ez_consumer - entsoe_wholesale * VAT_RATE)
-    Falls back to last known surcharge from state if derivation fails.
+
+    Tries up to 5 most recent price files, falls back to last known surcharge
+    from state, then to DEFAULT_SURCHARGE_EUR_MWH.
     """
     price_files = glob_sorted(data_dir, "*_energy_price_forecast.json")
     if not price_files:
-        return state.get("consumer_surcharge", {}).get("value_eur_mwh")
+        fallback = state.get("consumer_surcharge", {}).get("value_eur_mwh", DEFAULT_SURCHARGE_EUR_MWH)
+        logger.info(f"Surcharge: no price files, using fallback {fallback:.2f}")
+        return fallback
 
-    latest = price_files[-1]
-    ez = parse_energy_zero_consumer(latest)
-    ws = parse_entsoe_wholesale(latest)
+    # Try recent files (newest first) — the latest may have missing sources
+    for pf in reversed(price_files[-5:]):
+        ez = parse_energy_zero_consumer(pf)
+        ws = parse_entsoe_wholesale(pf)
 
-    if ez.empty or ws.empty:
-        logger.info("Surcharge: no EZ or ENTSO-E data available")
-        return state.get("consumer_surcharge", {}).get("value_eur_mwh")
+        if ez.empty or ws.empty:
+            continue
 
-    # Resample to hourly to align 15-min ENTSO-E with hourly EZ
-    ez_hourly = ez.resample("h").mean().dropna()
-    ws_hourly = ws.resample("h").mean().dropna()
+        ez_hourly = ez.resample("h").mean().dropna()
+        ws_hourly = ws.resample("h").mean().dropna()
 
-    overlap_idx = ez_hourly.index.intersection(ws_hourly.index)
-    if len(overlap_idx) < 3:
-        logger.warning(f"Surcharge: only {len(overlap_idx)} overlapping hours, need >= 3")
-        return state.get("consumer_surcharge", {}).get("value_eur_mwh")
+        overlap_idx = ez_hourly.index.intersection(ws_hourly.index)
+        if len(overlap_idx) < 3:
+            continue
 
-    surcharges = ez_hourly[overlap_idx] - ws_hourly[overlap_idx] * VAT_RATE
-    surcharge = float(np.median(surcharges))
+        surcharges = ez_hourly[overlap_idx] - ws_hourly[overlap_idx] * VAT_RATE
+        surcharge = float(np.median(surcharges))
 
-    logger.info(
-        f"Surcharge derived: {surcharge:.2f} EUR/MWh (incl. VAT) "
-        f"from {len(overlap_idx)} overlapping hours, "
-        f"range [{surcharges.min():.2f}, {surcharges.max():.2f}]"
-    )
-    return surcharge
+        logger.info(
+            f"Surcharge derived: {surcharge:.2f} EUR/MWh (incl. VAT) "
+            f"from {len(overlap_idx)} overlapping hours in {pf.name}, "
+            f"range [{surcharges.min():.2f}, {surcharges.max():.2f}]"
+        )
+        return surcharge
+
+    fallback = state.get("consumer_surcharge", {}).get("value_eur_mwh", DEFAULT_SURCHARGE_EUR_MWH)
+    logger.warning(f"Surcharge: no usable EZ/ENTSO-E overlap in recent files, using fallback {fallback:.2f}")
+    return fallback
 
 
 def generate_consumer_forecast(forecast, forecast_upper, forecast_lower, surcharge):
@@ -472,21 +481,14 @@ def main():
 
     # Derive consumer surcharge and generate consumer forecast
     surcharge = derive_surcharge(data_dir, state)
-    consumer_forecast = None
-    consumer_upper = None
-    consumer_lower = None
-
-    if surcharge is not None:
-        consumer_forecast, consumer_upper, consumer_lower = generate_consumer_forecast(
-            forecast, forecast_upper, forecast_lower, surcharge
-        )
-        state["consumer_surcharge"] = {
-            "value_eur_mwh": round(surcharge, 2),
-            "last_updated": datetime.now(timezone.utc).isoformat(),
-        }
-        logger.info(f"Consumer forecast generated with surcharge {surcharge:.2f} EUR/MWh")
-    else:
-        logger.warning("Consumer forecast skipped — no surcharge available")
+    consumer_forecast, consumer_upper, consumer_lower = generate_consumer_forecast(
+        forecast, forecast_upper, forecast_lower, surcharge
+    )
+    state["consumer_surcharge"] = {
+        "value_eur_mwh": round(surcharge, 2),
+        "last_updated": datetime.now(timezone.utc).isoformat(),
+    }
+    logger.info(f"Consumer forecast generated with surcharge {surcharge:.2f} EUR/MWh")
 
     # Save everything
     save_model_and_state(model, state)
