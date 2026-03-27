@@ -29,19 +29,15 @@ export const CONSTANTS = {
 
 // Data source configuration
 export const DATA_SOURCES = {
-    // Historical data sources from energy_price_forecast.json
+    // Historical data sources from energy_price_forecast.json (wholesale only)
+    // Note: energy_zero is excluded — it's ALL_IN consumer pricing (incl. energy tax,
+    // ODE, transport) which is ~100 EUR/MWh above wholesale. Still used for ML surcharge derivation.
     forecast: [
         {
             key: 'entsoe',
             name: 'ENTSO-E',
             color: '#60a5fa',
             description: 'European Network of Transmission System Operators for Electricity'
-        },
-        {
-            key: 'energy_zero',
-            name: 'EnergyZero',
-            color: '#10b981',
-            description: 'Dutch energy provider day-ahead prices'
         },
         {
             key: 'epex',
@@ -76,8 +72,8 @@ export const DATA_SOURCES = {
     // Live Energy Zero data configuration
     energyZero: {
         name: {
-            live: 'Energy Zero (Live)',
-            historical: 'Energy Zero (Historical)'
+            live: 'EnergyZero (Live)',
+            historical: 'EnergyZero (Historical)'
         },
         color: '#0e4531ff',  // Dark green
         colorAlt: '#10b981',  // Alternative lighter green

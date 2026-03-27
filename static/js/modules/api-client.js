@@ -257,7 +257,7 @@ export class ApiClient {
                 const fromDate = startOfDay.toISOString();
                 const tillDate = endOfDay.toISOString();
 
-                const url = `https://api.energyzero.nl/v1/energyprices?fromDate=${fromDate}&tillDate=${tillDate}&interval=4&usageType=1&inclBtw=true`;
+                const url = `https://api.energyzero.nl/v1/energyprices?fromDate=${fromDate}&tillDate=${tillDate}&interval=4&usageType=1&inclBtw=false`;
 
                 console.log(`Fetching Energy Zero data for: ${date.toDateString()}`);
 
@@ -325,7 +325,7 @@ export class ApiClient {
                 const fromDate = startOfDay.toISOString();
                 const tillDate = endOfDay.toISOString();
 
-                const url = `https://api.energyzero.nl/v1/energyprices?fromDate=${fromDate}&tillDate=${tillDate}&interval=4&usageType=1&inclBtw=true`;
+                const url = `https://api.energyzero.nl/v1/energyprices?fromDate=${fromDate}&tillDate=${tillDate}&interval=4&usageType=1&inclBtw=false`;
                 console.log(`Single day URL: ${url}`);
 
                 const response = await this.cachedFetch(url);
@@ -355,7 +355,7 @@ export class ApiClient {
                     const tillDate = endOfDay.toISOString();
                     const dateString = currentDate.toDateString();
 
-                    const url = `https://api.energyzero.nl/v1/energyprices?fromDate=${fromDate}&tillDate=${tillDate}&interval=4&usageType=1&inclBtw=true`;
+                    const url = `https://api.energyzero.nl/v1/energyprices?fromDate=${fromDate}&tillDate=${tillDate}&interval=4&usageType=1&inclBtw=false`;
 
                     // Create fetch promise for this day
                     fetchPromises.push(
