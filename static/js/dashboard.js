@@ -17,7 +17,7 @@ import {
     getWindLocations, processWind,
     getSolarLocations, processSolar,
     getWeatherLocations, processWeatherTemp, processWeatherCloud,
-    processImbalance, processFlows, processLoad, processNedProduction,
+    processImbalance, processFlows, processLoad, processNedProduction, processNuclear,
     buildMarketCards, processGasChart,
 } from './modules/tab-charts.js';
 import { renderAllModelViz } from './modules/model-viz.js';
@@ -310,6 +310,7 @@ class EnergyDashboard {
                 this.renderPlotlyChart('flowsChart', processFlows(files));
                 this.renderPlotlyChart('loadChart', processLoad(files));
                 this.renderPlotlyChart('nedProductionChart', processNedProduction(files));
+                this.renderPlotlyChart('nuclearChart', processNuclear(files));
             } else if (tabKey === 'market') {
                 this.renderMarketTab(files);
             }

@@ -47,6 +47,7 @@ DATA_FILES = [
     'gas_storage.json',
     'gas_flows.json',
     'ned_production.json',
+    'generation_forecast.json',
 ]
 
 

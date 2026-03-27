@@ -62,7 +62,7 @@ export const DATA_SOURCES = {
             files: ['wind_forecast.json', 'solar_forecast.json', 'weather_forecast_multi_location.json'],
         },
         grid: {
-            files: ['grid_imbalance.json', 'cross_border_flows.json', 'load_forecast.json', 'ned_production.json'],
+            files: ['grid_imbalance.json', 'cross_border_flows.json', 'load_forecast.json', 'ned_production.json', 'generation_forecast.json'],
         },
         market: {
             files: ['market_proxies.json', 'gas_storage.json', 'gas_flows.json'],

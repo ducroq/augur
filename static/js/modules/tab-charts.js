@@ -336,6 +336,55 @@ export function processNedProduction(files) {
     return { traces, layout: { yaxis: { title: 'Production (MW)' } } };
 }
 
+// ── Grid Tab: French Nuclear ────────────────────────────────
+
+/**
+ * Process ENTSO-E generation forecast — French nuclear actual + availability.
+ * Dual axis: generation (GW, left) and availability (%, right).
+ */
+export function processNuclear(files) {
+    const traces = [];
+    const gen = files['generation_forecast.json'];
+    if (!gen || !gen.data || !gen.data['FR']) return { traces, layout: {} };
+
+    const frData = gen.data['FR'];
+
+    const actualXY = fieldTimeSeries(frData, 'nuclear_actual');
+    if (actualXY.x.length > 0) {
+        traces.push({
+            ...lineTrace('Generation', actualXY.x, actualXY.y.map(v => v / 1000), COLORS.cyan, 'GW'),
+            fill: 'tozeroy',
+            fillcolor: COLORS.cyan + '22',
+        });
+    }
+
+    const availEntries = Object.entries(frData)
+        .filter(([, obj]) => obj && typeof obj === 'object' && typeof obj.nuclear_availability === 'number')
+        .map(([ts, obj]) => ({ ts, val: obj.nuclear_availability * 100 }))
+        .sort((a, b) => new Date(a.ts) - new Date(b.ts));
+
+    if (availEntries.length > 0) {
+        traces.push({
+            x: availEntries.map(d => d.ts),
+            y: availEntries.map(d => d.val),
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Availability',
+            line: { width: 2, color: COLORS.amber, dash: 'dot' },
+            yaxis: 'y2',
+            hovertemplate: '<b>Availability</b><br>%{x}<br>%{y:.1f}%<extra></extra>',
+        });
+    }
+
+    return {
+        traces,
+        layout: {
+            yaxis: { title: 'Generation (GW)' },
+            yaxis2: { title: 'Availability (%)', overlaying: 'y', side: 'right', range: [0, 100], gridcolor: 'rgba(0,0,0,0)' },
+        },
+    };
+}
+
 // ── Market Tab ──────────────────────────────────────────────
 
 /**
