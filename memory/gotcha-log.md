@@ -20,6 +20,13 @@
 **Fix**: energyDataHub migrated from nordpool to pynordpool (API v2) in 40632f6, and upstream entsoe-py/tenneteu-py timezone bugs fixed in 33fc596.
 **Status**: [RESOLVED] — root cause fixed in energyDataHub. Client-side workaround in legacy chart.js can be removed when chart.js is deprecated.
 
+### energyDataHub ENTSO-E backfill completed (2026-03-28)
+**Problem**: 43% of energyDataHub price files (123 of 235) were missing `entsoe` and/or `entsoe_de` datasets due to silent API failures since Sep 2025. Augur's warmup training used incomplete price data.
+**Fix**: energyDataHub backfilled 100 files with historical ENTSO-E day-ahead prices (NL + DE). Commit ducroq/energydatahub@7a1e4c1.
+**Action needed**: Re-run warmup consolidation (`ml/data/consolidate.py`) to rebuild training parquet with the patched price files. The daily `ml.update` pipeline will automatically use the latest data.
+**Remaining**: 26 early files (Sep-Oct 2025) still degraded due to malformed timestamps — low impact, predates most Augur training data.
+**Status**: [RESOLVED]
+
 ### Energy Zero hardcoded +2h offset assumes summer time (ongoing)
 **Problem**: `chart.js:185-186` adds fixed +2 hours for NL timezone, incorrect during winter (UTC+1).
 **Root cause**: Quick implementation without proper timezone library.
