@@ -291,6 +291,8 @@ def _nearest(series: pd.Series, target_ts: pd.Timestamp, tolerance_hours=3) -> f
         return None
     if target_ts.tzinfo is None:
         target_ts = target_ts.tz_localize("UTC")
+    if not series.index.is_monotonic_increasing:
+        series = series.sort_index()
     idx = series.index.get_indexer([target_ts], method="nearest")[0]
     if idx < 0 or idx >= len(series):
         return None
