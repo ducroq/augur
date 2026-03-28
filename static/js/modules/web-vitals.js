@@ -158,14 +158,3 @@ function logMetric(name, value, rating) {
     // });
 }
 
-/**
- * Get all recorded Web Vitals metrics
- * @returns {Object} Metrics object
- */
-export function getWebVitals() {
-    try {
-        return JSON.parse(sessionStorage.getItem('webVitals') || '{}');
-    } catch (error) {
-        return {};
-    }
-}

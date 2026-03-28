@@ -39,19 +39,6 @@ export class ApiClient {
     }
 
     /**
-     * Cancel a specific request by URL
-     * @param {string} url - URL of request to cancel
-     */
-    cancelRequest(url) {
-        const controller = this.activeRequests.get(url);
-        if (controller) {
-            controller.abort();
-            this.activeRequests.delete(url);
-            console.log(`🚫 Cancelled request: ${url.substring(0, 60)}...`);
-        }
-    }
-
-    /**
      * Get cache statistics
      * @returns {Object} Cache stats
      */

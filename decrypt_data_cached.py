@@ -17,6 +17,7 @@ import urllib.request
 import time
 import logging
 import hashlib
+import cryptography.exceptions
 from datetime import datetime, timedelta
 from pathlib import Path
 from utils.secure_data_handler import SecureDataHandler
@@ -194,10 +195,6 @@ def validate_base64_key(key_b64, key_name, expected_length=32):
     if not key_b64:
         raise ValueError(f"{key_name} is not set")
 
-    # Check if it looks like base64
-    if not key_b64.replace('=', '').replace('+', '').replace('/', '').isalnum():
-        raise ValueError(f"{key_name} does not appear to be valid base64 (contains invalid characters)")
-
     try:
         decoded_key = base64.b64decode(key_b64)
     except Exception as e:
@@ -313,10 +310,14 @@ def decrypt_single_file(handler, filename, force_refresh=False):
 
         return True
 
+    except cryptography.exceptions.InvalidSignature:
+        logger.error(f"  ✗ {filename}: HMAC verification FAILED — possible data tampering")
+        raise
+
     except Exception as e:
         logger.error(f"  ✗ {filename}: {e}")
 
-        # If we have cached data, use it as fallback
+        # If we have cached data, use it as fallback (only for transient errors)
         if os.path.exists(output_path):
             age_hours = get_file_age_hours(output_path)
             logger.warning(f"  Using cached {filename} as fallback (age: {age_hours:.1f}h)")

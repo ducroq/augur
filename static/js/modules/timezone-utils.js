@@ -59,56 +59,6 @@ export function convertUTCToAmsterdam(utcDate) {
 }
 
 /**
- * Format Amsterdam local time as ISO string with proper timezone offset.
- * Determines the correct offset (+01:00 for CET or +02:00 for CEST) based on the date.
- *
- * @param {Date} localDate - Date object representing Amsterdam local time
- * @returns {string} ISO string with Amsterdam timezone offset (e.g., "2025-11-07T01:00:00+01:00")
- */
-export function formatAmsterdamISOString(localDate) {
-    const year = localDate.getFullYear();
-    const month = String(localDate.getMonth() + 1).padStart(2, '0');
-    const day = String(localDate.getDate()).padStart(2, '0');
-    const hours = String(localDate.getHours()).padStart(2, '0');
-    const minutes = String(localDate.getMinutes()).padStart(2, '0');
-    const seconds = String(localDate.getSeconds()).padStart(2, '0');
-
-    // Determine timezone offset by checking what Amsterdam time would be for this local date
-    // Convert back to see what the offset actually is
-    const testDate = new Date(Date.UTC(year, localDate.getMonth(), localDate.getDate(), localDate.getHours(), localDate.getMinutes(), localDate.getSeconds()));
-    const amsterdamParts = amsterdamFormatter.formatToParts(testDate);
-    const getAmsterdam = type => amsterdamParts.find(p => p.type === type).value;
-
-    // Calculate if DST is in effect by comparing UTC components with Amsterdam components
-    const utcHour = testDate.getUTCHours();
-    const amsterdamHour = parseInt(getAmsterdam('hour'));
-    let offset = amsterdamHour - utcHour;
-
-    // Handle day boundary wraparound
-    if (offset < -12) offset += 24;
-    if (offset > 12) offset -= 24;
-
-    const offsetString = offset === 2 ? '+02:00' : '+01:00';
-
-    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offsetString}`;
-}
-
-/**
- * Format a date for datetime-local input
- * @param {Date} date - Date to format
- * @returns {string} Formatted datetime string
- */
-export function formatDateTimeLocal(date) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-
-    return `${year}-${month}-${day}T${hours}:${minutes}`;
-}
-
-/**
  * Format a date for display
  * @param {Date} date - Date to format
  * @returns {string} Formatted datetime string

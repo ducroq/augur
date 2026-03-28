@@ -1,5 +1,5 @@
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import hashes, hmac
+from cryptography.hazmat.primitives import hashes, hmac, padding as crypto_padding
 from cryptography.hazmat.backends import default_backend
 import os
 import json
@@ -58,14 +58,12 @@ class SecureDataHandler:
         return data
 
     def _pad(self, data):
-        block_size = algorithms.AES.block_size // 8
-        padding_size = block_size - (len(data) % block_size)
-        padding = bytes([padding_size] * padding_size)
-        return data + padding
+        padder = crypto_padding.PKCS7(algorithms.AES.block_size).padder()
+        return padder.update(data) + padder.finalize()
 
     def _unpad(self, padded_data):
-        padding_size = padded_data[-1]
-        return padded_data[:-padding_size]
+        unpadder = crypto_padding.PKCS7(algorithms.AES.block_size).unpadder()
+        return unpadder.update(padded_data) + unpadder.finalize()
 
 if __name__ == "__main__":
     from utils.helpers import load_config

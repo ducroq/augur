@@ -40,6 +40,7 @@ def create_model():
 def warmup(data_path: Path):
     """Replay historical data through River model."""
     df = pd.read_parquet(data_path)
+    assert df.index.is_monotonic_increasing, "Training data must be sorted by timestamp"
     logger.info(f"Loaded {len(df)} rows from {data_path}")
     logger.info(f"Date range: {df.index.min()} to {df.index.max()}")
 
@@ -50,6 +51,7 @@ def warmup(data_path: Path):
     n_learned = 0
     n_skipped = 0
     all_errors = []
+    all_actuals = []
 
     for ts, row in df.iterrows():
         ts_iso = ts.isoformat()
@@ -82,6 +84,7 @@ def warmup(data_path: Path):
         error = abs(signed_error)
         errors.append(error)
         all_errors.append(signed_error)
+        all_actuals.append(price)
         n_learned += 1
 
         # Log progress every 500 rows
@@ -96,9 +99,8 @@ def warmup(data_path: Path):
     if all_errors:
         overall_mae = np.mean([abs(e) for e in all_errors])
         last_week_mae = np.mean(list(errors))
-        # MAPE (avoid division by zero)
-        prices = df["price_eur_mwh"].dropna().values[-len(all_errors):]
-        mape_vals = [abs(e / p) * 100 for e, p in zip([abs(x) for x in all_errors], prices) if abs(p) > 1.0]
+        # MAPE (avoid division by zero) — use aligned actuals, not df slice
+        mape_vals = [abs(e / p) * 100 for e, p in zip(all_errors, all_actuals) if abs(p) > 1.0]
         overall_mape = np.mean(mape_vals) if mape_vals else float("nan")
 
         logger.info(f"\n{'='*60}")

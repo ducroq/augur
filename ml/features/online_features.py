@@ -12,7 +12,7 @@ Feature selection based on Lasso/Ridge analysis (R²=0.934):
 
 import math
 from collections import deque
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 
 # Lag offsets in hours — all required for good autoregressive signal
@@ -27,11 +27,10 @@ def _safe(val: float | None) -> float:
     if val is None:
         return 0.0
     try:
-        if val != val:  # NaN check
-            return 0.0
+        fval = float(val)
+        return 0.0 if math.isnan(fval) else fval
     except (TypeError, ValueError):
         return 0.0
-    return float(val)
 
 
 class OnlineFeatureBuilder:
@@ -52,13 +51,21 @@ class OnlineFeatureBuilder:
         """Record an observed price."""
         self.price_history.append((timestamp_iso, price))
 
+    @staticmethod
+    def _ensure_utc(ts: datetime) -> datetime:
+        """Ensure a datetime is UTC-aware."""
+        if ts.tzinfo is None:
+            return ts.replace(tzinfo=timezone.utc)
+        return ts
+
     def _get_lag(self, current_ts: datetime, hours: int) -> float | None:
         """Look up the price from `hours` ago."""
+        current_ts = self._ensure_utc(current_ts)
         target = current_ts.timestamp() - hours * 3600
         best = None
         best_diff = float("inf")
         for ts_iso, price in self.price_history:
-            ts = datetime.fromisoformat(ts_iso)
+            ts = self._ensure_utc(datetime.fromisoformat(ts_iso))
             diff = abs(ts.timestamp() - target)
             if diff < best_diff:
                 best_diff = diff
@@ -70,10 +77,11 @@ class OnlineFeatureBuilder:
 
     def _get_recent_prices(self, current_ts: datetime, hours: int) -> list[float]:
         """Get the last N hours of prices for rolling stats."""
+        current_ts = self._ensure_utc(current_ts)
         cutoff = current_ts.timestamp() - hours * 3600
         prices = []
         for ts_iso, price in self.price_history:
-            ts = datetime.fromisoformat(ts_iso)
+            ts = self._ensure_utc(datetime.fromisoformat(ts_iso))
             if ts.timestamp() >= cutoff:
                 prices.append(price)
         return prices
@@ -90,7 +98,7 @@ class OnlineFeatureBuilder:
 
         Returns None if required lag features (1h, 24h) are unavailable.
         """
-        ts = datetime.fromisoformat(timestamp_iso)
+        ts = self._ensure_utc(datetime.fromisoformat(timestamp_iso))
 
         # Required lags — must have at least 1h and 24h
         lag_1h = self._get_lag(ts, 1)

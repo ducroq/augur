@@ -137,13 +137,11 @@ export function processEnergyDataForChart(energyData, energyZeroData, cutoffTime
                     // Quick check: parse the date portion to determine DST
                     const dateMatch = datetime.match(/^(\d{4})-(\d{2})-(\d{2})/);
                     if (dateMatch) {
-                        const year = parseInt(dateMatch[1]);
-                        const month = parseInt(dateMatch[2]);
-
-                        // Rough DST check: Mar-Oct is typically CEST (+02:00), Nov-Feb is CET (+01:00)
-                        // This is simplified; actual DST transitions happen on specific Sundays
-                        const isDST = month >= 3 && month <= 10;
-                        const correctOffset = isDST ? '+02:00' : '+01:00';
+                        // Use Intl API for accurate DST detection (handles transition Sundays)
+                        const probe = new Date(`${dateMatch[0]}T12:00:00Z`);
+                        const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Amsterdam', hour: 'numeric', hour12: false }).formatToParts(probe);
+                        const localHour = parseInt(parts.find(p => p.type === 'hour').value);
+                        const correctOffset = (localHour - 12 + 24) % 24 === 2 ? '+02:00' : '+01:00';
 
                         normalizedDatetime = datetime.replace(/\+00:(18|09)/, correctOffset);
                     }

@@ -34,7 +34,7 @@ export class UIController {
             const toggleContainer = document.createElement('div');
             toggleContainer.className = 'live-data-controls';
             toggleContainer.innerHTML = `
-                <select id="end-period">
+                <select id="end-period" aria-label="Forecast time range">
                     <option value="tomorrow">day-ahead</option>
                     <option value="dayaftertomorrow" selected>48-hour forecast</option>
                     <option value="week">week-ahead</option>
@@ -121,10 +121,12 @@ export class UIController {
             chartContainer.style.pointerEvents = 'none';
         }
 
+        if (document.getElementById('loading-indicator')) return;
+
         const loadingDiv = document.createElement('div');
         loadingDiv.id = 'loading-indicator';
         loadingDiv.className = 'loading-indicator';
-        loadingDiv.innerHTML = '⏳ Loading data...';
+        loadingDiv.textContent = 'Loading data...';
         document.querySelector('.chart-container').appendChild(loadingDiv);
     }
 

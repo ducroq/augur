@@ -68,10 +68,4 @@ export class TabController {
         return (map[tabKey] || []).map(id => document.getElementById(id)).filter(Boolean);
     }
 
-    /**
-     * Get the primary chart element for a tab (for simple tabs).
-     */
-    getChartElement(tabKey) {
-        return this.getChartElements(tabKey)[0] || null;
-    }
 }

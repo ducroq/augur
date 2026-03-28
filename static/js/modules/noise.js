@@ -21,19 +21,3 @@ export function addNoise(value, percentage = CONSTANTS.NOISE_PERCENTAGE) {
     return value * (1 + noisePercent);
 }
 
-/**
- * Add noise to all numeric values in a data object (timestamp -> value map).
- * @param {Object} data - Object with timestamp keys and numeric values
- * @param {number} [percentage] - Noise range
- * @returns {Object} New object with noised values
- */
-export function addNoiseToDataset(data, percentage = CONSTANTS.NOISE_PERCENTAGE) {
-    if (!data || typeof data !== 'object') {
-        return data;
-    }
-    const noised = {};
-    for (const [key, value] of Object.entries(data)) {
-        noised[key] = typeof value === 'number' ? addNoise(value, percentage) : value;
-    }
-    return noised;
-}

@@ -1,24 +1,26 @@
 # Memory
 
+<!-- Loaded every session. Keep lean — index only, deep knowledge in topic files.
+     END-OF-SESSION: review gotcha-log, promote patterns, retire stale entries. -->
+
 ## Topic Files
 
 | File | When to load | Key insight |
 |------|-------------|-------------|
 | `memory/gotcha-log.md` | Stuck or debugging | Problem-fix archive |
 | `memory/data-formats.md` | Working with energyDataHub data | Schema v2.1 structure, units, timezone conventions |
-| `memory/ml-decisions.md` | ML architecture choices | Original XGBoost plan (superseded by River ARF) |
+| `memory/ml-decisions.md` | ML architecture choices | Original XGBoost plan (superseded by River ARF — see ADR-004) |
 
 ## Current State
 
-- Restructured from energyDataDashboard to Augur (2026-03-25)
-- Dashboard: 5 tabs (Prices, Forecast, Grid, Market, Model) on Netlify
+- Dashboard: 5 tabs (Prices, Weather, Grid, Market, Model) on Netlify
 - ML pipeline: **live** — River ARF on sadalsuud, daily cron at 16:45 UTC
-- Forecast: 48h wholesale + consumer (auto-derived surcharge), exchange-informed lags
-- Confidence bands: EWM error stats (half-life 24h) + volatility scaling (2026-03-27)
-- Consumer forecast: orange dotted line, derived from EZ/ENTSO-E overlap (2026-03-27)
-- Key metric: vs Exchange MAE = 16.1 EUR/MWh (tracking convergence)
-- energyDataHub: stable, collecting daily, ~220 days of history
-- energyDataHub issues #5, #6, #7 all resolved (gas TTF, NED, generation mix)
+- Forecast: 48h wholesale + consumer (auto-derived surcharge ~110.85 EUR/MWh)
+- Re-warmup completed 2026-03-28 on full backfilled dataset (4,192 rows, MAE 13.80)
+- Legacy `chart.js` deleted — all frontend is modular ES6 in `static/js/modules/`
+- Test suite added: 17 tests (SecureDataHandler + OnlineFeatureBuilder)
+- energyDataHub: stable, ENTSO-E backfill completed, ~220 days of history
+- Major code health sweep completed 2026-03-28 (20 issues fixed across ML, security, frontend)
 
 ## Key File Paths
 
@@ -34,12 +36,17 @@
 | `decrypt_data_cached.py` | Decrypts 10 data files from energyDataHub |
 | `scripts/daily_update.sh` | Cron script on sadalsuud |
 
+## Recently Promoted
+
+- If EWM variance looks wrong → check that `ewm_mean` (signed) is used, not `ewm_abs` — promoted from code review 2026-03-28
+- If exchange prices corrupt lag buffer → ensure they're only pushed once (pre-loop), not also in forecast loop — promoted from code review 2026-03-28
+
 ## Active Decisions
 
 - ADR-001: Timezone handling — use `Intl.DateTimeFormat` with Europe/Amsterdam
 - ADR-003: Netlify cache --force flag — ensures fresh data on webhook builds
+- ADR-004: River ARF online learning over XGBoost batch — continuous learning, no retraining
 - Target: ENTSO-E NL wholesale day-ahead price + derived consumer forecast
-- Model: River ARF (10 trees), not XGBoost — continuous learning over batch
 - Features: selected by Lasso at multiple horizons (1h/6h/24h/48h)
 - Dropped temperature (no signal per Lasso), using one NL location per data type
 - Exchange prices fed as lag features for first ~29h of forecast
@@ -47,6 +54,5 @@
 
 ## Open Issues
 
-- energyDataHub #5, #6, #7: All resolved (gas TTF, NED, generation mix now collecting)
 - Augur #2-4: New features (NED, gas, flows), #5: Backtesting, #6-7: Model variants
 - Planned ~2026-04-17: Re-warmup with new features (TTF gas, gen mix, gas storage, NED production)

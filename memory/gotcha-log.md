@@ -4,7 +4,8 @@
 
 | Entry | Promoted to | Date |
 |-------|------------|------|
-| (none yet) | | |
+| EWM variance formula wrong | Fixed in `ml/update.py` — now uses signed `ewm_mean` | 2026-03-28 |
+| Double push of exchange prices | Fixed in `ml/update.py` — only push ML predictions | 2026-03-28 |
 
 ---
 
@@ -31,4 +32,4 @@
 **Problem**: `chart.js:185-186` adds fixed +2 hours for NL timezone, incorrect during winter (UTC+1).
 **Root cause**: Quick implementation without proper timezone library.
 **Fix**: Modular `timezone-utils.js` uses `Intl.DateTimeFormat` correctly. Legacy `chart.js` still has the bug.
-**Status**: Active — fixed in modular code, legacy code still broken. Will resolve when chart.js is fully deprecated.
+**Status**: [RESOLVED] — legacy `chart.js` deleted 2026-03-28. Modular `timezone-utils.js` handles DST correctly.

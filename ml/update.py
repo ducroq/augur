@@ -205,11 +205,13 @@ def generate_forecast(model, fb, data, state, hours=48):
     if len(error_history) >= 2:
         alpha = 1 - math.exp(-math.log(2) / 24)
         ewm_abs = abs(error_history[0])
+        ewm_mean = error_history[0]
         ewm_sq = error_history[0] ** 2
         for e in error_history[1:]:
             ewm_abs = alpha * abs(e) + (1 - alpha) * ewm_abs
+            ewm_mean = alpha * e + (1 - alpha) * ewm_mean
             ewm_sq = alpha * e ** 2 + (1 - alpha) * ewm_sq
-        ewm_std = max(0.0, ewm_sq - ewm_abs ** 2) ** 0.5
+        ewm_std = max(0.0, ewm_sq - ewm_mean ** 2) ** 0.5
     else:
         ewm_abs = 30.0
         ewm_std = 15.0
@@ -272,8 +274,9 @@ def generate_forecast(model, fb, data, state, hours=48):
         forecast_upper[ts_iso] = round(pred + band_width, 2)
         forecast_lower[ts_iso] = round(max(pred - band_width, 0), 2)
 
-        # Use exchange price as lag if known, otherwise use prediction
-        fb.push_price(ts_iso, exchange_price if exchange_price is not None else pred)
+        # Only push ML predictions as lags — exchange prices were pre-loaded above
+        if exchange_price is None:
+            fb.push_price(ts_iso, pred)
 
     logger.info(
         f"Generated {len(forecast)}-hour forecast: "

@@ -1,20 +1,10 @@
 [build]
-  command = """
-    echo "🔧 Installing Python dependencies..." &&
-    pip install cryptography &&
-    echo "" &&
-    echo "📦 Fetching and decrypting energy data (forcing fresh fetch)..." &&
-    mkdir -p static/data &&
-    python decrypt_data_cached.py --force &&
-    echo "" &&
-    echo "🏗️  Building Hugo site..." &&
-    hugo --minify
-  """
+  command = "bash scripts/netlify_build.sh production"
   publish = "public"
 
 [build.environment]
   HUGO_VERSION = "0.124.0"
-  PYTHON_VERSION = "3.11"
+  PYTHON_VERSION = "3.12"
 
 # Cache data directory between builds for faster deployments
 
@@ -23,8 +13,8 @@
   for = "/*"
   [headers.values]
     # Content Security Policy - allow our own scripts and Plotly CDN
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.plot.ly; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://api.energyzero.nl; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
-    # Security headers
+    Content-Security-Policy = "default-src 'self'; script-src 'self' https://cdn.plot.ly; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://api.energyzero.nl; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     X-XSS-Protection = "1; mode=block"
@@ -77,38 +67,14 @@
 [build.processing.images]
   compress = true
 
-# Production context with optimized base URL
 [context.production]
-  command = """
-    echo "🚀 Production build starting..." &&
-    pip install cryptography &&
-    mkdir -p static/data &&
-    python decrypt_data_cached.py --force &&
-    hugo --minify --baseURL $DEPLOY_PRIME_URL &&
-    echo "✓ Production build complete!"
-  """
+  command = "bash scripts/netlify_build.sh production '--baseURL $DEPLOY_PRIME_URL'"
 
-# Deploy preview context (for PRs)
 [context.deploy-preview]
-  command = """
-    echo "🔍 Deploy preview build..." &&
-    pip install cryptography &&
-    mkdir -p static/data &&
-    python decrypt_data_cached.py --force &&
-    hugo --minify --baseURL $DEPLOY_PRIME_URL --buildDrafts &&
-    echo "✓ Preview build complete!"
-  """
+  command = "bash scripts/netlify_build.sh preview '--baseURL $DEPLOY_PRIME_URL --buildDrafts'"
 
-# Branch deploy context
 [context.branch-deploy]
-  command = """
-    echo "🌿 Branch deploy build..." &&
-    pip install cryptography &&
-    mkdir -p static/data &&
-    python decrypt_data_cached.py --force &&
-    hugo --minify --baseURL $DEPLOY_PRIME_URL &&
-    echo "✓ Branch build complete!"
-  """
+  command = "bash scripts/netlify_build.sh branch '--baseURL $DEPLOY_PRIME_URL'"
 
 # Redirect rules (optional - add if needed)
 # [[redirects]]

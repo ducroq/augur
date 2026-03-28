@@ -1,0 +1,2 @@
+# Minimal dependencies for Netlify build (decrypt only)
+cryptography>=42.0

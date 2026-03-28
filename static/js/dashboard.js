@@ -29,8 +29,6 @@ class EnergyDashboard {
     constructor() {
         this.energyData = null;
         this.energyZeroData = null;
-        this.currentTimeRange = 'all';
-        this.priceThreshold = CONSTANTS.DEFAULT_PRICE_THRESHOLD;
         this.refreshInterval = null;
         this.chartInitialized = false;
 
@@ -41,13 +39,10 @@ class EnergyDashboard {
         this.endDateTime = new Date(now.getTime() + (CONSTANTS.ONE_DAY_MS * 2));
         this.endDateTime.setHours(23, 59, 59, 999);
         this.customTimeRange = true;
-        this.maxHistoricalDays = CONSTANTS.MAX_HISTORICAL_DAYS;
-
         // Initialize API client, UI controller, data loader, and tabs
         this.apiClient = new ApiClient();
         this.uiController = new UIController(this);
         this.dataLoader = new DataLoader();
-        this.tabCharts = {}; // track Plotly init state per tab
 
         // Debounced refresh function (500ms delay)
         this.debouncedRefresh = debounce(
@@ -271,10 +266,13 @@ class EnergyDashboard {
             lastUpdate
         );
 
-        // Position controls below legend after chart is rendered
-        setTimeout(() => {
-            this.uiController.positionControlsBelowLegend();
-        }, 100);
+        // Position controls below legend after chart finishes rendering
+        const chartEl = document.getElementById('energyChart');
+        if (chartEl) {
+            chartEl.on('plotly_afterplot', () => {
+                this.uiController.positionControlsBelowLegend();
+            });
+        }
     }
 
     /**
@@ -301,8 +299,6 @@ class EnergyDashboard {
 
         if (firstVisit) {
             const files = await this.dataLoader.loadFiles(tabConfig.files);
-            this.forecastFiles = tabKey === 'forecast' ? files : this.forecastFiles;
-
             if (tabKey === 'forecast') {
                 this.initForecastTab(files);
             } else if (tabKey === 'grid') {
@@ -392,16 +388,34 @@ class EnergyDashboard {
         const cards = buildMarketCards(files);
         const container = document.getElementById('marketCards');
         if (cards.length > 0) {
-            container.innerHTML = cards.map(c => `
-                <div class="market-card">
-                    <div class="card-label">${c.label}</div>
-                    <div class="card-value">${c.value}</div>
-                    <div class="card-unit">${c.unit}</div>
-                    ${c.detail ? `<div class="card-detail">${c.detail}</div>` : ''}
-                </div>
-            `).join('');
+            container.replaceChildren();
+            for (const c of cards) {
+                const card = document.createElement('div');
+                card.className = 'market-card';
+                const label = document.createElement('div');
+                label.className = 'card-label';
+                label.textContent = c.label;
+                const value = document.createElement('div');
+                value.className = 'card-value';
+                value.textContent = c.value;
+                const unit = document.createElement('div');
+                unit.className = 'card-unit';
+                unit.textContent = c.unit;
+                card.append(label, value, unit);
+                if (c.detail) {
+                    const detail = document.createElement('div');
+                    detail.className = 'card-detail';
+                    detail.textContent = c.detail;
+                    card.appendChild(detail);
+                }
+                container.appendChild(card);
+            }
         } else {
-            container.innerHTML = '<p style="color:#999;text-align:center;padding:20px;">No market data available.</p>';
+            container.replaceChildren();
+            const p = document.createElement('p');
+            p.style.cssText = 'color:#999;text-align:center;padding:20px;';
+            p.textContent = 'No market data available.';
+            container.appendChild(p);
         }
 
         // Small gas storage chart below cards

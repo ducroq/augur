@@ -2,17 +2,17 @@
 
 Energy price forecasting platform for the Netherlands. Combines data from 18+ APIs (via energyDataHub), ML-based week-ahead price predictions, and an interactive dashboard for smart consumption (heat pumps, EV charging, industrial thermal).
 
-- **Stack**: Python 3.12 (ML pipeline), Hugo + Plotly.js (dashboard), XGBoost + River (forecasting)
+- **Stack**: Python 3.12 (ML pipeline), Hugo + Plotly.js (dashboard), River ARF (forecasting)
 - **Status**: Production — dashboard live, ML pipeline daily on sadalsuud
 - **Repo**: github.com/ducroq/augur
-- **agent-ready-projects**: v1.2.0
+- **agent-ready-projects**: v1.3.2
 
 ## Before You Start
 
 | When | Read |
 |------|------|
 | Working on ML features or training | `ml/features/online_features.py` — feature engineering, `ml/training/warmup.py` — model lifecycle |
-| Changing the dashboard or chart rendering | `static/js/modules/` — use modular JS, NOT legacy `chart.js` |
+| Changing the dashboard or chart rendering | `static/js/modules/` — modular ES6 code |
 | Changing deployment or build pipeline | `docs/RUNBOOK.md` — Netlify build, --force flag, webhook flow |
 | Making architectural decisions | `docs/decisions/` — ADR index |
 | Stuck or debugging something weird | `memory/gotcha-log.md` — problem-fix archive |
@@ -22,7 +22,6 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 ## Hard Constraints
 
 - Never commit encryption keys or secrets — keys are base64-encoded env vars (`ENCRYPTION_KEY_B64`, `HMAC_KEY_B64`)
-- Never modify legacy `chart.js` — all new frontend work goes in `static/js/modules/`
 - Never use hardcoded +2h timezone offset — use `Intl.DateTimeFormat` with `timeZone: 'Europe/Amsterdam'`
 - Never claim tests pass without running them. Never claim a file exists without reading it.
 - Always verify HMAC before decryption — data integrity is non-negotiable
@@ -83,10 +82,11 @@ Client browser (https://energy.jeroenveen.nl):
 | `ml/models/state.json` | Model state: timestamps, error history, price buffer |
 | `static/js/dashboard.js` | Modular dashboard entry point (preferred) |
 | `static/js/modules/` | ES6 modules: api-client, chart-renderer, data-processor, etc. |
-| `static/js/chart.js` | Legacy monolith — DO NOT MODIFY, pending deprecation |
 | `decrypt_data_cached.py` | Production decryption with caching + --force |
 | `utils/secure_data_handler.py` | AES-CBC-256 + HMAC-SHA256 |
-| `netlify.toml` | Build pipeline: decrypt → infer → hugo |
+| `scripts/netlify_build.sh` | Shared Netlify build script (all contexts) |
+| `netlify.toml` | Build pipeline: decrypt → hugo |
+| `tests/` | pytest suite for SecureDataHandler + OnlineFeatureBuilder |
 | `layouts/index.html` | Dashboard HTML template |
 | `static/css/style.css` | Glassmorphism dark theme |
 
@@ -94,7 +94,7 @@ Client browser (https://energy.jeroenveen.nl):
 
 ```bash
 # Install dependencies
-pip install cryptography pandas numpy xgboost
+pip install -r requirements.txt
 npm install
 
 # Set encryption keys (Windows PowerShell)
@@ -104,8 +104,8 @@ $env:HMAC_KEY_B64 = "your_key"
 # Fetch and decrypt data
 python decrypt_data_cached.py --force
 
-# Run ML inference (once model trained)
-python -m ml.inference
+# Run tests
+python -m pytest tests/ -v
 
 # Dev server
 hugo server -D

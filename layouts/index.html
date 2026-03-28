@@ -7,16 +7,16 @@
     </header>
 
     <nav class="tab-nav" role="tablist" aria-label="Dashboard views">
-        <button class="tab-btn active" role="tab" data-tab="prices" aria-selected="true" aria-controls="panel-prices">Prices</button>
-        <button class="tab-btn" role="tab" data-tab="forecast" aria-selected="false" aria-controls="panel-forecast">Weather</button>
-        <button class="tab-btn" role="tab" data-tab="grid" aria-selected="false" aria-controls="panel-grid">Grid</button>
-        <button class="tab-btn" role="tab" data-tab="market" aria-selected="false" aria-controls="panel-market">Market</button>
-        <button class="tab-btn" role="tab" data-tab="model" aria-selected="false" aria-controls="panel-model">Model</button>
+        <button class="tab-btn active" role="tab" id="tab-prices" data-tab="prices" aria-selected="true" aria-controls="panel-prices">Prices</button>
+        <button class="tab-btn" role="tab" id="tab-forecast" data-tab="forecast" aria-selected="false" aria-controls="panel-forecast">Weather</button>
+        <button class="tab-btn" role="tab" id="tab-grid" data-tab="grid" aria-selected="false" aria-controls="panel-grid">Grid</button>
+        <button class="tab-btn" role="tab" id="tab-market" data-tab="market" aria-selected="false" aria-controls="panel-market">Market</button>
+        <button class="tab-btn" role="tab" id="tab-model" data-tab="model" aria-selected="false" aria-controls="panel-model">Model</button>
     </nav>
 
     <div class="tab-panels">
         <!-- Prices: today + tomorrow -->
-        <div class="tab-panel active" id="panel-prices" role="tabpanel">
+        <div class="tab-panel active" id="panel-prices" role="tabpanel" aria-labelledby="tab-prices">
             <div class="chart-container">
                 <div id="energyChart">
                     <div class="chart-loading-fallback">
@@ -31,7 +31,7 @@
         </div>
 
         <!-- Forecast: 7-10 day outlook (wind, solar, weather) -->
-        <div class="tab-panel" id="panel-forecast" role="tabpanel">
+        <div class="tab-panel" id="panel-forecast" role="tabpanel" aria-labelledby="tab-forecast">
             <div class="forecast-section">
                 <div class="forecast-header">
                     <h3>Offshore Wind Speed (10-day)</h3>
@@ -70,7 +70,7 @@
         </div>
 
         <!-- Grid: yesterday's operational data -->
-        <div class="tab-panel" id="panel-grid" role="tabpanel">
+        <div class="tab-panel" id="panel-grid" role="tabpanel" aria-labelledby="tab-grid">
             <div class="forecast-section">
                 <div class="forecast-header"><h3>System Imbalance (yesterday)</h3></div>
                 <div class="chart-container">
@@ -104,7 +104,7 @@
         </div>
 
         <!-- Market: slow-moving context -->
-        <div class="tab-panel" id="panel-market" role="tabpanel">
+        <div class="tab-panel" id="panel-market" role="tabpanel" aria-labelledby="tab-market">
             <div id="marketCards" class="market-cards">
                 <div class="chart-loading-fallback">
                     <div class="loading-spinner"></div>
@@ -117,7 +117,7 @@
         </div>
 
         <!-- Model: ML explanation and diagnostics -->
-        <div class="tab-panel" id="panel-model" role="tabpanel">
+        <div class="tab-panel" id="panel-model" role="tabpanel" aria-labelledby="tab-model">
             <!-- Architecture diagram -->
             <div class="model-section">
                 <h2 class="model-title">Architecture</h2>

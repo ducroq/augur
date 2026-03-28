@@ -84,14 +84,30 @@ export function showErrorNotification(errorInfo) {
     const notification = document.createElement('div');
     notification.id = 'error-notification';
     notification.className = `error-notification ${errorInfo.severity}`;
-    notification.innerHTML = `
-        <div class="error-icon">${errorInfo.severity === 'error' ? '❌' : '⚠️'}</div>
-        <div class="error-content">
-            <div class="error-message">${errorInfo.userMessage}</div>
-            <div class="error-technical">Technical: ${errorInfo.technicalMessage}</div>
-        </div>
-        <button class="error-close" onclick="this.parentElement.remove()">×</button>
-    `;
+    const icon = document.createElement('div');
+    icon.className = 'error-icon';
+    icon.textContent = errorInfo.severity === 'error' ? '❌' : '⚠️';
+
+    const content = document.createElement('div');
+    content.className = 'error-content';
+    const msg = document.createElement('div');
+    msg.className = 'error-message';
+    msg.textContent = errorInfo.userMessage;
+    const tech = document.createElement('div');
+    tech.className = 'error-technical';
+    tech.textContent = `Technical: ${errorInfo.technicalMessage}`;
+    content.appendChild(msg);
+    content.appendChild(tech);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'error-close';
+    closeBtn.setAttribute('aria-label', 'Close');
+    closeBtn.textContent = '\u00d7';
+    closeBtn.addEventListener('click', () => notification.remove());
+
+    notification.appendChild(icon);
+    notification.appendChild(content);
+    notification.appendChild(closeBtn);
 
     document.body.appendChild(notification);
 
