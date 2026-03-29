@@ -21,6 +21,9 @@
 - Test suite added: 17 tests (SecureDataHandler + OnlineFeatureBuilder)
 - energyDataHub: stable, ENTSO-E backfill completed, ~220 days of history
 - Major code health sweep completed 2026-03-28 (20 issues fixed across ML, security, frontend)
+- Repo cleanup 2026-03-28: removed 33 stale docs/archive files, rewrote README
+- Docs structure: CLAUDE.md + docs/RUNBOOK.md + docs/decisions/ + memory/ (agent-ready-projects v1.3.4)
+- `/curate` skill installed at `.claude/skills/curate/SKILL.md`
 
 ## Key File Paths
 
@@ -34,7 +37,9 @@
 | `ml/models/state.json` | Model state: last timestamp, error history, price buffer |
 | `static/data/augur_forecast.json` | Dashboard forecast output with confidence bands |
 | `decrypt_data_cached.py` | Decrypts 10 data files from energyDataHub |
+| `scripts/netlify_build.sh` | Shared Netlify build script (all contexts) |
 | `scripts/daily_update.sh` | Cron script on sadalsuud |
+| `tests/` | pytest suite: SecureDataHandler + OnlineFeatureBuilder |
 
 ## Recently Promoted
 

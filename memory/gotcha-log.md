@@ -27,6 +27,12 @@
 **Remaining**: 26 early files (Sep-Oct 2025) still degraded due to malformed timestamps — low impact.
 **Status**: [RESOLVED]
 
+### Non-monotonic price index crashes _nearest (2026-03-28)
+**Problem**: `_nearest()` in `ml/update.py` crashed with `ValueError: index must be monotonic` during forecast generation after ENTSO-E backfill.
+**Root cause**: `parse_price_file` merges multiple sources (energy_zero, elspot, epex, entsoe) by overwriting — the resulting series can have an unsorted index.
+**Fix**: Added `if not series.index.is_monotonic_increasing: series = series.sort_index()` guard in `_nearest`.
+**Status**: [RESOLVED]
+
 ### Energy Zero hardcoded +2h offset (2026-03, pre-Augur)
 **Problem**: Legacy code added fixed +2 hours for NL timezone, incorrect during winter (UTC+1).
 **Root cause**: Quick implementation without proper timezone library.
