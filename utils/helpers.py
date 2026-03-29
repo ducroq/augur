@@ -152,8 +152,6 @@ def save_data_file(
                 f.write(encrypted_data)
         else:
             data.write_to_json(file_path)
-            # with open(file_path, 'w') as f:
-            #     json.dump(data, f, indent=2)
     except Exception as e:
         logging.error(f"Error saving file {file_path}: {e}")
         raise

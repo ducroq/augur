@@ -47,7 +47,7 @@ energyDataHub/collectors/tennet.py
     ↓ (Daily at 16:00 UTC)
 GitHub Pages: grid_imbalance.json (encrypted)
     ↓
-Augur/decrypt_data.py
+Augur/decrypt_data_cached.py
     ↓
 Dashboard visualization (secondary Y-axis chart)
 ```
@@ -192,7 +192,7 @@ energyLiveData was archived because its core functionality (Energy Zero API) was
 **Repository**: `Augur`
 
 **Actions** (deferred until Phase 1 complete):
-1. Update `decrypt_data.py` to fetch `grid_imbalance.json`
+1. Update `decrypt_data_cached.py` to fetch `grid_imbalance.json`
 2. Create `static/js/modules/grid-status.js`
 3. Add secondary Y-axis to Plotly chart (EUR/MWh left, MW right)
 4. Add status indicator widget (🟢🟡🔴)
@@ -209,8 +209,6 @@ energyLiveData was archived because its core functionality (Energy Zero API) was
 ## Related Decisions
 
 - [ADR-001: Amsterdam Timezone Handling](./001-timezone-handling-strategy.md) - TenneT data must use same timezone pattern
-- [ENERGYLIVEDATA_FEATURES_PLAN.md](../ENERGYLIVEDATA_FEATURES_PLAN.md) - Original feature roadmap (Feature 1.2)
-- [AI_AUGMENTED_WORKFLOW.md](../agents/AI_AUGMENTED_WORKFLOW.md) - Agent system framework
 
 ---
 
@@ -231,7 +229,7 @@ energyLiveData was archived because its core functionality (Energy Zero API) was
 **Augur:**
 - Repository: https://github.com/ducroq/Augur
 - Live: https://energy.jeroenveen.nl
-- Decryption: `decrypt_data.py`
+- Decryption: `decrypt_data_cached.py`
 
 ---
 
