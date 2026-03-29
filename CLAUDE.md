@@ -5,7 +5,7 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 - **Stack**: Python 3.12 (ML pipeline), Hugo + Plotly.js (dashboard), River ARF (forecasting)
 - **Status**: Production — dashboard live, ML pipeline daily on sadalsuud
 - **Repo**: github.com/ducroq/augur
-- **agent-ready-projects**: v1.3.2
+- **agent-ready-projects**: v1.3.3
 
 ## Before You Start
 
