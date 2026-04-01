@@ -5,7 +5,7 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 - **Stack**: Python 3.12 (ML pipeline), Hugo + Plotly.js (dashboard), River ARF (forecasting)
 - **Status**: Production — dashboard live, ML pipeline daily on sadalsuud
 - **Repo**: github.com/ducroq/augur
-- **agent-ready-projects**: v1.3.3
+- **agent-ready-projects**: v1.3.4
 
 ## Before You Start
 
@@ -65,7 +65,7 @@ Client browser (https://energy.jeroenveen.nl):
 - **Features**: Lasso-selected — price lags, rolling stats, wind speed, solar GHI, load forecast
 - **Target**: ENTSO-E NL wholesale day-ahead price (EUR/MWh)
 - **Consumer forecast**: derived from wholesale via auto-computed surcharge (EZ consumer - ENTSO-E × 1.21), with fallback chain (recent files → state → default 95 EUR/MWh)
-- **Forecast**: 48h with 80% confidence band, exchange-informed lags
+- **Forecast**: 72h with 80% confidence band, exchange-informed lags
 - **Confidence bands**: EWM error stats (half-life 24h) + volatility scaling from price_rolling_std_6h
 - **Convergence metric**: vs Exchange MAE (tracking daily)
 - **Forecast archive**: timestamped copies in `ml/forecasts/` on sadalsuud

@@ -186,7 +186,7 @@ def update_model(model, state, data):
     return model, state, fb
 
 
-def generate_forecast(model, fb, data, state, hours=48):
+def generate_forecast(model, fb, data, state, hours=72):
     """Generate price forecast with confidence bands for the next N hours.
 
     Uses known exchange day-ahead prices as lag features where available,

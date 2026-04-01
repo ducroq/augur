@@ -161,7 +161,7 @@ class EnergyDashboard {
                 endTime.setHours(23, 59, 59, 999);
                 break;
             case 'dayaftertomorrow':
-                endTime = new Date(now.getTime() + (CONSTANTS.ONE_DAY_MS * 2));
+                endTime = new Date(now.getTime() + (CONSTANTS.ONE_DAY_MS * 3));
                 endTime.setHours(23, 59, 59, 999);
                 break;
             case 'week':
@@ -169,7 +169,7 @@ class EnergyDashboard {
                 endTime.setHours(23, 59, 59, 999);
                 break;
             default:
-                endTime = new Date(now.getTime() + (CONSTANTS.ONE_DAY_MS * 2));
+                endTime = new Date(now.getTime() + (CONSTANTS.ONE_DAY_MS * 3));
                 endTime.setHours(23, 59, 59, 999);
                 break;
         }
