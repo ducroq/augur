@@ -9,6 +9,12 @@
 
 ---
 
+### CI workflow references stale file names (2026-04-01)
+**Problem**: CI failed on `chart.js not copied` and `No module named 'decrypt_data'` — both files were renamed/deleted in earlier refactors but `.github/workflows/test.yml` was never updated.
+**Root cause**: File renames (chart.js → dashboard.js, decrypt_data.py → decrypt_data_cached.py) didn't include CI workflow updates.
+**Fix**: Updated test.yml to reference `dashboard.js` and `decrypt_data_cached`. Added `sourceType:module` for ESLint on ES6 imports.
+**Status**: [RESOLVED]
+
 ### Netlify --force flag not bypassing hash cache (2026-03, pre-Augur)
 **Problem**: Webhook-triggered builds were serving stale data despite --force flag.
 **Root cause**: `decrypt_data_cached.py` --force bypassed age check but not hash check. Cached hash matched → skipped decryption even when forced.
