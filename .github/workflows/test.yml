@@ -30,17 +30,17 @@ jobs:
         python -c "from utils.helpers import load_config; print('✓ helpers import OK')"
         python -c "from utils.data_types import EnhancedDataSet, CombinedDataSet; print('✓ data_types import OK')"
         python -c "from utils.timezone_helpers import get_timezone; print('✓ timezone_helpers import OK')"
-        python -c "from decrypt_data import fetch_with_retry, validate_base64_key; print('✓ decrypt_data import OK')"
+        python -c "from decrypt_data_cached import fetch_with_retry, validate_base64_key; print('✓ decrypt_data_cached import OK')"
 
     - name: Test Python syntax
       run: |
-        python -m py_compile decrypt_data.py
+        python -m py_compile decrypt_data_cached.py
         python -m py_compile utils/*.py
 
     - name: Test validation function
       run: |
         python -c "
-        from decrypt_data import validate_base64_key
+        from decrypt_data_cached import validate_base64_key
         import base64
 
         # Test valid key
@@ -69,7 +69,7 @@ jobs:
     - name: Test retry logic
       run: |
         python -c "
-        from decrypt_data import fetch_with_retry
+        from decrypt_data_cached import fetch_with_retry
 
         # Test successful fetch
         data = fetch_with_retry('https://www.google.com', max_retries=2, initial_delay=1)
@@ -97,7 +97,7 @@ jobs:
       run: |
         test -d public || (echo "public directory not created" && exit 1)
         test -f public/index.html || (echo "index.html not generated" && exit 1)
-        test -f public/js/chart.js || (echo "chart.js not copied" && exit 1)
+        test -f public/js/dashboard.js || (echo "dashboard.js not copied" && exit 1)
         test -f public/css/style.css || (echo "style.css not copied" && exit 1)
         echo "✓ Hugo build successful - all expected files present"
 
@@ -106,7 +106,7 @@ jobs:
       with:
         node-version: '18'
     - run: |
-        npx eslint public/js/chart.js --no-eslintrc --parser-options=ecmaVersion:2022 || echo "⚠ ESLint warnings (non-blocking)"
+        npx eslint public/js/dashboard.js --no-eslintrc --parser-options=ecmaVersion:2022,sourceType:module || echo "⚠ ESLint warnings (non-blocking)"
 
   all-tests-passed:
     name: All Tests Passed
