@@ -1,12 +1,13 @@
 /**
  * Model explanation visualizations for the Model tab.
- * All charts use pre-computed data from model-viz-data.js.
+ * Static charts use pre-computed data from model-viz-data.js.
+ * Performance charts use live data from augur_forecast.json.
  * @module model-viz
  */
 
 import {
     CORRELATION, FEATURE_IMPORTANCE_BY_HORIZON, HOURLY_PROFILE,
-    LEARNING_CURVE, WIND_VS_PRICE,
+    WIND_VS_PRICE,
 } from './model-viz-data.js';
 
 const DARK = {
@@ -162,27 +163,123 @@ export function renderWindScatter(elementId) {
     }), plotConfig);
 }
 
-// ── 5. Learning Curve ───────────────────────────────────────
+// ── 5. MAE Over Time (live) ────────────────────────────────
 
-export function renderLearningCurve(elementId) {
+function renderMaeOverTime(elementId, metricsHistory) {
+    if (!metricsHistory || metricsHistory.length === 0) return;
+
+    const dates = metricsHistory.map(e => e.date);
+    const traces = [
+        {
+            x: dates,
+            y: metricsHistory.map(e => e.update_mae),
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: 'Daily MAE',
+            line: { width: 2, color: '#60a5fa' },
+            marker: { size: 4, color: '#60a5fa' },
+            hovertemplate: '<b>%{x}</b><br>Daily MAE: %{y:.1f} EUR/MWh<extra></extra>',
+        },
+        {
+            x: dates,
+            y: metricsHistory.map(e => e.last_week_mae),
+            type: 'scatter',
+            mode: 'lines',
+            name: '7-day MAE',
+            line: { width: 2, color: '#10b981', dash: 'dot' },
+            hovertemplate: '<b>%{x}</b><br>7-day MAE: %{y:.1f} EUR/MWh<extra></extra>',
+        },
+    ];
+
+    // Add vs Exchange MAE if any entries have it
+    const exchangeDates = metricsHistory.filter(e => e.mae_vs_exchange != null);
+    if (exchangeDates.length > 0) {
+        traces.push({
+            x: exchangeDates.map(e => e.date),
+            y: exchangeDates.map(e => e.mae_vs_exchange),
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: 'vs Exchange MAE',
+            line: { width: 2, color: '#f59e0b' },
+            marker: { size: 4, color: '#f59e0b' },
+            hovertemplate: '<b>%{x}</b><br>vs Exchange: %{y:.1f} EUR/MWh<extra></extra>',
+        });
+    }
+
+    Plotly.newPlot(elementId, traces, darkLayout({
+        xaxis: { title: 'Date', gridcolor: DARK.grid },
+        yaxis: { title: 'MAE (EUR/MWh)', gridcolor: DARK.grid, rangemode: 'tozero' },
+        legend: { orientation: 'h', y: 1.08, xanchor: 'center', x: 0.5 },
+        margin: { l: 60, r: 30, t: 40, b: 50 },
+    }), plotConfig);
+}
+
+// ── 6. Error Distribution (live) ──────────────────────────
+
+function renderErrorDistribution(elementId, errorHistory) {
+    if (!errorHistory || errorHistory.length === 0) return;
+
+    Plotly.newPlot(elementId, [
+        {
+            x: errorHistory,
+            type: 'histogram',
+            marker: { color: 'rgba(96, 165, 250, 0.7)', line: { color: '#60a5fa', width: 1 } },
+            nbinsx: 40,
+            hovertemplate: 'Bin: %{x:.0f} EUR/MWh<br>Count: %{y}<extra></extra>',
+        },
+    ], darkLayout({
+        xaxis: { title: 'Prediction Error (EUR/MWh)', gridcolor: DARK.grid },
+        yaxis: { title: 'Count', gridcolor: DARK.grid },
+        margin: { l: 50, r: 30, t: 10, b: 50 },
+        shapes: [{
+            type: 'line', x0: 0, x1: 0, y0: 0, y1: 1,
+            yref: 'paper', line: { color: '#ef4444', width: 2, dash: 'dash' },
+        }],
+        annotations: [{
+            x: 0, y: 1, yref: 'paper', text: 'zero',
+            showarrow: false, font: { color: '#ef4444', size: 10 }, yanchor: 'bottom',
+        }],
+    }), plotConfig);
+}
+
+// ── 7. MAE by Hour of Day (live) ──────────────────────────
+
+function renderMaeByHour(elementId, errorHistory, errorHours) {
+    if (!errorHistory || !errorHours || errorHistory.length === 0) return;
+    if (errorHistory.length !== errorHours.length) return;
+
+    // Group absolute errors by hour
+    const hourBuckets = Array.from({ length: 24 }, () => []);
+    for (let i = 0; i < errorHistory.length; i++) {
+        const hour = errorHours[i];
+        if (hour >= 0 && hour < 24) {
+            hourBuckets[hour].push(Math.abs(errorHistory[i]));
+        }
+    }
+
+    const hours = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
+    const maes = hourBuckets.map(b => b.length > 0 ? b.reduce((a, c) => a + c, 0) / b.length : 0);
+    const counts = hourBuckets.map(b => b.length);
+
     Plotly.newPlot(elementId, [{
-        x: LEARNING_CURVE.x,
-        y: LEARNING_CURVE.y,
-        type: 'scatter',
-        mode: 'lines',
-        line: { width: 2, color: '#a78bfa' },
-        fill: 'tozeroy',
-        fillcolor: 'rgba(167, 139, 250, 0.1)',
-        hovertemplate: 'Sample %{x}<br>Rolling MAE: %{y:.1f} EUR/MWh<extra></extra>',
+        x: hours,
+        y: maes,
+        type: 'bar',
+        marker: {
+            color: maes.map(v => v > 20 ? '#ef4444' : v > 15 ? '#f59e0b' : '#10b981'),
+            opacity: 0.85,
+        },
+        hovertemplate: '<b>%{x}</b><br>MAE: %{y:.1f} EUR/MWh<br>Samples: %{customdata}<extra></extra>',
+        customdata: counts,
     }], darkLayout({
-        xaxis: { title: 'Training Samples (rolling window)', gridcolor: DARK.grid },
-        yaxis: { title: 'Rolling MAE (EUR/MWh)', gridcolor: DARK.grid },
-        margin: { l: 60, r: 30, t: 10, b: 50 },
+        xaxis: { title: 'Hour of Day', gridcolor: DARK.grid, dtick: 2 },
+        yaxis: { title: 'MAE (EUR/MWh)', gridcolor: DARK.grid, rangemode: 'tozero' },
+        margin: { l: 50, r: 30, t: 10, b: 50 },
     }), plotConfig);
 }
 
 /**
- * Load live metrics from augur_forecast.json and update the metric cards.
+ * Load live metrics from augur_forecast.json, update metric cards, and render performance charts.
  */
 async function loadLiveMetrics() {
     try {
@@ -198,8 +295,13 @@ async function loadLiveMetrics() {
         };
 
         set('metric-exchange-mae', metrics.vs_exchange?.mae_vs_exchange?.toFixed(1) || '--');
-        set('metric-mae', metrics.mae?.toFixed(1) || '--');
+        set('metric-mae', metrics.update_mae?.toFixed(1) || '--');
         set('metric-samples', m.n_training_samples?.toLocaleString() || '--');
+
+        // Render live performance charts
+        renderMaeOverTime('maeOverTimeChart', m.metrics_history);
+        renderErrorDistribution('errorDistChart', m.error_history);
+        renderMaeByHour('maeByHourChart', m.error_history, m.error_hours);
     } catch {
         // Forecast not available yet
     }
@@ -213,6 +315,5 @@ export function renderAllModelViz() {
     renderCorrelation('correlationChart');
     renderHourlyProfile('hourlyProfileChart');
     renderWindScatter('windScatterChart');
-    renderLearningCurve('learningCurveChart');
     loadLiveMetrics();
 }

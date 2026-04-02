@@ -171,6 +171,26 @@
                 </div>
             </div>
 
+            <!-- Model Performance (live charts from augur_forecast.json) -->
+            <div class="model-section">
+                <h2 class="model-title">Model Performance</h2>
+                <p class="model-subtitle">Live convergence tracking. These charts update daily as the model learns from new price observations.</p>
+                <div class="chart-container">
+                    <h3 class="forecast-header-text">MAE Over Time</h3>
+                    <div id="maeOverTimeChart" class="chart-area"></div>
+                </div>
+                <div class="model-two-col" style="margin-top: 16px">
+                    <div class="chart-container">
+                        <h3 class="forecast-header-text">Error Distribution (last 500 predictions)</h3>
+                        <div id="errorDistChart" class="chart-area"></div>
+                    </div>
+                    <div class="chart-container">
+                        <h3 class="forecast-header-text">MAE by Hour of Day</h3>
+                        <div id="maeByHourChart" class="chart-area"></div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Feature Importance + Correlation side by side -->
             <div class="model-section">
                 <h2 class="model-title">Feature Analysis</h2>
@@ -198,15 +218,6 @@
                         <h3 class="forecast-header-text">Offshore Wind vs Price</h3>
                         <div id="windScatterChart" class="chart-area"></div>
                     </div>
-                </div>
-            </div>
-
-            <!-- Learning Curve -->
-            <div class="model-section">
-                <h2 class="model-title">Learning Curve</h2>
-                <p class="model-subtitle">Rolling MAE during online learning. The model sees each hour once and never revisits it — this is how it improves over time.</p>
-                <div class="chart-container">
-                    <div id="learningCurveChart" class="chart-area chart-area-sm"></div>
                 </div>
             </div>
 

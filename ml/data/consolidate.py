@@ -79,13 +79,31 @@ def resolve_weather_value(val):
 
 
 def parse_price_file(path: Path) -> pd.Series:
-    """Extract ENTSO-E NL hourly prices from an energy_price_forecast file."""
+    """Extract ENTSO-E NL hourly prices from an energy_price_forecast file.
+
+    Returns wholesale prices only.  When ENTSO-E data is missing, logs a
+    warning — Energy Zero consumer prices are NOT used as a substitute
+    because they include VAT/surcharges and would corrupt the training target.
+    """
     data = load_json_file(path)
 
-    # Merge all wholesale sources: entsoe preferred, then fill gaps from others
+    entsoe_source = data.get("entsoe")
+    has_entsoe = (
+        entsoe_source
+        and isinstance(entsoe_source, dict)
+        and "data" in entsoe_source
+        and entsoe_source["data"]
+    )
+    if not has_entsoe:
+        logger.warning(
+            "ENTSO-E data missing in %s — skipping Energy Zero to avoid "
+            "consumer/wholesale price contamination", path.name
+        )
+
+    # Merge wholesale sources only: entsoe preferred, then fill gaps from elspot/epex
+    # Energy Zero is EXCLUDED — it's a consumer price (incl. VAT + surcharges)
     merged = {}
-    for source_key in ("energy_zero", "elspot", "epex", "entsoe"):
-        # Process in reverse priority so entsoe overwrites others
+    for source_key in ("elspot", "epex", "entsoe"):
         source = data.get(source_key)
         if not source or not isinstance(source, dict) or "data" not in source:
             continue

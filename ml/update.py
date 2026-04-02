@@ -140,6 +140,7 @@ def update_model(model, state, data):
 
     # Rolling error history for confidence bands (keep last 500 errors)
     error_history = state.get("error_history", [])
+    error_hours = state.get("error_hours", [])
 
     errors = []
     for ts, price in new_prices.items():
@@ -165,9 +166,11 @@ def update_model(model, state, data):
         err = price - y_pred  # signed error (not abs)
         errors.append(abs(err))
         error_history.append(err)
+        error_hours.append(ts.hour)
 
-    # Trim to last 500
+    # Trim to last 500 (parallel arrays — must stay aligned)
     error_history = error_history[-500:]
+    error_hours = error_hours[-500:]
 
     # Update state
     n_new = len(errors)
@@ -178,8 +181,24 @@ def update_model(model, state, data):
     state["n_samples"] = prev_n + n_new
     state["price_buffer"] = fb.get_price_buffer()
     state["error_history"] = error_history
+    state["error_hours"] = error_hours
+
     if mae is not None:
         state.setdefault("metrics", {})["update_mae"] = round(mae, 2)
+
+    # Append to metrics history (one entry per daily update, cap at 365 days)
+    if mae is not None:
+        history_entry = {
+            "date": new_prices.index.max().strftime("%Y-%m-%d"),
+            "update_mae": round(mae, 2),
+            "mae": round(state["metrics"].get("mae", mae), 2),
+            "last_week_mae": round(state["metrics"].get("last_week_mae", mae), 2),
+            "n_samples": prev_n + n_new,
+            "mae_vs_exchange": None,  # backfilled in main() if exchange data available
+        }
+        metrics_history = state.get("metrics_history", [])
+        metrics_history.append(history_entry)
+        state["metrics_history"] = metrics_history[-365:]
 
     logger.info(f"Learned {n_new} new samples, MAE: {mae:.2f}" if mae else "No valid samples")
 
@@ -424,6 +443,9 @@ def write_forecast_json(forecast, forecast_upper, forecast_lower, state, output_
             "last_updated": datetime.now(timezone.utc).isoformat(),
             "n_training_samples": state.get("n_samples", 0),
             "metrics": metrics,
+            "metrics_history": state.get("metrics_history", []),
+            "error_history": state.get("error_history", []),
+            "error_hours": state.get("error_hours", []),
         },
         "forecast": forecast,
         "forecast_upper": forecast_upper,
@@ -483,6 +505,9 @@ def main():
             f"Forecast vs exchange: MAE {exchange_comparison['mae_vs_exchange']:.1f} EUR/MWh "
             f"over {exchange_comparison['n_overlap_hours']} hours"
         )
+        # Backfill mae_vs_exchange into the latest metrics_history entry
+        if state.get("metrics_history"):
+            state["metrics_history"][-1]["mae_vs_exchange"] = exchange_comparison["mae_vs_exchange"]
 
     # Derive consumer surcharge and generate consumer forecast
     surcharge = derive_surcharge(data_dir, state)
