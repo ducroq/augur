@@ -15,31 +15,15 @@
 
 - Dashboard: 5 tabs (Prices, Weather, Grid, Market, Model) on Netlify
 - ML pipeline: **live** — River ARF on sadalsuud, daily cron at 16:45 UTC
-- Forecast: 48h wholesale + consumer (auto-derived surcharge ~110.85 EUR/MWh)
+- Forecast: 72h wholesale + consumer (auto-derived surcharge ~110.85 EUR/MWh)
 - Re-warmup completed 2026-03-28 on full backfilled dataset (4,192 rows, MAE 13.80)
 - Legacy `chart.js` deleted — all frontend is modular ES6 in `static/js/modules/`
 - Test suite added: 17 tests (SecureDataHandler + OnlineFeatureBuilder)
 - energyDataHub: stable, ENTSO-E backfill completed, ~220 days of history
 - Major code health sweep completed 2026-03-28 (20 issues fixed across ML, security, frontend)
 - Repo cleanup 2026-03-28: removed 33 stale docs/archive files, rewrote README
-- Docs structure: CLAUDE.md + docs/RUNBOOK.md + docs/decisions/ + memory/ (agent-ready-projects v1.3.4)
-- `/curate` skill installed at `.claude/skills/curate/SKILL.md`
-
-## Key File Paths
-
-| Path | Why it matters |
-|------|---------------|
-| `ml/features/online_features.py` | Shared feature builder for warmup + daily update |
-| `ml/data/consolidate.py` | Parses 220 days of encrypted energyDataHub history |
-| `ml/training/warmup.py` | Replays history through River ARF (one-time) |
-| `ml/update.py` | Daily entry point: learn + forecast + archive |
-| `ml/models/river_model.pkl` | Trained model (committed daily by sadalsuud) |
-| `ml/models/state.json` | Model state: last timestamp, error history, price buffer |
-| `static/data/augur_forecast.json` | Dashboard forecast output with confidence bands |
-| `decrypt_data_cached.py` | Decrypts 10 data files from energyDataHub |
-| `scripts/netlify_build.sh` | Shared Netlify build script (all contexts) |
-| `scripts/daily_update.sh` | Cron script on sadalsuud |
-| `tests/` | pytest suite: SecureDataHandler + OnlineFeatureBuilder |
+- Docs structure: CLAUDE.md + docs/RUNBOOK.md + docs/decisions/ + memory/
+- agent-ready-projects updated to v1.7.0 (2026-04-09): `/curate` gains freshness+doc-sync, `/audit-context` skill added
 
 ## Recently Promoted
 

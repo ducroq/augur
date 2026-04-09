@@ -5,7 +5,7 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 - **Stack**: Python 3.12 (ML pipeline), Hugo + Plotly.js (dashboard), River ARF (forecasting)
 - **Status**: Production — dashboard live, ML pipeline daily on sadalsuud
 - **Repo**: github.com/ducroq/augur
-- **agent-ready-projects**: v1.3.4
+- **agent-ready-projects**: v1.7.0
 
 ## Before You Start
 
@@ -16,8 +16,10 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 | Changing deployment or build pipeline | `docs/RUNBOOK.md` — Netlify build, --force flag, webhook flow |
 | Making architectural decisions | `docs/decisions/` — ADR index |
 | Stuck or debugging something weird | `memory/gotcha-log.md` — problem-fix archive |
+| Questioning ML architecture choices | `memory/ml-decisions.md` — why week-ahead, why River ARF, feature strategy |
 | Working with energyDataHub data formats | `memory/data-formats.md` — schema v2.1, units, timezone conventions |
-| Ending a session | `memory/gotcha-log.md` — review, promote patterns, retire stale entries |
+| Ending a session | Run `/curate` — review gotchas, promote patterns, check doc sync |
+| Monthly or after major restructuring | Run `/audit-context` — structural health audit |
 
 ## Hard Constraints
 
