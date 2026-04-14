@@ -18,6 +18,7 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 | Stuck or debugging something weird | `memory/gotcha-log.md` — problem-fix archive |
 | Questioning ML architecture choices | `memory/ml-decisions.md` — why week-ahead, why River ARF, feature strategy |
 | Working with energyDataHub data formats | `memory/data-formats.md` — schema v2.1, units, timezone conventions |
+| Changing ML pipeline, model, or forecast logic | `docs/model-progress-log.md` — add dated entry with rationale, evidence, and outcome |
 | Ending a session | Run `/curate` — review gotchas, promote patterns, check doc sync |
 | Monthly or after major restructuring | Run `/audit-context` — structural health audit |
 

@@ -43,5 +43,8 @@
 
 ## Open Issues
 
-- Augur #2-4: New features (NED, gas, flows), #5: Backtesting, #6-7: Model variants
+- #2-4: New ML features (NED production, gas/carbon prices, cross-border flows)
+- #5: Backtesting framework from archived forecasts
+- #6-7: Model variants (peak/off-peak, larger ARF ensemble or Prophet)
+- #8-10: Product expansion (SaaS API, ensemble forecasting, multi-country)
 - Planned ~2026-04-17: Re-warmup with new features (TTF gas, gen mix, gas storage, NED production)

@@ -186,6 +186,14 @@ def update_model(model, state, data):
     if mae is not None:
         state.setdefault("metrics", {})["update_mae"] = round(mae, 2)
 
+    # Recalculate aggregate metrics from error_history (not frozen warmup values)
+    if len(error_history) >= 1:
+        state["metrics"]["mae"] = round(np.mean([abs(e) for e in error_history]), 2)
+    if len(error_history) >= 168:
+        state["metrics"]["last_week_mae"] = round(
+            np.mean([abs(e) for e in error_history[-168:]]), 2
+        )
+
     # Append to metrics history (one entry per daily update, cap at 365 days)
     if mae is not None:
         history_entry = {
@@ -203,6 +211,27 @@ def update_model(model, state, data):
     logger.info(f"Learned {n_new} new samples, MAE: {mae:.2f}" if mae else "No valid samples")
 
     return model, state, fb
+
+
+def _historical_rolling_stats(fb):
+    """Compute typical rolling mean/std by hour from real price history.
+
+    Used to override rolling stats during recursive forecasting so the model
+    sees realistic variance instead of artificially smooth predicted-price stats.
+    """
+    from collections import defaultdict
+
+    by_hour = defaultdict(list)
+    for ts_iso, price in fb.price_history:
+        hour = datetime.fromisoformat(ts_iso).hour
+        by_hour[hour].append(price)
+    stats = {}
+    for hour, prices in by_hour.items():
+        if len(prices) >= 2:
+            mean = sum(prices) / len(prices)
+            std = (sum((p - mean) ** 2 for p in prices) / len(prices)) ** 0.5
+            stats[hour] = {"mean": mean, "std": max(std, 1.0)}
+    return stats
 
 
 def generate_forecast(model, fb, data, state, hours=72):
@@ -250,6 +279,14 @@ def generate_forecast(model, fb, data, state, hours=72):
     if n_exchange > 0:
         logger.info(f"Fed {n_exchange} known exchange prices as lag features")
 
+    # Pre-compute historical rolling stats from real prices (before predictions
+    # contaminate the buffer). Used to override rolling features beyond the
+    # exchange horizon so the model sees realistic variance, not recursion artifacts.
+    hist_stats = _historical_rolling_stats(fb)
+
+    # Seed RNG for reproducible forecasts within the same hour
+    rng = np.random.RandomState(int(now.timestamp()) // 3600)
+
     forecast = {}
     forecast_upper = {}
     forecast_lower = {}
@@ -273,6 +310,12 @@ def generate_forecast(model, fb, data, state, hours=72):
         if features is None:
             continue
 
+        # Beyond exchange horizon: override rolling stats with historical values
+        # to prevent variance collapse from recursive predictions
+        if exchange_price is None and ts.hour in hist_stats:
+            features["price_rolling_mean_6h"] = hist_stats[ts.hour]["mean"]
+            features["price_rolling_std_6h"] = hist_stats[ts.hour]["std"]
+
         pred = model.predict_one(features)
 
         # Current price volatility (already computed by feature builder)
@@ -293,9 +336,12 @@ def generate_forecast(model, fb, data, state, hours=72):
         forecast_upper[ts_iso] = round(pred + band_width, 2)
         forecast_lower[ts_iso] = round(max(pred - band_width, 0), 2)
 
-        # Only push ML predictions as lags — exchange prices were pre-loaded above
+        # Only push ML predictions as lags — exchange prices were pre-loaded above.
+        # Add calibrated noise to prevent correlated lag collapse: noise scale
+        # matches the model's own error distribution (ewm_std).
         if exchange_price is None:
-            fb.push_price(ts_iso, pred)
+            noise = rng.normal(0, ewm_std) if ewm_std > 0 else 0.0
+            fb.push_price(ts_iso, pred + noise)
 
     logger.info(
         f"Generated {len(forecast)}-hour forecast: "
