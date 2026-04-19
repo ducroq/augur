@@ -13,27 +13,22 @@ config/local/
 .env.local
 *.key
 *.pem
-
 # Decrypted data files
 static/data/*.json
 !static/data/augur_forecast.json
 data/*.json
-
 # Hugo build files
 public/
 resources/
-
 # Hugo cache
 .hugo_build.lock
 augur_project_knowledge.md
-
 # Node.js
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 package-lock.json.backup
-
 # Backup and temporary files
 *.backup
 !config/backup/*.backup
@@ -43,34 +38,27 @@ package-lock.json.backup
 *~
 .DS_Store
 Thumbs.db
-
 # Alternate config files (keep .optimized for reference)
 # *.optimized
-
 # IDE and Editor files
 .vscode/
 .idea/
 .claude/
 *.sublime-project
 *.sublime-workspace
-
 # OS files
-.DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
 ehthumbs.db
 Desktop.ini
-
 # Logs
 *.log
 logs/
-
 # Test output
 coverage/
 .nyc_output/
-
 # ML model artifacts
 ml/models/*.joblib
 ml/models/*.tmp
@@ -78,9 +66,8 @@ ml/models/*.tmp
 # river_model.pkl and state.json are committed daily by sadalsuud
 !ml/models/river_model.pkl
 !ml/models/state.json
-
 # ML training data (derived, rebuild with consolidate.py)
 ml/data/*.parquet
-
 # ML forecast archive (daily copies on sadalsuud, for backtesting)
 ml/forecasts/
+ml/models/river_v2*
