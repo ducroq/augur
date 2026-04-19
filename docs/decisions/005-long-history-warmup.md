@@ -1,7 +1,11 @@
 # ADR-005: Long-History Warmup
 
-**Status**: Draft
+**Status**: Paused (mini-check inconclusive 2026-04-19)
 **Date**: 2026-04-19
+
+> **2026-04-19 update**: a 1-day mini-warmup (9 months training, 1 month backtest — see `docs/long-history-mini-results.md`) did not produce signal strong enough to justify full Phase A. v2-mini backtest MAE (16.4) was comparable to v1's current MAE range (11-17) rather than clearly better. Key unexpected finding: calibrated weather noise *improved* performance vs perfect-knowledge weather, suggesting the leakage concern was overstated. ADR-005 paused, not rejected — the plumbing (`ml/data/consolidate_historical.py`, `ml/training/warmup_mini.py`, `ml/evaluation/backtest.py`) remains on the `feat/long-history-warmup` branch for reuse when a trigger emerges (seasonal degradation, new-feature addition requiring historical re-warmup).
+
+
 **Context**: The live River ARF model has seen ~64 days of training data and has never encountered winter demand, summer solar saturation, Christmas/New Year, Easter, or the 2022 gas crisis. Forecast accuracy (`mae_vs_exchange` ~17 EUR/MWh) is ~2× academic benchmarks. Before investing in ensembles (augur#9) or new features, give the model multi-year seasonal coverage.
 
 Informed by `docs/long-history-feasibility.md`. Implementation mechanics are in `docs/long-history-implementation-plan.md` — this ADR covers only architectural decisions.
