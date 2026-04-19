@@ -2,116 +2,112 @@
 
 **Branch**: `feat/long-history-warmup`
 **Date**: 2026-04-19
-**Status**: Scouting — no code written, no APIs called at scale. Decides whether to proceed to ADR + build.
+**Status**: Scouting complete with measured probes. Decision pending ADR-005.
 
 ## Premise
 
-The live River ARF model has seen ~64 training days (6,183 samples, 15-min resolution since warmup on 2026-03-26). It has never encountered:
+The live River ARF model has seen ~64 days of training data (6,183 samples since warmup on 2026-03-26). It has never encountered a winter demand peak, summer solar saturation, Christmas/New Year, Easter, a spring regime transition, or multi-week industrial shutdown patterns. Adding more features before the model has seen a full seasonal cycle risks overfitting to the current short window.
 
-- A winter demand peak
-- A summer solar saturation window
-- Christmas / New Year / Easter
-- A spring regime transition
-- Multi-week industrial shutdown patterns
+## Surprise finding — tier boundary may not be needed
 
-Adding more features to a model that has never seen a full seasonal cycle risks overfitting to the current short window. A long historical warmup is the structurally honest fix.
+The original plan assumed a boundary at **2025-11-04** (day `collectors/googleweather.py` was added to energyDataHub and first `weather_forecast_multi_location.json` appeared). On audit:
 
-## Tier boundary
+- `ml/update.py:93-95` reads `weather_forecast_multi_location.json` and calls `parse_weather_file(...)` → extracts **only NL temperature**.
+- `ml/features/online_features.py:149-151` does **not** use temperature. Per `memory/ml-pipeline.md`: "Dropped: temperature (no signal per Lasso)."
+- Augur's actual exogenous features are `wind_speed_80m` (from `wind_forecast.json`), `solar_ghi` (from `solar_forecast.json`), `load_forecast` (from `load_forecast.json`). All three sources predate the 2025-11-04 boundary and are fully backfillable from their original suppliers (ENTSO-E for load, Open-Meteo for wind/solar).
 
-**2025-11-04** — the date `collectors/googleweather.py` was added to energyDataHub and the first `weather_forecast_multi_location.json` file appeared. Before this date we have single-location weather; after, we have the full multi-location feature set the live pipeline uses.
+**Implication**: single-tier long warmup using the current feature set is viable. No tier boundary, no regime-change handling, no leakage comparison study. The design simplifies significantly.
 
-Two-tier strategy:
+The open question is whether wind/solar **forecast** data (not actuals) is obtainable historically. Open-Meteo archive returns ERA5 actuals — same leakage concern as before — but this is one decision about feature construction, not a two-tier architecture.
 
-- **Tier 1 (backfill, 2020→2025-11-03)** — reduced feature set drawn from publicly backfillable sources. Purpose: teach the model seasonality, holidays, crisis regimes, multi-year price level shifts.
-- **Tier 2 (live, 2025-11-04→now)** — full current feature set from energyDataHub. Purpose: fine-tune on current market microstructure and rich features unavailable historically.
+## Measured probe results
 
-River ARF's ADWIN drift detection absorbs the regime change at the boundary. Features absent in Tier 1 remain null during Tier 1 replay; tree leaves will only split on them once Tier 2 training begins.
+All probes executed 2026-04-19 against live APIs.
 
-## Source-by-source feasibility
+### Probe 1: ENTSO-E Transparency — **working**
 
-### ENTSO-E Transparency Platform — **feasible**
+| Query | Period | Result | Wall |
+|---|---|---|---|
+| NL day-ahead prices | Jan 2015 week | 169 rows | 0.5s |
+| NL actual load | Jan 2018 week | 672 rows (15-min) | 0.7s |
+| NL wind+solar day-ahead forecast | Jan 2019 week | 672 rows, cols `Solar, Wind Offshore, Wind Onshore` | 1.5s |
+| NL generation by type | Jan 2019 week | 672 rows, multi-index cols (Biomass, Fossil Gas, Hard Coal, ...) | 3.2s |
+| NL day-ahead prices | Jan 2020 week | transient 503 | — |
 
-- **Client**: energyDataHub already uses `entsoe-py` (`EntsoePandasClient`). Supports arbitrary start/end date ranges.
-- **Coverage**: NL day-ahead prices from ~2015-01-01. Load forecasts and actuals from ~2015. Generation by type (aggregated) reliable from ~2016. Cross-border flows from ~2015.
-- **Auth**: Free API key via email to `transparency@entsoe.eu`. ~24-48h turnaround. **Blocker**: existing keys live on a separate Pi collector host (not on sadalsuud or this dev machine). A dedicated key for this initiative is cleanest.
-- **Rate limits**: 400 req/min. Pandas client auto-chunks. A 5-year price pull is ~60 chunks ≈ 10 minutes wall clock.
-- **Schema stability**: Stable since 2018; pre-2018 some documents have different EIC codes, but the library handles it.
+- **API key**: pulled from `C:\Users\scbry\HAN\HAN H2 LAB IPKW - Projects - WebBasedControl\01. Software\energyDataHub\secrets.ini` → `[api_keys].entsoe`. Works without modification to `entsoe-py` pandas client.
+- **2015 boundary confirmed**: earliest probed week (Jan 5-12, 2015) returns data.
+- **503 errors are transient**: one of five calls hit a 503 Service Unavailable. Must wrap every call in retry logic (exponential backoff). Not a blocker.
+- **Security note**: the ENTSO-E library encodes the API token in the query URL (`securityToken=...`). 503 errors echo the URL back — any logs or tracebacks that capture these responses will leak the key. Production code must redact.
+- **Call sizes**: a week of hourly data is one API call ≈ 1-3s. A 5-year pull is ~260 weekly calls ≈ 10-15 minutes wall time with retries.
 
-**What's pullable**:
-| Field | Granularity | Coverage |
+### Probe 2: Open-Meteo archive — **best-in-class free source**
+
+| Query | Result | Wall |
 |---|---|---|
-| Day-ahead prices (NL, DE, BE) | 60min | 2015-present |
-| Actual load (NL) | 15min/60min | 2015-present |
-| Day-ahead load forecast (NL) | 60min | 2015-present |
-| Actual generation by type (NL) | 60min | 2016-present |
-| Day-ahead generation forecast (wind+solar, NL) | 60min | 2018-present |
-| Cross-border physical flows (NL↔DE/BE/UK/NO) | 60min | 2015-present |
+| Eindhoven (51.44, 5.47), Jan 2020 week, 4 vars | 168 rows | 0.5s |
+| Offshore point (54.0, 5.97) near Gemini wind farm, Jan 2020 week | 168 rows, wind_speed_100m available | 0.1s |
+| **Eindhoven 5 years (2020-2024), 2 vars, single call** | **43,848 rows** | **0.5s** |
 
-### Open-Meteo Historical Archive — **feasible, best free source**
+- No API key, no rate-limit hit during scouting.
+- Single-call multi-year pulls work — the earlier plan to chunk monthly is unnecessary. A full 5-year pull for our 3-5 grid points × 5-6 variables is a handful of requests, ~5 seconds total wall time.
+- Returns **actuals** (ERA5 reanalysis), not as-of-date forecasts. See leakage note below.
 
-- **Endpoint**: `https://archive-api.open-meteo.com/v1/archive`
-- **Backend**: ERA5 reanalysis (hourly, 0.25° grid)
-- **Coverage**: 1940-01-01 to ~5 days ago
-- **Auth**: None. Rate limit 10,000 req/day (free tier). A single call can return multi-year multi-variable series.
-- **Caveat**: Returns **actuals**, not as-of-date forecasts. Using actuals as stand-ins for forecast lags during Tier 1 introduces a subtle form of leakage: the model learns with perfect-knowledge weather. Two mitigations:
-  - Add noise calibrated to realistic 24-48h forecast error (from Google Weather / Open-Meteo forecast-vs-actual benchmarks, e.g. temperature MAE ~1.5°C at 24h horizon).
-  - Accept the leakage as a Tier-1 bias that Tier-2 retraining corrects — the model will over-weight weather features going in, then be rebalanced by the noisier live forecasts.
+### Probe 3: Gas / carbon — **mixed**
 
-**What's pullable for our feature set**: temperature_2m, wind_speed_80m, wind_speed_100m, shortwave_radiation (GHI), cloud_cover, precipitation — all available at our grid points (Eindhoven, Gemini wind farm lat/lon, population centers). Extracting 5 years × 6 variables × 5 locations ≈ 1 request returning ~250MB JSON. Pull in monthly chunks to stay safe.
-
-### TTF gas & EUA carbon — **feasible but degraded**
-
-ICE and EEX no longer publish free EOD settlement CSVs for futures. Realistic free options, in order of quality:
-
-1. **yfinance** — front-month TTF (`TTF=F`) and EUA (`CO2.DE` or `KRBN`) daily closes. History back to ~2017. **Best free option for daily granularity**. Used for Tier 1 features `gas_ttf_price_daily`, `carbon_eua_price_daily` (forward-filled to hourly).
-2. **Investing.com historical pages** — scrape; brittle.
-3. **Alpha Vantage** — the pipeline already has a key. Supports some commodity tickers but TTF/EUA coverage is spotty.
-4. **Manual download** — EEX publishes settlement reports; monthly downloads for 5 years is ~60 files, tractable but tedious.
-
-Recommendation: start with yfinance, daily resolution. Gas/carbon only drive price at daily-to-weekly time scale anyway — sub-daily resolution is not needed.
-
-### Calendar features — **feasible, trivial**
-
-- **Library**: `holidays` (pip), covers NL holidays deterministically back centuries. Includes fixed (Koningsdag) and moving (Easter, Ascension, Whit Monday).
-- **School breaks**: `workalendar` or a small hand-maintained CSV from Dutch govt publications (~20 rows/year × 5 years = 100 rows).
-- **No API calls needed**. Pure compute from date.
-
-**Proposed feature columns**: `is_holiday`, `is_school_break`, `is_bridge_day`, `is_summer_vacation`, `day_of_year_sin`, `day_of_year_cos`, `week_of_year_sin`, `week_of_year_cos`.
-
-## What Tier 1 does **not** include
-
-| Feature | Why excluded | Impact |
+| Source | Series | Result |
 |---|---|---|
-| Multi-location Google Weather | Starts 2025-11-04 | Tier 1 uses single-location ERA5 actuals + noise |
-| NED production breakdown | NL-specific, short history | Generation-by-type from ENTSO-E covers this partially |
-| TenneT grid imbalance | Short history, intraday-only use | Not useful for 72h horizon anyway |
-| EZ consumer surcharge | Recent API | Tier 1 trains on wholesale only; surcharge is applied at forecast time |
-| Gas flows, gas storage | Short history on our side | GIE has longer history; defer to Tier-2 as-is |
-| As-of-date forecast lags | Not archived | Tier 1 uses actuals-as-forecasts with noise |
+| yfinance `TTF=F` (Natural Gas Dutch TTF) | 6 months | ✓ 124 daily rows |
+| yfinance `EUA=F`, `CO2.DE`, `CARBON.L`, `FEUA.L` | any | ✗ all 0 rows (delisted / wrong tickers) |
+| Alpha Vantage `NATURAL_GAS` endpoint | monthly history | ✓ 351 rows (but this is Henry Hub US, not TTF EU) |
 
-## Scale & storage
+- **TTF front-month via yfinance works**. Key already in the pipeline config (not needed — no auth on yfinance).
+- **EUA carbon has no free yfinance ticker**. Options: Sandbag/Ember public CSV (annual), EEX manual downloads, scrape Investing.com, or **omit EUA from Tier 1** (TTF alone carries most of the cross-commodity price signal pre-2022; independent EUA signal matters mainly in the 2022-2023 crisis).
+- **Recommendation**: start with TTF only. Revisit EUA if backtests show 2022-2023 performance is weak.
 
-- **Rows**: 5 years × 8760 hours × ~1 row = ~44k rows per series. Price series alone: 44k. With 20 feature columns: 44k × 21 = ~900k cells. **Parquet file: ~5-15 MB**. Trivial.
-- **Warmup time**: 44k samples through River ARF `learn_one` at ~500 samples/s (observed on sadalsuud) = ~90 seconds. Tier 1 warmup is fast — earlier estimate of hours was overblown.
-- **API pulls total**: ENTSO-E ~60 chunks × 15s = 15 min. Open-Meteo ~60 chunks × 2s = 2 min. yfinance ~2 calls, instant. **Total backfill data collection ≈ 20 minutes wall time.**
+### Probe 4: Augur feature audit — **already covered above**
 
-## Risks
+The critical finding: Augur's features do not depend on the multi-location weather introduction. Tier boundary is structural hypothesis that didn't survive contact with the code.
 
-1. **Regime change at 2022 gas crisis**. Prices went from €50 → €500 → €50 over 18 months. River ARF's trees will see this as extreme outliers. Mitigation: winsorize prices beyond 99.5 percentile for training, keep raw prices for inference. Or: accept the noisy trees, ADWIN will prune.
-2. **As-of-date weather leakage** (see Open-Meteo section). Core design risk. Can be measured: train two Tier-1 models, one with noiseless actuals, one with calibrated-noise actuals, compare held-out Tier-2-only MAE.
-3. **Target definition drift**. Pre-2025 we only had ENTSO-E prices; current pipeline uses consolidated multi-source with ENTSO-E override. Tier 1 target is pure ENTSO-E day-ahead — matches production target after the 2026-04-02 source-cleanup fix. No drift concern.
-4. **Time-zone footguns**. ENTSO-E returns CET; Open-Meteo defaults UTC; holidays library uses local date. Unified on UTC-indexed DataFrames before merge. ADR-001 exists for this.
-5. **Cross-contamination with current warmup**. The in-repo `ml/data/consolidate.py` is pointed at energyDataHub's short history. Tier 1 consolidation is a new code path — must not accidentally overwrite or interleave with current training data. Solution: separate module `ml/data/consolidate_tier1.py` and a distinct model directory `ml/models/river_v2/`.
+### Probe 5: River ARF throughput — **measured on sadalsuud**
 
-## Recommended next steps
+- **322 samples/s** (`learn_one + predict_one`, 30 synthetic features, 10-tree ARF Regressor with StandardScaler pipeline).
+- 5-year hourly warmup (~44k samples): **~2.3 minutes** wall.
+- 3-year 15-minute warmup (~105k samples): **~5.5 minutes** wall.
+- My earlier "~500 samples/s / 90 seconds" estimate was optimistic by ~1.5×. Conclusion unchanged: warmup time is trivial.
 
-1. **Obtain a fresh ENTSO-E API key** (email registration, 1-2 days). Blocker for anything price-related.
-2. **Write ADR-005** — design stance: two-tier, tier boundary 2025-11-04, Tier 1 feature set, leakage mitigation, evaluation gate.
-3. **Build `ml/data/consolidate_tier1.py`** with one-source-at-a-time testability. Unit tests mock each external API.
-4. **Warmup + backtest** on held-out April 2026 slice. Compare `mae_vs_exchange` and spike recall against current model. Go/no-go gate.
+## Revised proposal — single-tier long warmup
 
-## Decision for this phase
+Since the tier boundary doesn't load-bear, the proposal collapses to:
 
-**Feasibility: GREEN**. All sources are accessible, the scale is trivial, and the design risks are measurable rather than architectural. The main non-trivial item is a business-level decision (the weather-leakage tradeoff), which belongs in the ADR, not here.
+1. **Historical data module** `ml/data/consolidate_historical.py` (separate from the current `consolidate.py`) pulls from authoritative sources:
+   - ENTSO-E: day-ahead prices (target), load actuals, load forecast, wind+solar day-ahead forecast
+   - Open-Meteo archive: `wind_speed_100m` at offshore point, `shortwave_radiation` at Eindhoven (with calibrated noise to approximate forecast error)
+   - yfinance: TTF front-month daily, forward-filled to hourly
+   - `holidays`: NL calendar features
+2. **Feature builder** uses the same `online_features.py` as production — no Tier 1/Tier 2 split.
+3. **Warmup script** `ml/training/warmup_historical.py` replays chronologically through River ARF → produces `ml/models/river_v2/river_model.pkl`.
+4. **Backtest** on a held-out slice of 2026 data (e.g., April only) compares `mae_vs_exchange` between current model and v2.
 
-Next: write ADR-005.
+Time to first measurable backtest number: ~1-2 days of code plus 5-10 minutes of data collection and training.
+
+## Design risks (reduced from prior version)
+
+1. **Weather-forecast leakage** — still relevant. ERA5 actuals used as wind/solar "forecast" lags during warmup give the model perfect-knowledge weather. Mitigation: apply calibrated noise per horizon. A realistic budget (from published weather-forecast-skill studies):
+   - temperature MAE: ~1.0°C at 24h, ~2.0°C at 72h, ~3.5°C at 168h
+   - wind MAE: ~1.5 m/s at 24h, ~3.0 m/s at 72h
+   - Actual benchmark against our live pipeline is TBD — but this is feature engineering, not architecture.
+2. **2022 gas crisis regime**. Prices went from ~€50 → peaks of ~€700 → back to ~€50 over 18 months. River ARF with ADWIN may handle this, or may get destabilized. Mitigations under consideration: winsorize training prices beyond p99.5; reset model at crisis boundaries; or simply let it run and measure.
+3. **Target definition**: production target is ENTSO-E day-ahead (post the 2026-04-02 source-cleanup fix). Historical target is also ENTSO-E day-ahead. No drift concern — clean match.
+4. **State file bloat**. `ml/models/state.json` has bounded `error_history` (500) and `metrics_history` (365). A 44k-sample warmup overflows both. Solution: reset both to empty at the end of warmup; `warmup_historical` does not populate these (they're daily-cron-only). No code change needed in `update.py` beyond using `river_v2/` paths.
+5. **503 retry & key redaction**. ENTSO-E API has transient 503s and leaks tokens in error URLs. Backfill script must retry with exponential backoff and redact query strings from any logged exceptions.
+
+## Decision — GREEN
+
+- All three external sources (ENTSO-E, Open-Meteo, yfinance TTF) reachable and verified.
+- Scale is trivial (~10 min data pull, ~3-6 min warmup).
+- Tier-boundary complexity was unnecessary — single long warmup suffices.
+- Remaining risks are feature-engineering tradeoffs (weather noise, EUA omission) and code hygiene (retry + key redaction), not architecture.
+
+## Next step
+
+Write **ADR-005** — design stance for a single-tier long warmup, feature set, weather-leakage mitigation, evaluation gate, rollback plan. Then code.
