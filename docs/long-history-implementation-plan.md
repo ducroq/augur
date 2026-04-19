@@ -167,6 +167,78 @@ Total: ~3 weeks wall clock, ~4 days of actual engineering effort.
 
 ## 13. Open questions (pre-implementation)
 
-- **Weather-noise σ calibration**: benchmark against archived `*_wind_forecast.json` / `*_solar_forecast.json` files on sadalsuud (they go back to 2025-09-28) to measure actual forecast-vs-archived-truth error at relevant horizons. Informs noise budget before Phase A starts.
 - **ENTSO-E retry-strategy specifics**: exponential backoff with max retries? Circuit breaker? The existing `energydatahub/collectors/base.py` has `RetryConfig` + `CircuitBreakerConfig` — reuse or write fresh?
 - **Feature importance re-run target date**: at end of Phase A, before or after Phase B? Before = risk of re-warmup loop if feature set changes; after = delay cutover. Recommend: after Phase B evaluation confirms v2 is worth deploying, then re-run Lasso on the extended data to check whether next iteration should touch features.
+
+## 14. Accepted decisions from risk review (2026-04-19)
+
+Three decisions were made after the FMEA:
+
+1. **Pre-flight approach**: run the two design-affecting studies (target-diff, weather-noise) before Phase A begins; do the remaining 8 hygiene items in parallel with Phase A tasks that touch them. Rationale: the studies can reshape the plan; the hygiene items are cheap and don't inform architecture.
+2. **Weather-leakage mitigation**: accept calibrated noise as the production mitigation, **and add a leakage probe to Phase A**: during warmup, train **two** v2 models side-by-side — one with ERA5 + calibrated noise (production candidate), one with ERA5 as-is (perfect-knowledge ceiling). Compare backtest metrics. Gap-analysis outcomes:
+   - Gap small → noise isn't doing enough; shadow mode won't catch; revisit before cutover.
+   - Gap large → calibration is working; shadow mode remains the final check.
+   - Perfect-knowledge model loses to current baseline → project premise is wrong; stop.
+3. **Time reserve**: budget +20% wall time across phases for unknown-unknowns. Phase A: 3 → 3.5-4 days. Phase B shadow: 14 → up to 18 days.
+
+## 15. Pre-flight studies (running now)
+
+### 15.1 Target-definition diff study
+
+Pull 1 month of production training target (what the live model actually learned) and 1 month of ENTSO-E hourly forward-filled to 15-min. Compare.
+
+Accept criteria: `mean |diff| < 0.5 EUR/MWh` AND `p95 |diff| < 2.0 EUR/MWh`. If fails, warmup must use consolidated target (more complex build) or accept the documented bias.
+
+### 15.2 Weather-noise calibration study
+
+For archived `*_wind_forecast.json` and `*_solar_forecast.json` files on sadalsuud (2025-12-01 onward, 59-60 files), extract forecasts at h+24, h+48, h+72 and compare against Open-Meteo archive actuals for the same timestamps. Report σ per horizon, which becomes the Phase A noise budget.
+
+## 16. Study findings (2026-04-19)
+
+### 16.1 Target-diff — passes cleanly
+
+- Compared production `parse_price_file` output for 14 days (2026-04-04 to 2026-04-19, 1440 rows of 15-min data) against raw ENTSO-E day-ahead prices for the same period, forward-filled to 15-min.
+- **Mean |diff| = 0.000 EUR/MWh, p95 = 0.000, max = 0.000**. All 1440 timestamps exact zeros.
+- Production target is literally ENTSO-E; the multi-source merge in `parse_price_file` has no measurable effect when ENTSO-E is present (which is the norm post-2026-04-02 fix).
+- **Target-definition drift risk (FMEA row 2) effectively retired.** No systematic divergence to correct for.
+
+### 16.2 ENTSO-E resolution transition — 2025-10-01
+
+Unexpected finding during the study: ENTSO-E NL day-ahead prices transitioned from hourly to native 15-minute resolution on **2025-10-01** (EU 15-minute MTU rollout).
+
+- Pre-2025-10-01: hourly prices
+- Post-2025-10-01: 15-min prices
+
+Implication for warmup: two resolution regimes must be handled. Pre-transition data gets **forward-filled** to 15-min (each hourly price spans its following four 15-min slots). Post-transition is used as-is. No architectural change to ADR-005; a note in `consolidate_historical.py`.
+
+### 16.3 Weather-noise calibration
+
+Methodology: forecast-vs-proxy-actual. For each target timestamp, the short-lead forecast (within 4h of publish) acts as proxy actual; long-lead forecasts at h+24/48/72/168 are compared against it.
+
+**Results** (59-60 archived files, 155-178 samples per horizon):
+
+| Horizon | Wind σ (m/s) | Solar σ (W/m²) |
+|---|---|---|
+| h+24h | 1.82 | 29.5 |
+| h+48h | 2.30 | 27.5 |
+| h+72h | 2.35 | 34.4 |
+| h+168h | 6.16 | — (insufficient data) |
+
+**Caveats**:
+- Underestimates true forecast error (short-lead proxy has its own residual error).
+- Solar σ mixes day and night; night-hours (GHI=0) drag the mean down. For Phase A, split solar noise by daytime/nighttime, or apply noise only to nonzero GHI values.
+- Only 60 days of forecast history; may not reflect seasonal variation (summer clear skies vs winter stratus).
+
+**Phase A noise budget** (starting point, refine in shadow mode):
+- Wind: `σ_wind(h) = 1.8 + 0.007·h` m/s (interpolated between measured points)
+- Solar: `σ_solar(h) = 30 + 0.06·h` W/m², applied only when `baseline_ghi > 0`
+- Beyond h+72 (where data thins), extrapolate cautiously or use persistence-model fallback
+
+### 16.4 Overall status
+
+Both design-affecting studies completed. No architectural changes required to ADR-005. Two small additions:
+
+1. Historical warmup must forward-fill ENTSO-E pre-2025-10-01 hourly data to 15-min.
+2. Weather noise is split by horizon per the budget above; solar noise is GHI-gated.
+
+Pre-flight checklist: **items 2 and 3 complete**. Remaining items are hygiene (ENTSO-E key, `.env`, `.gitattributes`, disk check, pip dry-run, user sign-off) and can proceed alongside Phase A.

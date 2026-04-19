@@ -38,16 +38,16 @@ Sorted by pre-mitigation RPN, descending.
 - Bound residual risk with shadow mode — v2 competes against v1 on live (forecast-fed) data for 14 days before cutover. If v2 lead collapses on live, the gate holds.
 - Residual D=5 because shadow mode takes 2 weeks to surface the issue, and some leakage is inherent even with calibrated noise.
 
-### 2. Target-definition drift (ENTSO-E hourly FF vs consolidated 15-min)
+### 2. Target-definition drift (ENTSO-E hourly FF vs consolidated 15-min) — **RETIRED 2026-04-19**
 
 |  | S | O | D | RPN |
 |---|---|---|---|---|
 | Pre | 9 | 4 | 9 | **324** |
-| Post | 9 | 4 | 2 | 72 |
+| Post-study | 9 | **0** | — | **0** |
 
-**Failure mode**: warmup target is pure ENTSO-E hourly forward-filled to 15-min. Production target is 15-min "wholesale price" from consolidated multi-source. If they differ systematically, v2 learns a subtly different function; gate passes because backtest target matches warmup target, not production target.
-**Mitigation**: **pre-warmup target-comparison study**. Pull 1 month of both target series for the same period. Assert `mean |ENTSO-E_FF − consolidated| < 0.5 EUR/MWh` and `p95 |diff| < 2.0 EUR/MWh`. If it fails, use the consolidated target for warmup (more complex) or accept the documented bias.
-**Residual D=2** because the diff check catches it before training; if the study passes, the drift is within measured tolerance.
+**Failure mode**: warmup target is pure ENTSO-E hourly forward-filled to 15-min. Production target is 15-min "wholesale price" from consolidated multi-source. If they differ systematically, v2 learns a subtly different function; gate passes spuriously.
+**Study result** (`long-history-implementation-plan.md` §16.1): 14-day comparison showed **1440/1440 timestamps exact zero diff** — production target is literally ENTSO-E. No drift to correct.
+**Additional finding**: ENTSO-E NL transitioned hourly → 15-min on 2025-10-01. Warmup must forward-fill pre-transition data; post-transition uses native 15-min. Minor implementation detail, not a risk.
 
 ### 3. Timezone / DST off-by-one
 
