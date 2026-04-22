@@ -19,7 +19,7 @@
 - Re-warmup completed 2026-03-28 on full backfilled dataset (4,192 rows, MAE 13.80)
 - Legacy `chart.js` deleted — all frontend is modular ES6 in `static/js/modules/`
 - Test suite added: 17 tests (SecureDataHandler + OnlineFeatureBuilder)
-- energyDataHub: stable, ENTSO-E backfill completed, ~220 days of history
+- energyDataHub: stable, ENTSO-E backfill completed, 263 daily price files (Sep 2025 → Apr 2026)
 - Major code health sweep completed 2026-03-28 (20 issues fixed across ML, security, frontend)
 - Repo cleanup 2026-03-28: removed 33 stale docs/archive files, rewrote README
 - Docs structure: CLAUDE.md + docs/RUNBOOK.md + docs/decisions/ + memory/
@@ -47,4 +47,4 @@
 - #5: Backtesting framework from archived forecasts
 - #6-7: Model variants (peak/off-peak, larger ARF ensemble or Prophet)
 - #8-10: Product expansion (SaaS API, ensemble forecasting, multi-country)
-- Planned ~2026-04-17: Re-warmup with new features (TTF gas, gen mix, gas storage, NED production)
+- 2026-04-22: Data-readiness audit for new-feature re-warmup done. File-count precheck passes for all 4 targets; content thin on `market_history.carbon` (1 day) and `ned_production` (DQ-flagged). Recommended Phase-1 scope: TTF gas + generation_mix only. Decision pending.

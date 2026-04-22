@@ -4,6 +4,32 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
+## 2026-04-22 — New-feature readiness audit (investigation, no code change)
+
+**Trigger**: With ADR-005 long-history warmup paused, re-opened the question of whether to add new energyDataHub sources as features to the live River ARF: `market_history` (TTF gas + carbon EUA), `generation_mix`, `gas_storage`, `gas_flows`, `ned_production`.
+
+**Method**: Pulled the HAN `energyDataHub/` checkout, counted daily files per source, cross-referenced the fetcher log's last DQ report (2026-03-31), and checked ADR-005's "out of scope" caveat.
+
+**Findings (file-count precheck after pull, all 4 sources now current through 2026-04-21):**
+
+| Source | Days covered | File-count precheck | DQ notes from last log |
+|---|---|---|---|
+| market_history (TTF+carbon) | 26 (2026-03-27→04-21) | borderline | TTF=26 days, **carbon=1 day** — completeness error (17%) |
+| generation_mix | 26 | borderline | passed DQ |
+| gas_storage | 91 | pass | value-range errors (24 vals outside [0,100]%) + staleness |
+| gas_flows | 92 | pass | passed DQ |
+| ned_production | 142 | pass | completeness error (25%) |
+
+**Strategic caveat**: ADR-005 explicitly deferred TTF/cross-border/gas-storage features "until v2 cutover is evaluated". With v2 paused, that guidance is stale and this question is legitimately re-open. The mini-warmup's calibrated-noise surprise suggests low-importance features won't dramatically move MAE either way — Lasso will downweight weak signals.
+
+**Operational gotcha uncovered**: HAN OneDrive checkout had not been pulled since 2026-03-31, creating a 22-day phantom gap that nearly caused a false "collection stopped" alarm. Added gotcha entry and feedback memory to always `git pull` before reasoning about data freshness.
+
+**Recommended next step (not executed)**: Phase-1 scope of **TTF gas + generation_mix only** (both pass DQ, cleanest story). Defer carbon (needs backfill), ned_production and gas_storage (active DQ errors). Before committing to Phase 1, re-check `data_quality_report.json` for the latest DQ status rather than the stale March log.
+
+**Outcome**: No code change; investigation captured here and in auto-memory `project_new_features_rewarmup.md` so the next session inherits scope and blockers.
+
+---
+
 ## 2026-04-14 — Forecast collapse: model outputs flat mean
 
 **Trigger**: Noticed the live forecast on the dashboard barely moves — temporal price swings are suppressed. The model outputs what looks like an average price estimate regardless of time of day.

@@ -9,6 +9,15 @@
 
 ---
 
+### Stale HAN energyDataHub checkout misread as "collection stopped" (2026-04-22)
+**Problem**: Auditing energyDataHub sources for new-feature readiness, I saw all file timestamps ending 2026-03-31 (22 days ago) and the fetcher log also ending that day. Concluded collection had stopped and was about to raise a blocker.
+**Root cause**: The HAN OneDrive checkout at `C:\Users\scbry\HAN\...\energyDataHub\` is a normal git clone of `github.com/ducroq/energydatahub`, not a live mirror. It only reflects whatever was last manually pulled — in this case, 2026-03-31. Production collection had been running normally; GitHub commits continued through 2026-04-21.
+**Fix**: `git pull` in the HAN path before any data audit. After pulling, all 4 target new-feature sources had current data through 2026-04-21.
+**Pattern**: Any time a question hinges on energyDataHub *recency*, *coverage*, *file presence*, or *gaps*, run `git pull` in the HAN path first. Equivalent rule on sadalsuud (SSH and pull there).
+**Status**: [RESOLVED] — captured as feedback memory `feedback_git_pull_before_data.md`.
+
+---
+
 ### Calibrated weather noise improved rather than degraded model (2026-04-19)
 **Problem**: Designed a "leakage probe" for long-history warmup expecting perfect-knowledge weather to win over calibrated-noise weather. Got the opposite — noisy variant beat clean on both training MAE (14.98 vs 16.40) and backtest MAE (16.36 vs 18.06).
 **Root cause**: Calibrated noise (wind σ=1.8 m/s, solar σ=30 W/m² GHI-gated) acted as regularization, not leakage simulation. Price lags dominate the feature set; reducing weather feature precision prevented River ARF from overfitting to weak weather signals.
