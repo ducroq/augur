@@ -246,6 +246,99 @@ def parse_load_file(path: Path) -> pd.Series:
     return pd.Series(series, name="load_forecast")
 
 
+def parse_market_history_file(path: Path) -> dict[str, pd.Series]:
+    """Extract daily TTF gas closing prices from the market_history accumulator.
+
+    TTF is yfinance daily closes keyed by "YYYY-MM-DD". Anchor each close to
+    00:00 UTC of the *following* day — avoids leakage (close isn't knowable
+    until after market close ~17:30 CET) and matches what the live pipeline
+    sees at inference time on day D+1 morning.
+    """
+    data = load_json_file(path)
+    container = data.get("data", data) if isinstance(data, dict) else {}
+    gas_ttf = container.get("gas_ttf", {}) if isinstance(container, dict) else {}
+    ttf_data = gas_ttf.get("data", {}) if isinstance(gas_ttf, dict) else {}
+
+    series = {}
+    for date_str, price in ttf_data.items():
+        if not isinstance(price, (int, float)):
+            continue
+        try:
+            ts = (pd.Timestamp(date_str) + pd.Timedelta(days=1)).tz_localize("UTC")
+            series[ts] = float(price)
+        except Exception:
+            continue
+    return {"gas_ttf_eur_mwh": pd.Series(series, name="gas_ttf_eur_mwh")}
+
+
+def parse_generation_mix_file(path: Path) -> dict[str, pd.Series]:
+    """Extract NL generation-mix forecasts (forecast-only to avoid train/serve skew).
+
+    Returns four hourly series:
+      - gen_nl_fossil_gas_mw:   NL fossil-gas generation forecast (marginal fuel)
+      - gen_nl_wind_total_mw:   NL onshore + offshore wind forecast
+      - gen_nl_solar_mw:        NL solar forecast
+      - gen_nl_renewable_share: (wind + solar + hydro) / total forecast
+    """
+    ALL_FUEL_TYPES = (
+        "nuclear", "fossil_gas", "fossil_hard_coal", "fossil_lignite",
+        "hydro_pumped_storage", "hydro_run_of_river", "hydro_reservoir",
+        "wind_onshore", "wind_offshore", "solar",
+    )
+    RENEWABLE_TYPES = {
+        "wind_onshore", "wind_offshore", "solar",
+        "hydro_run_of_river", "hydro_reservoir",
+    }
+
+    def _num(v):
+        return float(v) if isinstance(v, (int, float)) else 0.0
+
+    data = load_json_file(path)
+    container = data.get("data", data) if isinstance(data, dict) else {}
+    nl_data = container.get("NL", {}) if isinstance(container, dict) else {}
+
+    gas, wind, solar, share = {}, {}, {}, {}
+    for ts_str, fields in nl_data.items():
+        if not isinstance(fields, dict):
+            continue
+        try:
+            ts = pd.Timestamp(ts_str).tz_convert("UTC")
+        except Exception:
+            continue
+
+        gas_val = fields.get("fossil_gas_forecast")
+        solar_val = fields.get("solar_forecast")
+        wind_on = fields.get("wind_onshore_forecast")
+        wind_off = fields.get("wind_offshore_forecast")
+
+        if isinstance(gas_val, (int, float)):
+            gas[ts] = float(gas_val)
+        if isinstance(solar_val, (int, float)):
+            solar[ts] = float(solar_val)
+        if isinstance(wind_on, (int, float)) or isinstance(wind_off, (int, float)):
+            wind[ts] = _num(wind_on) + _num(wind_off)
+
+        total = 0.0
+        renewable = 0.0
+        seen_any = False
+        for fuel in ALL_FUEL_TYPES:
+            val = fields.get(f"{fuel}_forecast")
+            if isinstance(val, (int, float)):
+                seen_any = True
+                total += val
+                if fuel in RENEWABLE_TYPES:
+                    renewable += val
+        if seen_any and total > 0:
+            share[ts] = renewable / total
+
+    return {
+        "gen_nl_fossil_gas_mw":   pd.Series(gas,   name="gen_nl_fossil_gas_mw"),
+        "gen_nl_wind_total_mw":   pd.Series(wind,  name="gen_nl_wind_total_mw"),
+        "gen_nl_solar_mw":        pd.Series(solar, name="gen_nl_solar_mw"),
+        "gen_nl_renewable_share": pd.Series(share, name="gen_nl_renewable_share"),
+    }
+
+
 def glob_sorted(data_dir: Path, pattern: str) -> list[Path]:
     """Find files matching pattern, sorted by filename (timestamp order)."""
     return sorted(data_dir.glob(pattern))
@@ -257,30 +350,39 @@ def consolidate(data_dir: Path, output: Path):
     if not data_dir.exists():
         raise FileNotFoundError(f"Data directory not found: {data_dir}")
 
+    # Parsers keyed by glob pattern. Each returns either a single pd.Series
+    # (named) or a dict[str, pd.Series] for multi-column outputs like
+    # generation_mix. Later files overwrite earlier values per timestamp.
     parsers = {
-        "price_eur_mwh": ("*_energy_price_forecast.json", parse_price_file),
-        "wind_speed_80m": ("*_wind_forecast.json", parse_wind_file),
-        "solar_ghi": ("*_solar_forecast.json", parse_solar_file),
-        "temperature": ("*_weather_forecast_multi_location.json", parse_weather_file),
-        "load_forecast": ("*_load_forecast.json", parse_load_file),
+        "*_energy_price_forecast.json": parse_price_file,
+        "*_wind_forecast.json": parse_wind_file,
+        "*_solar_forecast.json": parse_solar_file,
+        "*_weather_forecast_multi_location.json": parse_weather_file,
+        "*_load_forecast.json": parse_load_file,
+        "*_market_history.json": parse_market_history_file,
+        "*_generation_mix.json": parse_generation_mix_file,
     }
 
-    all_series = {}
-    for col_name, (pattern, parser) in parsers.items():
+    combined_by_col: dict[str, dict] = {}
+    for pattern, parser in parsers.items():
         files = glob_sorted(data_dir, pattern)
-        logger.info(f"{col_name}: found {len(files)} files")
+        logger.info(f"{pattern}: found {len(files)} files")
 
-        combined = {}
         for f in files:
             try:
-                s = parser(f)
-                for ts, val in s.items():
-                    combined[ts] = val  # Later files overwrite earlier ones
+                result = parser(f)
+                if isinstance(result, pd.Series):
+                    result = {result.name: result}
+                for col_name, s in result.items():
+                    bucket = combined_by_col.setdefault(col_name, {})
+                    for ts, val in s.items():
+                        bucket[ts] = val
             except Exception as e:
                 logger.warning(f"  Failed to parse {f.name}: {e}")
 
-        all_series[col_name] = pd.Series(combined, name=col_name)
-        logger.info(f"  {col_name}: {len(combined)} data points")
+    all_series = {col: pd.Series(data, name=col) for col, data in combined_by_col.items()}
+    for col in sorted(all_series):
+        logger.info(f"  {col}: {len(all_series[col])} data points")
 
     # Combine into DataFrame
     df = pd.DataFrame(all_series)
@@ -290,10 +392,20 @@ def consolidate(data_dir: Path, output: Path):
     # Resample to hourly (take mean if sub-hourly)
     df = df.resample("h").mean()
 
-    # Forward-fill slow-changing features (max 6 hours)
-    for col in ["temperature", "load_forecast", "wind_speed_80m", "solar_ghi"]:
+    # Forward-fill exogenous features (max 6 hours)
+    hourly_ffill_cols = [
+        "temperature", "load_forecast", "wind_speed_80m", "solar_ghi",
+        "gen_nl_fossil_gas_mw", "gen_nl_wind_total_mw",
+        "gen_nl_solar_mw", "gen_nl_renewable_share",
+    ]
+    for col in hourly_ffill_cols:
         if col in df.columns:
             df[col] = df[col].ffill(limit=6)
+
+    # TTF gas is a daily close (trading days only) — extend ffill across
+    # weekends/holidays. 72h covers a Fri close through Mon morning.
+    if "gas_ttf_eur_mwh" in df.columns:
+        df["gas_ttf_eur_mwh"] = df["gas_ttf_eur_mwh"].ffill(limit=72)
 
     # Drop rows with no price (target)
     before = len(df)
