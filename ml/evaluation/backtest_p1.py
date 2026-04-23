@@ -35,10 +35,10 @@ logger = logging.getLogger(__name__)
 
 PHASE1_FEATURE_COLS = (
     "gas_ttf_eur_mwh",
-    "gen_nl_fossil_gas_mw",
-    "gen_nl_wind_total_mw",
-    "gen_nl_solar_mw",
-    "gen_nl_renewable_share",
+    "gen_nl_fossil_gas_mw_lag24h",
+    "gen_nl_wind_total_mw_lag24h",
+    "gen_nl_solar_mw_lag24h",
+    "gen_nl_renewable_share_lag24h",
 )
 
 

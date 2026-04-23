@@ -32,10 +32,10 @@ DEFAULT_MODEL_DIR = Path(__file__).parent.parent / "models" / "river_p1"
 
 PHASE1_FEATURE_COLS = (
     "gas_ttf_eur_mwh",
-    "gen_nl_fossil_gas_mw",
-    "gen_nl_wind_total_mw",
-    "gen_nl_solar_mw",
-    "gen_nl_renewable_share",
+    "gen_nl_fossil_gas_mw_lag24h",
+    "gen_nl_wind_total_mw_lag24h",
+    "gen_nl_solar_mw_lag24h",
+    "gen_nl_renewable_share_lag24h",
 )
 
 
@@ -46,9 +46,16 @@ def create_model():
     )
 
 
-def warmup(data_path: Path, model_dir: Path, baseline: bool = False, until_ts: str | None = None):
+def warmup(
+    data_path: Path, model_dir: Path,
+    baseline: bool = False, until_ts: str | None = None, from_ts: str | None = None,
+):
     df = pd.read_parquet(data_path)
     assert df.index.is_monotonic_increasing, "Training data must be sorted"
+    if from_ts:
+        start = pd.Timestamp(from_ts, tz="UTC")
+        df = df[df.index >= start]
+        logger.info(f"Trimmed to rows from {start}")
     if until_ts:
         cutoff = pd.Timestamp(until_ts, tz="UTC")
         df = df[df.index < cutoff]
@@ -152,11 +159,18 @@ def main():
         help="Train without the Phase-1 feature kwargs (for A/B baseline).",
     )
     p.add_argument(
+        "--from-ts", default=None,
+        help="Only train on rows with timestamp >= this (ISO UTC).",
+    )
+    p.add_argument(
         "--until-ts", default=None,
         help="Only train on rows with timestamp < this (ISO UTC). Match --from-ts in backtest_p1.",
     )
     args = p.parse_args()
-    warmup(Path(args.data), Path(args.model_dir), baseline=args.baseline, until_ts=args.until_ts)
+    warmup(
+        Path(args.data), Path(args.model_dir),
+        baseline=args.baseline, until_ts=args.until_ts, from_ts=args.from_ts,
+    )
 
 
 if __name__ == "__main__":

@@ -93,10 +93,10 @@ class OnlineFeatureBuilder:
         solar_ghi: float | None = None,
         load_forecast: float | None = None,
         gas_ttf_eur_mwh: float | None = None,
-        gen_nl_fossil_gas_mw: float | None = None,
-        gen_nl_wind_total_mw: float | None = None,
-        gen_nl_solar_mw: float | None = None,
-        gen_nl_renewable_share: float | None = None,
+        gen_nl_fossil_gas_mw_lag24h: float | None = None,
+        gen_nl_wind_total_mw_lag24h: float | None = None,
+        gen_nl_solar_mw_lag24h: float | None = None,
+        gen_nl_renewable_share_lag24h: float | None = None,
     ) -> dict | None:
         """
         Build a feature dict for one timestamp.
@@ -155,21 +155,21 @@ class OnlineFeatureBuilder:
         features["solar_ghi"] = _safe(solar_ghi)
         features["load_forecast"] = _safe(load_forecast)
 
-        # Phase 1 new features (TTF gas + NL generation mix, forecast-only).
+        # Phase 1 new features (TTF gas + NL generation mix, actuals lagged 24h).
         # Keys are only added when the caller passes the kwarg — lets the
         # training harness toggle baseline vs Phase 1 runs on the same parquet.
         # NaN values (from ffill gaps) still add the key via _safe → 0.0, so a
         # Phase 1 run keeps a stable feature set across rows.
         if gas_ttf_eur_mwh is not None:
             features["gas_ttf_eur_mwh"] = _safe(gas_ttf_eur_mwh)
-        if gen_nl_fossil_gas_mw is not None:
-            features["gen_nl_fossil_gas_mw"] = _safe(gen_nl_fossil_gas_mw)
-        if gen_nl_wind_total_mw is not None:
-            features["gen_nl_wind_total_mw"] = _safe(gen_nl_wind_total_mw)
-        if gen_nl_solar_mw is not None:
-            features["gen_nl_solar_mw"] = _safe(gen_nl_solar_mw)
-        if gen_nl_renewable_share is not None:
-            features["gen_nl_renewable_share"] = _safe(gen_nl_renewable_share)
+        if gen_nl_fossil_gas_mw_lag24h is not None:
+            features["gen_nl_fossil_gas_mw_lag24h"] = _safe(gen_nl_fossil_gas_mw_lag24h)
+        if gen_nl_wind_total_mw_lag24h is not None:
+            features["gen_nl_wind_total_mw_lag24h"] = _safe(gen_nl_wind_total_mw_lag24h)
+        if gen_nl_solar_mw_lag24h is not None:
+            features["gen_nl_solar_mw_lag24h"] = _safe(gen_nl_solar_mw_lag24h)
+        if gen_nl_renewable_share_lag24h is not None:
+            features["gen_nl_renewable_share_lag24h"] = _safe(gen_nl_renewable_share_lag24h)
 
         return features
 

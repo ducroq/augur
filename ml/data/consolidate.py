@@ -272,13 +272,17 @@ def parse_market_history_file(path: Path) -> dict[str, pd.Series]:
 
 
 def parse_generation_mix_file(path: Path) -> dict[str, pd.Series]:
-    """Extract NL generation-mix forecasts (forecast-only to avoid train/serve skew).
+    """Extract NL generation-mix actuals shifted +24h — "feature at H" reflects
+    the actual generation at H-24h. The upstream collector runs over
+    yesterday→today so forecast fields aren't populated; same-hour actuals
+    would be leakage, so we lag by 24h. A day-ahead forecast at hour H can
+    legitimately use yesterday's same-hour realized mix as an input.
 
-    Returns four hourly series:
-      - gen_nl_fossil_gas_mw:   NL fossil-gas generation forecast (marginal fuel)
-      - gen_nl_wind_total_mw:   NL onshore + offshore wind forecast
-      - gen_nl_solar_mw:        NL solar forecast
-      - gen_nl_renewable_share: (wind + solar + hydro) / total forecast
+    Returns four hourly series (UTC, shifted +24h from original timestamp):
+      - gen_nl_fossil_gas_mw_lag24h:   NL fossil-gas actual at H-24
+      - gen_nl_wind_total_mw_lag24h:   NL onshore + offshore wind actual
+      - gen_nl_solar_mw_lag24h:        NL solar actual
+      - gen_nl_renewable_share_lag24h: (wind + solar + hydro) / total actual
     """
     ALL_FUEL_TYPES = (
         "nuclear", "fossil_gas", "fossil_hard_coal", "fossil_lignite",
@@ -298,18 +302,19 @@ def parse_generation_mix_file(path: Path) -> dict[str, pd.Series]:
     nl_data = container.get("NL", {}) if isinstance(container, dict) else {}
 
     gas, wind, solar, share = {}, {}, {}, {}
+    lag = pd.Timedelta(hours=24)
     for ts_str, fields in nl_data.items():
         if not isinstance(fields, dict):
             continue
         try:
-            ts = pd.Timestamp(ts_str).tz_convert("UTC")
+            ts = pd.Timestamp(ts_str).tz_convert("UTC") + lag
         except Exception:
             continue
 
-        gas_val = fields.get("fossil_gas_forecast")
-        solar_val = fields.get("solar_forecast")
-        wind_on = fields.get("wind_onshore_forecast")
-        wind_off = fields.get("wind_offshore_forecast")
+        gas_val = fields.get("fossil_gas_actual")
+        solar_val = fields.get("solar_actual")
+        wind_on = fields.get("wind_onshore_actual")
+        wind_off = fields.get("wind_offshore_actual")
 
         if isinstance(gas_val, (int, float)):
             gas[ts] = float(gas_val)
@@ -322,7 +327,7 @@ def parse_generation_mix_file(path: Path) -> dict[str, pd.Series]:
         renewable = 0.0
         seen_any = False
         for fuel in ALL_FUEL_TYPES:
-            val = fields.get(f"{fuel}_forecast")
+            val = fields.get(f"{fuel}_actual")
             if isinstance(val, (int, float)):
                 seen_any = True
                 total += val
@@ -332,10 +337,10 @@ def parse_generation_mix_file(path: Path) -> dict[str, pd.Series]:
             share[ts] = renewable / total
 
     return {
-        "gen_nl_fossil_gas_mw":   pd.Series(gas,   name="gen_nl_fossil_gas_mw"),
-        "gen_nl_wind_total_mw":   pd.Series(wind,  name="gen_nl_wind_total_mw"),
-        "gen_nl_solar_mw":        pd.Series(solar, name="gen_nl_solar_mw"),
-        "gen_nl_renewable_share": pd.Series(share, name="gen_nl_renewable_share"),
+        "gen_nl_fossil_gas_mw_lag24h":   pd.Series(gas,   name="gen_nl_fossil_gas_mw_lag24h"),
+        "gen_nl_wind_total_mw_lag24h":   pd.Series(wind,  name="gen_nl_wind_total_mw_lag24h"),
+        "gen_nl_solar_mw_lag24h":        pd.Series(solar, name="gen_nl_solar_mw_lag24h"),
+        "gen_nl_renewable_share_lag24h": pd.Series(share, name="gen_nl_renewable_share_lag24h"),
     }
 
 
@@ -384,6 +389,11 @@ def consolidate(data_dir: Path, output: Path):
     for col in sorted(all_series):
         logger.info(f"  {col}: {len(all_series[col])} data points")
 
+    empty_cols = [col for col, s in all_series.items() if len(s) == 0]
+    if empty_cols:
+        logger.warning(f"Dropping empty columns (no data parsed): {empty_cols}")
+        all_series = {col: s for col, s in all_series.items() if len(s) > 0}
+
     # Combine into DataFrame
     df = pd.DataFrame(all_series)
     df.index.name = "timestamp_utc"
@@ -395,8 +405,8 @@ def consolidate(data_dir: Path, output: Path):
     # Forward-fill exogenous features (max 6 hours)
     hourly_ffill_cols = [
         "temperature", "load_forecast", "wind_speed_80m", "solar_ghi",
-        "gen_nl_fossil_gas_mw", "gen_nl_wind_total_mw",
-        "gen_nl_solar_mw", "gen_nl_renewable_share",
+        "gen_nl_fossil_gas_mw_lag24h", "gen_nl_wind_total_mw_lag24h",
+        "gen_nl_solar_mw_lag24h", "gen_nl_renewable_share_lag24h",
     ]
     for col in hourly_ffill_cols:
         if col in df.columns:

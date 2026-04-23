@@ -4,6 +4,48 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
+## 2026-04-23 — Phase 1 new-feature A/B: TTF gas + NL genmix lag24h (parked)
+
+**Trigger**: Follow-up to the 2026-04-22 readiness audit. Implemented the recommended Phase 1 scope (TTF gas + NL generation mix) end-to-end on branch `feat/new-features-ttf-genmix` and ran a baseline-vs-Phase-1 backtest.
+
+**Feature set added** (all via `ml/data/consolidate.py` → `ml/features/online_features.py`):
+- `gas_ttf_eur_mwh` — daily yfinance TTF close, anchored to next-day 00:00 UTC (leakage-safe), 72h ffill through weekends
+- `gen_nl_fossil_gas_mw_lag24h` — NL fossil-gas actual at H-24h (marginal price-setter)
+- `gen_nl_wind_total_mw_lag24h` — onshore + offshore wind actual at H-24h
+- `gen_nl_solar_mw_lag24h` — NL solar actual at H-24h
+- `gen_nl_renewable_share_lag24h` — (wind+solar+hydro) / total at H-24h
+
+**Design note — actual→+24h shift instead of forecast**: energyDataHub's `entsoe_genmix_collector` runs over `yesterday→today`, so the file contains only `_actual` fields (no `_forecast`). Using same-hour actuals as features for same-hour price would be leakage; shifting +24h models "yesterday's same-hour realized mix", which is legitimately available at inference time for a day-ahead price forecast.
+
+**A/B harness** (new files): `ml/training/warmup_p1.py` (+ `--baseline` flag) and `ml/evaluation/backtest_p1.py`, both writing to `ml/models/river_p1/` or `ml/models/river_baseline/` so the production model at `ml/models/river_model.pkl` is untouched. Same parquet, same split timestamps, identical River ARF hyperparameters (n=10, seed=42).
+
+**Experiment**:
+
+| | |
+|---|---|
+| Training | 2026-03-27 → 2026-04-17 UTC, 480 rows (24 skipped for missing lags) |
+| Holdout | 2026-04-17 → 2026-04-23 UTC, 166 rows |
+
+**Results (holdout backtest)**:
+
+| Metric | Baseline | Phase 1 | Δ |
+|---|---|---|---|
+| MAE  | 15.15 | 13.87 | **−1.28** EUR/MWh |
+| MAPE | 139.2% | 131.0% | −8.2 pp |
+| RMSE | 20.12 | 18.51 | −1.61 |
+| Spike recall (n=4) | 1.0 | 1.0 | — |
+
+**Verdict — park, don't merge.** Phase 1 features move MAE, MAPE, and RMSE all in the right direction but the MAE improvement of 1.28 EUR/MWh is below the ADR-005 decision gate of ≥2 EUR/MWh. Also: holdout baseline MAE (15.15) is notably lower than the training-window rolling MAE (~20), suggesting the April holdout is an "easy" period — the 1.28 gap could easily be noise at n=166.
+
+**Operational findings worth banking**:
+- HAN OneDrive checkout had drifted 4 commits + 3 merge bubbles; now reset to `origin/main` with `pull.ff=only` to fail loudly on future drift.
+- TTF lives inside `market_history.gas_ttf.data` as a date-keyed dict; the parent `market_history` DQ error is specifically about the carbon sub-field, not TTF.
+- Effective genmix coverage is only ~26 days (file count in HAN), so Phase 1 is data-limited. Re-run makes sense once ~2 months of history has accumulated.
+
+**Status**: banked on `feat/new-features-ttf-genmix`. Revisit when ≥60 days of genmix history is available or if Phase 1.5 (DE/BE mix) is scoped.
+
+---
+
 ## 2026-04-14 — Forecast collapse: model outputs flat mean
 
 **Trigger**: Noticed the live forecast on the dashboard barely moves — temporal price swings are suppressed. The model outputs what looks like an average price estimate regardless of time of day.
