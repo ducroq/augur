@@ -9,6 +9,27 @@
 
 ---
 
+### generation_mix.json has no `_forecast` fields (2026-04-23)
+**Problem**: Wrote `parse_generation_mix_file()` to read `fossil_gas_forecast`, `wind_onshore_forecast`, etc. after inspecting `collectors/entsoe_generation.py` in energyDataHub and seeing both `*_forecast` and `*_actual` produced. End-to-end consolidation showed all four genmix columns at 0 data points.
+**Root cause**: `data_fetcher.py` line 448 calls `entsoe_genmix_collector.collect(yesterday, today)` — a *past* time window. ENTSO-E only returns actuals for past windows; forecasts are for future hours. So the file in practice contains only `*_actual` fields, regardless of what the collector code can theoretically produce. The collector source code overstates the available schema.
+**Fix**: Parser now reads `_actual` fields and **shifts timestamps +24h**, so "feature at H" = "actual at H-24h". Same-hour actuals as features for same-hour prices would be leakage; the +24h lag makes it a legitimate "yesterday same-hour realized mix" signal that is knowable at inference time. Column names renamed to `*_lag24h` so the shift is visible in the schema.
+**Pattern**: Don't trust collector source code alone for schema. Collector *capabilities* ≠ collector *outputs* in production. Decrypt and inspect an actual file before writing a parser.
+**Status**: [RESOLVED] — fix on `feat/new-features-ttf-genmix` in `ml/data/consolidate.py`.
+
+### Empty pandas series break DataFrame resample (2026-04-23)
+**Problem**: First end-to-end consolidation run with the new genmix parser crashed on `df.resample("h").mean()` with `TypeError: Only valid with DatetimeIndex... got an instance of 'Index'`. All four new genmix columns had 0 data points because of the schema bug above.
+**Root cause**: When building `pd.DataFrame(dict_of_series)` from a mix of non-empty `DatetimeIndex` series and empty default-index series, the resulting DataFrame falls back to generic `Index` instead of `DatetimeIndex`. Then `.resample("h")` has nothing to resample against.
+**Fix**: Filter out empty series in `consolidate()` before constructing the DataFrame, and log a warning listing the dropped columns. The warning would have made the genmix schema bug visible immediately instead of hiding behind a cryptic resample error.
+**Pattern**: In the consolidate pipeline, a parser that silently returns zero rows is a real failure mode. Surface it as a warning, not as a downstream exception three functions later.
+**Status**: [RESOLVED] — defensive filter in `ml/data/consolidate.py`.
+
+### Checked-in .venv is a Linux venv, unusable on Windows (2026-04-23)
+**Problem**: `C:/local_dev/augur/.venv/bin/python --version` exits with code 49 and no output. Any `python` call through the venv fails silently.
+**Root cause**: `.venv/pyvenv.cfg` has `home = /usr/bin` and `command = /home/jeroen/local_dev/augur/.venv/...` — the venv was created on a Linux machine (sadalsuud or similar). The Python stubs in `.venv/bin/` are 7-byte files that don't work on Windows. OneDrive sync likely copied the directory verbatim.
+**Fix**: Install deps against the system Python instead (`C:\Users\scbry\AppData\Local\Programs\Python\Python313`). For this session: `pip install river` into system Python. If a Windows-native venv is ever needed, `python -m venv .venv-win` in the project root is the clean path.
+**Pattern**: If the checked-in `.venv/pyvenv.cfg` says `home=/usr/bin`, don't fight it — use system Python.
+**Status**: [RESOLVED] — river 0.24.2 installed to system Python this session.
+
 ### Calibrated weather noise improved rather than degraded model (2026-04-19)
 **Problem**: Designed a "leakage probe" for long-history warmup expecting perfect-knowledge weather to win over calibrated-noise weather. Got the opposite — noisy variant beat clean on both training MAE (14.98 vs 16.40) and backtest MAE (16.36 vs 18.06).
 **Root cause**: Calibrated noise (wind σ=1.8 m/s, solar σ=30 W/m² GHI-gated) acted as regularization, not leakage simulation. Price lags dominate the feature set; reducing weather feature precision prevented River ARF from overfitting to weak weather signals.
