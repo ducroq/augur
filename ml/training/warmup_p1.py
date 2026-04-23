@@ -46,9 +46,13 @@ def create_model():
     )
 
 
-def warmup(data_path: Path, model_dir: Path, baseline: bool = False):
+def warmup(data_path: Path, model_dir: Path, baseline: bool = False, until_ts: str | None = None):
     df = pd.read_parquet(data_path)
     assert df.index.is_monotonic_increasing, "Training data must be sorted"
+    if until_ts:
+        cutoff = pd.Timestamp(until_ts, tz="UTC")
+        df = df[df.index < cutoff]
+        logger.info(f"Trimmed to rows before {cutoff}")
     logger.info(f"Loaded {len(df)} rows from {data_path}")
     logger.info(f"Range: {df.index.min()} to {df.index.max()}")
     mode = "BASELINE (pre-Phase-1 features only)" if baseline else "PHASE 1 (+TTF, NL genmix)"
@@ -147,8 +151,12 @@ def main():
         "--baseline", action="store_true",
         help="Train without the Phase-1 feature kwargs (for A/B baseline).",
     )
+    p.add_argument(
+        "--until-ts", default=None,
+        help="Only train on rows with timestamp < this (ISO UTC). Match --from-ts in backtest_p1.",
+    )
     args = p.parse_args()
-    warmup(Path(args.data), Path(args.model_dir), baseline=args.baseline)
+    warmup(Path(args.data), Path(args.model_dir), baseline=args.baseline, until_ts=args.until_ts)
 
 
 if __name__ == "__main__":

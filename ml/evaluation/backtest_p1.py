@@ -42,13 +42,23 @@ PHASE1_FEATURE_COLS = (
 )
 
 
-def backtest(model_path: Path, state_path: Path, data_path: Path, baseline: bool = False) -> dict:
+def backtest(
+    model_path: Path,
+    state_path: Path,
+    data_path: Path,
+    baseline: bool = False,
+    from_ts: str | None = None,
+) -> dict:
     with open(model_path, "rb") as f:
         model = pickle.load(f)
     state = json.load(open(state_path))
     fb = OnlineFeatureBuilder(state.get("price_buffer"))
 
     df = pd.read_parquet(data_path).sort_index()
+    if from_ts:
+        cutoff = pd.Timestamp(from_ts, tz="UTC")
+        df = df[df.index >= cutoff]
+        logger.info(f"Trimmed to rows from {cutoff}")
     mode = "BASELINE" if baseline else "PHASE 1"
     logger.info(f"Backtest {len(df)} samples: {df.index.min()} to {df.index.max()} ({mode})")
 
@@ -117,8 +127,15 @@ def main():
         "--baseline", action="store_true",
         help="Skip Phase-1 feature kwargs; must match the flag used at warmup.",
     )
+    p.add_argument(
+        "--from-ts", default=None,
+        help="Only backtest rows with timestamp >= this (ISO UTC). Match --until-ts in warmup_p1.",
+    )
     args = p.parse_args()
-    r = backtest(Path(args.model), Path(args.state), Path(args.data), baseline=args.baseline)
+    r = backtest(
+        Path(args.model), Path(args.state), Path(args.data),
+        baseline=args.baseline, from_ts=args.from_ts,
+    )
     Path(args.out).write_text(json.dumps(r, indent=2))
     logger.info(f"Report written to {args.out}")
 
