@@ -9,6 +9,15 @@
 
 ---
 
+### Local main can lag origin/main when working from parked feature branch (2026-04-28)
+**Problem**: While diagnosing live model degradation, the initial read of `ml/models/state.json` showed `last_timestamp: 2026-04-21` and `git log -- ml/models/state.json` on `main` ended on the same date. Concluded production pipeline had been silent for 7 days. Wrong.
+**Root cause**: Local checkout was on `feat/new-features-ttf-genmix` (parked), forked at `12f0177 Daily model update 2026-04-21`. Local `main` was 7 commits behind `origin/main`, which had been receiving daily updates through 2026-04-28. The live dashboard reads from `origin/main`, not the local working tree.
+**Fix**: `git fetch origin && git show origin/main:ml/models/state.json` revealed the true production state — cron healthy, real degradation driven by a price regime shift. The misdiagnosis cost ~5 minutes and one round of pushback from the user.
+**Pattern**: Before claiming a production pipeline is stale or broken from local artifact inspection, run `git fetch origin` and read the relevant file via `git show origin/main:<path>`. The local working branch may not reflect what is actually deployed. Especially when the working branch is non-main / parked.
+**Status**: [RESOLVED]
+
+---
+
 ### Calibrated weather noise improved rather than degraded model (2026-04-19)
 **Problem**: Designed a "leakage probe" for long-history warmup expecting perfect-knowledge weather to win over calibrated-noise weather. Got the opposite — noisy variant beat clean on both training MAE (14.98 vs 16.40) and backtest MAE (16.36 vs 18.06).
 **Root cause**: Calibrated noise (wind σ=1.8 m/s, solar σ=30 W/m² GHI-gated) acted as regularization, not leakage simulation. Price lags dominate the feature set; reducing weather feature precision prevented River ARF from overfitting to weak weather signals.

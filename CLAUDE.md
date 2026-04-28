@@ -16,9 +16,10 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 | Changing deployment or build pipeline | `docs/RUNBOOK.md` — Netlify build, --force flag, webhook flow |
 | Making architectural decisions | `docs/decisions/` — ADR index |
 | Stuck or debugging something weird | `memory/gotcha-log.md` — problem-fix archive |
-| Questioning ML architecture choices | `memory/ml-decisions.md` — why week-ahead, why River ARF, feature strategy |
+| Questioning ML architecture choices | `memory/ml-decisions.md` (week-ahead, River ARF, feature strategy) + `docs/river-arf-retrospective.md` (why ARF is being retired and what replaces it) |
 | Working with energyDataHub data formats | `memory/data-formats.md` — schema v2.1, units, timezone conventions |
 | Changing ML pipeline, model, or forecast logic | `docs/model-progress-log.md` — add dated entry with rationale, evidence, and outcome |
+| Logging or citing an experiment (A/B, warmup, ablation) | `experiments/registry.jsonl` — append one line per experiment; schema in `experiments/README.md` |
 | Ending a session | Run `/curate` — review gotchas, promote patterns, check doc sync |
 | Monthly or after major restructuring | Run `/audit-context` — structural health audit |
 
@@ -64,6 +65,7 @@ Client browser (https://energy.jeroenveen.nl):
 ```
 
 ### ML Pipeline (live)
+- **Status (2026-04-28)**: River ARF retired — see `docs/river-arf-retrospective.md`. ARF cron continues running until LightGBM-Quantile replacement is shadow-validated; everything below remains operationally accurate.
 - **Model**: River ARFRegressor (10 trees), continuous online learning
 - **Features**: Lasso-selected — price lags, rolling stats, wind speed, solar GHI, load forecast
 - **Target**: ENTSO-E NL wholesale day-ahead price (EUR/MWh)
@@ -92,6 +94,8 @@ Client browser (https://energy.jeroenveen.nl):
 | `tests/` | pytest suite for SecureDataHandler + OnlineFeatureBuilder |
 | `layouts/index.html` | Dashboard HTML template |
 | `static/css/style.css` | Glassmorphism dark theme |
+| `experiments/registry.jsonl` | Append-only experiment log (EXP-NNN); schema in `experiments/README.md` |
+| `docs/river-arf-retrospective.md` | ARF retirement postmortem with figures and recovered data |
 
 ## How to Work Here
 
