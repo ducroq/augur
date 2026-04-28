@@ -170,7 +170,8 @@ The plan is to run the new model in **shadow mode** alongside ARF on the daily
 cron for at least two weeks. Promotion criteria, in priority order: (a) better
 MAE specifically on hours where realised price < 30 EUR/MWh, (b) better
 calibration of P10/P90 vs realised quantile coverage, (c) no regression on the
-high-load evening peak hours. The shadow plan is a separate document.
+high-load evening peak hours. Full plan with concrete thresholds and milestones
+in [`docs/lightgbm-quantile-shadow-plan.md`](lightgbm-quantile-shadow-plan.md).
 
 ARF will keep running until that bar is met. The infrastructure (daily cron,
 encryption, dashboard, archive) was designed model-agnostic and remains

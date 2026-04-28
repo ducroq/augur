@@ -9,6 +9,15 @@
 
 ---
 
+### Pandas mixed timezone offsets in CSV parse to object dtype (2026-04-28)
+**Problem**: `pd.read_csv("metrics_trajectory.csv", parse_dates=["commit_date"])` returned the column as object dtype instead of datetime64. Subsequent `.dt.tz_convert(...)` raised `AttributeError: Can only use .dt accessor with datetimelike values`.
+**Root cause**: The CSV had ISO-8601 timestamps spanning the EU DST transition — values like `2026-03-26T15:18:55+01:00` and `2026-03-29T16:45:06+02:00` in the same column. Pandas' `parse_dates` heuristic falls back to object dtype rather than picking a single dtype with mixed offsets.
+**Fix**: Don't rely on `parse_dates=`. Read first, then explicitly `pd.to_datetime(col, utc=True)` — `utc=True` normalises offsets to UTC, producing a clean tz-aware datetime64 column. Pattern saved in `_load_trajectory()` in `scripts/build_arf_retrospective_figures.py`.
+**Pattern**: Any time-series CSV that spans a DST boundary (or aggregates from multiple timezone sources) will trigger this. Default to `pd.to_datetime(..., utc=True)` for any timestamp column you intend to use as a real datetime. The `parse_dates=` shortcut only works for single-offset data.
+**Status**: [RESOLVED]
+
+---
+
 ### Local main can lag origin/main when working from parked feature branch (2026-04-28)
 **Problem**: While diagnosing live model degradation, the initial read of `ml/models/state.json` showed `last_timestamp: 2026-04-21` and `git log -- ml/models/state.json` on `main` ended on the same date. Concluded production pipeline had been silent for 7 days. Wrong.
 **Root cause**: Local checkout was on `feat/new-features-ttf-genmix` (parked), forked at `12f0177 Daily model update 2026-04-21`. Local `main` was 7 commits behind `origin/main`, which had been receiving daily updates through 2026-04-28. The live dashboard reads from `origin/main`, not the local working tree.
