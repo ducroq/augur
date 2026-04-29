@@ -1,0 +1,17 @@
+{
+  "n_hours": 672,
+  "n_eval_days": 28,
+  "mae_overall": 12.833131501008726,
+  "mae_low_price_lt30": 26.4679888830278,
+  "n_low_price_hours": 136,
+  "mae_evening_peak": 13.262529551737341,
+  "n_evening_peak_hours": 80,
+  "p80_band_coverage": 0.5625,
+  "p80_band_width_mean": 25.613312090723195,
+  "config": {
+    "parquet": "ml\\data\\training_history.parquet",
+    "eval_start": "2026-04-01T00:00:00+00:00",
+    "eval_end": "2026-04-29T00:00:00+00:00",
+    "window_days": 28
+  }
+}
