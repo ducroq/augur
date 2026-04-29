@@ -1,0 +1,5 @@
+config,n_hours,n_eval_days,mae_overall,mae_low_price_lt30,mae_evening_peak,p80_band_coverage,p80_band_width_mean,n_low_price_hours,n_evening_peak_hours,mean_cqr_q,nonzero_cqr_days
+28d_raw,672,28,12.833,26.468,13.263,0.562,25.613,136,80,,
+28d_cqr,672,28,12.833,26.468,13.263,0.768,37.717,136,80,6.052,25.000
+56d_raw,672,28,12.195,25.242,11.416,0.601,25.482,136,80,,
+56d_cqr,672,28,12.195,25.242,11.416,0.765,36.043,136,80,5.280,25.000

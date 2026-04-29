@@ -97,15 +97,24 @@ def walk_forward_backtest(cfg: BacktestConfig) -> pd.DataFrame:
     return pd.DataFrame.from_records(records)
 
 
-def compute_metrics(preds: pd.DataFrame) -> dict:
-    """Compute the promotion-criteria metrics from the per-hour predictions."""
+def compute_metrics(
+    preds: pd.DataFrame,
+    p10_col: str = "p10",
+    p50_col: str = "p50",
+    p90_col: str = "p90",
+) -> dict:
+    """Compute the promotion-criteria metrics from the per-hour predictions.
+
+    Column-name args let callers re-evaluate against post-processed bands
+    (e.g. p10_cqr / p90_cqr from conformal correction) without copying.
+    """
     if len(preds) == 0:
         return {"n_hours": 0}
 
     realized = preds["realized"].to_numpy()
-    p50 = preds["p50"].to_numpy()
-    p10 = preds["p10"].to_numpy()
-    p90 = preds["p90"].to_numpy()
+    p50 = preds[p50_col].to_numpy()
+    p10 = preds[p10_col].to_numpy()
+    p90 = preds[p90_col].to_numpy()
     abs_err = np.abs(p50 - realized)
 
     low_mask = realized < 30.0

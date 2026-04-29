@@ -34,11 +34,12 @@
 **Pattern**: When a feature has been shown low-importance by Lasso (temperature dropped per `memory/ml-decisions.md`), "perfect" vs "noisy" variants of that feature family are not meaningfully different. Test the assumption before architecting around it.
 **Status**: [RESOLVED] — captured in `docs/long-history-mini-results.md` on `feat/long-history-warmup` branch.
 
-### Python stdout encoding breaks on Unicode arrows under Git Bash (2026-04-19)
+### Python stdout encoding breaks on Unicode arrows under Git Bash (2026-04-19, recurred 2026-04-29)
 **Problem**: Probe script printing `→` arrow crashed with `UnicodeEncodeError: 'charmap' codec can't encode character '\u2192'` on Windows. Aborted a multi-probe parallel run mid-way.
 **Root cause**: Windows Python defaults to cp1252 stdout when invoked via Git Bash without explicit encoding. Non-ASCII output fails immediately.
-**Fix**: Set `PYTHONIOENCODING=utf-8` before the python invocation, or avoid non-ASCII characters in print statements for throwaway scripts.
-**Pattern**: If running ad-hoc python on Windows Git Bash with any non-ASCII output, prepend `PYTHONIOENCODING=utf-8`. For saved scripts, use ASCII-only separators (`->`, `..`) over Unicode.
+**Fix**: Set `PYTHONIOENCODING=utf-8` before the python invocation, or avoid non-ASCII characters in print statements for committed scripts.
+**Recurrence (2026-04-29)**: Same trap in `ml/shadow/backtest.py` startup line — `print(f"... {a} -> {b} ...")` originally written with a Unicode arrow. Caught immediately on first invocation; one-character fix.
+**Pattern**: If running ad-hoc python on Windows Git Bash with any non-ASCII output, prepend `PYTHONIOENCODING=utf-8`. For committed scripts use ASCII-only separators (`->`, `..`) over Unicode — environment-independent and survives cp1252 callers. Two recurrences in 10 days makes this a write-time discipline, not a runtime workaround.
 **Status**: [RESOLVED]
 
 ---
