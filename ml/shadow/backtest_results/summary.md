@@ -13,28 +13,32 @@
 - **Features**: 24-column ARF parity set (`features_pandas.FEATURE_COLUMNS`). `renewable_pressure` not yet included — held for an A/B once shadow numbers are stable.
 - **Data**: `ml/data/training_history.parquet` (5,039 rows, 2025-09-28 → 2026-04-29 UTC).
 
-## Headline numbers
+## Headline numbers (h+1 perfect-lag, single horizon)
+
+All MAE numbers below are next-hour-prediction errors with realized lag inputs — apples-to-apples with River ARF's `update_mae`. Iterated 72-hour-ahead errors will be higher; that's milestone 3.
 
 | Metric | Value |
 |---|---|
 | Hours predicted | 672 |
 | Eval days | 28 |
-| **MAE (overall)** | **12.83 EUR/MWh** |
-| MAE on hours where realized < 30 EUR/MWh (n=136) | 26.47 |
-| MAE on weekday evening peak 16-19 UTC (n=80) | 13.26 |
+| **MAE h+1 (overall)** | **12.83 EUR/MWh** |
+| MAE h+1 on hours where realized < 30 EUR/MWh (n=136) | 26.47 |
+| MAE h+1 on weekday evening peak 16-19 UTC (n=80) | 13.26 |
 | **P80 band empirical coverage** | **56.3 %** |
 | Mean P80 band width | 25.6 EUR/MWh |
 
 ## LightGBM vs ARF (14-day apples-to-apples window)
 
-| | ARF `update_mae` | LightGBM `mae` |
+The 04-14 → 04-28 calendar window spans **15 calendar days**; ARF's daily cron skipped 2026-04-22, so `metrics_history.csv` has **14 evaluable rows** for the comparison.
+
+| | ARF `update_mae` | LightGBM `mae` (h+1) |
 |---|---|---|
 | **Mean** | **21.95** | **13.21** |
 | Median | 16.07 | 7.27 |
 | Worst day (04-26) | 69.05 | 60.72 |
 | Best day | 9.18 (04-17) | 5.59 (04-18) |
 
-- **LightGBM wins 14/14 days.** Mean improvement: **46%** (range +12% to +70%).
+- **LightGBM wins all 14 evaluable days** (LGBM has predictions for 04-22 too, MAE 8.17, but ARF cron skipped that date so it's not in the merged comparison). Mean improvement: **46%** (range +12% to +70%).
 - The two regime-shift extreme days (04-25, 04-26 — min realized -190 and -413 EUR/MWh) still produce the largest absolute LightGBM errors, but improvement vs ARF holds even there (+21% and +12%).
 - The post-regime-shift recovery on 04-27/04-28 is dramatic for LightGBM (12.3 / 8.7 MAE) while ARF stayed near 28-29 — its trees are still anchored on pre-shift leaves.
 
@@ -83,3 +87,13 @@ Plan (`docs/lightgbm-quantile-shadow-plan.md` §6) requires all three over a con
 - Address the band-coverage gap before the 14-day shadow eval starts, otherwise criterion (b) will fail by construction.
 - Compute ARF's per-slice MAE alongside LightGBM's so promotion criteria (a) and (c) are formally evaluable rather than directional.
 - Consider running a `renewable_pressure` ablation on this same backtest harness before the cron wiring.
+
+## Known caveats from review (added 2026-04-29)
+
+Captured during a review battery (code-reviewer + data-analyzer + security-auditor) on commits 461ee44, 8253bb4, c1996af. The methodology is sound — no temporal leakage, predict-before-learn comparison verified against `ml/update.py:163-164`, CQR matches Romano et al. 2019. The items below are caveats that any write-up should state explicitly.
+
+- **Headline MAE is h+1 only.** The 12.83 / 13.21 / 46% numbers measure next-hour quality with realized lag inputs. Deployed 72-hour-ahead behaviour uses iterated forecast lags and will produce higher MAE; multi-horizon validation is milestone 3 work.
+- **"14/14 wins" is precise but easy to misread.** 14 evaluable days in a 15-day calendar window (ARF cron skipped 04-22). LGBM has data for 04-22 (MAE 8.17) and would have won that day too; the merged comparison just can't show it.
+- **Promotion criterion (a) cannot yet be formally verified.** ARF's per-slice MAE on `realized < 30 EUR/MWh` is not in `metrics_history.csv`. The "Likely PASS" verdict above is directional. Milestone 3's nightly cron must log ARF's slice-MAE alongside LightGBM's before promotion.
+- **Pickle artifacts will need HMAC signing** before sadalsuud writes one. `LightGBMQuantileForecaster.load` uses `pickle.load` without integrity verification; the project already has `HMAC_KEY_B64` infrastructure in `utils/secure_data_handler.py`. Action item for milestone 3 prereq.
+- **Single-horizon perfect-lag is the model-quality ceiling, not the deployed-system quality.** Same point as the headline caveat, surfaced as a separate methodology note for clarity.

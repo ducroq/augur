@@ -29,15 +29,15 @@ Conclusion: pinball-loss minimization on small finite samples produces systemati
 
 Both CQR variants land in the [75 %, 85 %] target. 56d marginally beats 28d on every point-prediction metric (≈5 % better overall, 14 % better evening peak). Same coverage; less inflation needed.
 
-## Apples-to-apples 14-day window (2026-04-14 → 2026-04-28)
+## Apples-to-apples comparison window
 
-This is the window where ARF metrics are honest (post-04-14 forecast-fix) and matches the plan's 14-day shadow-validation cadence in §6.
+The 04-14 → 04-28 window spans **15 calendar days**; ARF's daily cron skipped 2026-04-22 so `metrics_history.csv` carries **14 evaluable rows**. LightGBM has predictions for all 15 days. The 14-day shadow-validation cadence in plan §6 is satisfied either way.
 
 | | 56d_raw | **56d_cqr** | ARF (`update_mae` mean) |
 |---|---|---|---|
-| Hours | 360 | 360 | 14 days |
-| MAE overall | 12.59 | 12.59 | **21.95** |
-| MAE realized < 30 EUR/MWh | 37.90 (n=64) | 37.90 | not directly recoverable |
+| Hours | 360 (15 LGBM days) | 360 | 14 evaluable days |
+| MAE h+1 overall | 12.59 | 12.59 | **21.95** |
+| MAE h+1 realized < 30 EUR/MWh | 37.90 (n=64) | 37.90 | not directly recoverable |
 | P80 coverage | 0.633 | **0.775** | n/a (ARF EWM bands not P10/P90) |
 
 Rolling 14-day CQR-coverage stability:
@@ -67,10 +67,20 @@ Rationale:
 
 ## Caveats worth keeping visible
 
-1. **Per-day coverage is bimodal.** Aggregate criterion is satisfied; if a future metric tightens to "no day below 50 % coverage" the current setup wouldn't pass.
-2. **CQR reuses cross-model residuals.** Each day's calibration set comes from prior-day predictions made by *different fits* (each window retrains). Exchangeability is approximate. In practice this hasn't broken anything; if it does, ACI handles it.
+1. **Per-day coverage is bimodal.** Aggregate criterion is satisfied; if a future metric tightens to "no day below 50 % coverage" the current setup wouldn't pass. Concretely: the regime-shift days 04-25 and 04-26 — the days that motivated retiring ARF in the first place — sit at coverage ~0.46 / ~0.50 even after CQR. The 7-day calibration window has not yet absorbed enough tail variance by those dates. The aggregate PASS is real; the per-day weakness on the days that matter most is also real and should accompany the headline number in any promotion document.
+2. **CQR reuses cross-model residuals.** Each day's calibration set comes from prior-day predictions made by *different fits* (each window retrains). Exchangeability is approximate. In practice this hasn't broken anything; if it does, ACI (Adaptive Conformal Inference, Gibbs & Candès 2021) handles it.
 3. **`renewable_pressure` still not tested.** Plan calls for it as the one additive feature. Recommend a 56d_cqr × `{with, without renewable_pressure}` ablation early in milestone 3 before the 14-day shadow window starts.
 4. **ARF slice-MAE not directly recoverable** from existing artifacts. Milestone 3's nightly cron should log ARF's MAE on `realized < 30` and on the evening peak alongside LightGBM's, so criteria (a) and (c) become formally evaluable.
+
+## Known caveats from review (added 2026-04-29)
+
+A review battery (code-reviewer + data-analyzer + security-auditor) ran against commits 461ee44, 8253bb4, c1996af. Methodology verdict: sound. Specific items the write-up should state explicitly:
+
+- **Headline MAE is h+1 perfect-lag only.** The 12.20 / 12.59 / 46%-vs-ARF numbers measure next-hour quality with realized lag inputs. Deployed 72h-ahead behaviour will produce higher MAE because lags become recursive predictions; multi-horizon validation is milestone 3.
+- **Aggregate P80 = 0.775 PASSES criterion (b), but the per-day breakdown matters.** 04-25 and 04-26 — the regime-shift days — sit at ~0.46 / ~0.50 coverage even with CQR. Show the per-day table alongside the aggregate in any promotion doc.
+- **Pickle hardening before sadalsuud writes a model.** `LightGBMQuantileForecaster.load` uses `pickle.load` with no integrity verification. HMAC-sign on save using existing `HMAC_KEY_B64` infrastructure (precedent: `utils/secure_data_handler.py`); validate on load. Milestone 3 prereq.
+- **`compute_metrics` should force UTC** when reading `timestamp_utc` from a parquet round-trip (`pd.to_datetime(..., utc=True)`). Code nit, not a correctness issue today.
+- **Silent skip when training window is too short** (`backtest.py:73`, `len(X_train) < 100` continues without logging) — emit a warning so cron misconfigurations surface immediately.
 
 ## Files
 

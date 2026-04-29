@@ -10,17 +10,17 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 **What ran**: Walk-forward backtest harness (`ml/shadow/backtest.py`, `ml/shadow/features_pandas.py`) over 2026-04-01 → 2026-04-28, fitting `LightGBMQuantileForecaster` on a rolling 28-day window per evaluation day, predicting the next 24 hours with realised lag inputs. Single-horizon, perfect-lag — apples-to-apples with River ARF's `update_mae`. 24-column ARF parity feature set; `renewable_pressure` not yet included.
 
-**Result vs ARF (apples-to-apples 14-day window 2026-04-14 → 04-28, where ARF metrics are honest post forecast-fix)**:
+**Result vs ARF (apples-to-apples h+1 window 2026-04-14 → 04-28)**: 15 calendar days, ARF cron skipped 04-22 so 14 days are merge-evaluable. All MAE numbers below are h+1 perfect-lag (next-hour given realised lag inputs) — apples-to-apples with ARF's `update_mae`. Iterated 72h behaviour is a separate question and is deferred to milestone 3.
 
 | | LightGBM | ARF (`update_mae`) |
 |---|---|---|
-| Mean MAE | **13.21** | **21.95** |
-| Wins | **14 / 14 days** | — |
+| Mean MAE h+1 | **13.21** | **21.95** |
+| Wins | **14 / 14 evaluable days** | — |
 | Mean improvement | **+46 %** | — |
 | Worst day (04-26, min realised −413 EUR/MWh) | 60.72 | 69.05 |
 | Recovery 04-27/-28 | 12.25 / 8.67 | 27.79 / 28.96 |
 
-LightGBM beats ARF on every day of the comparison window, including the regime-shift extreme days; the recovery on 04-27/-28 is the cleanest signal that the new architecture handles the regime that broke ARF.
+LightGBM beats ARF on every evaluable day of the comparison window, including the regime-shift extreme days; the recovery on 04-27/-28 is the cleanest signal that the new architecture handles the regime that broke ARF. (LightGBM also has predictions for 04-22 with MAE 8.17, but ARF skipped that date so it's not in the merged comparison.)
 
 **Issue surfaced — band miscalibration**: Raw P80 empirical coverage was 56.3 %, well below the [75 %, 85 %] target in plan §6 (b). Diagnostic (`ml/shadow/backtest_results/diagnose_bands.py`) showed the miss is **chronic** (24 / 28 days under target, 0 over) and **bilateral** (25 % below P10, 19 % above P90), correlated negatively with realised volatility. Pinball-loss minimization on small finite samples gives systematically narrow quantile estimates.
 
@@ -32,7 +32,14 @@ LightGBM beats ARF on every day of the comparison window, including the regime-s
 - (b) P80 empirical coverage in [75 %, 85 %] — **PASS** (0.775 over the 14-day window).
 - (c) Weekday evening peak (16-19 UTC) MAE ≤ +10 % of ARF — **PASS** (11.42 vs ARF 21.95 mean).
 
-**Open items for milestone 3**: ARF slice-MAE logging alongside LightGBM's, `renewable_pressure` ablation, ACI fallback if per-day coverage stability becomes a criterion.
+**Open items for milestone 3** (gathered from this work + a review battery on 2026-04-29):
+
+- **HMAC-sign pickle artifacts before sadalsuud writes one.** `LightGBMQuantileForecaster.load` uses `pickle.load` with no integrity check; reuse existing `HMAC_KEY_B64` infrastructure (precedent: `utils/secure_data_handler.py`). Security MEDIUM, prereq for any cron landing.
+- **ARF slice-MAE logging in cron** so promotion criterion (a) becomes formally evaluable rather than "Likely PASS, formally TBD".
+- **`renewable_pressure` ablation** on the 56d_cqr backtest harness before the 14-day shadow window starts.
+- **Per-day coverage caveat for criterion (b)**. Aggregate P80 = 0.775 passes [75%, 85%], but 04-25 / 04-26 (the regime-shift days) sit at ~0.46 / ~0.50 even with CQR. Show per-day alongside aggregate in any promotion doc; consider ACI (Gibbs & Candès 2021) if per-day stability becomes a criterion.
+- **Always state h+1 qualifier with MAE headlines** until iterated multi-horizon validation lands.
+- Code nits worth folding in along the way: warning instead of silent skip on short training windows in `backtest.py:73`; `pd.to_datetime(..., utc=True)` in `compute_metrics`; build prediction DataFrames from `X_eval.index` instead of positional `zip`.
 
 **Branch**: `feat/lightgbm-shadow`. ARF cron continues to drive the dashboard.
 
