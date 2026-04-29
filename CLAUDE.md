@@ -2,7 +2,7 @@
 
 Energy price forecasting platform for the Netherlands. Combines data from 18+ APIs (via energyDataHub), ML-based week-ahead price predictions, and an interactive dashboard for smart consumption (heat pumps, EV charging, industrial thermal).
 
-- **Stack**: Python 3.12 (ML pipeline), Hugo + Plotly.js (dashboard), River ARF (forecasting)
+- **Stack**: Python 3.12 (ML pipeline), Hugo + Plotly.js (dashboard), River ARF — retired 2026-04-28, LightGBM-Quantile replacement in shadow validation
 - **Status**: Production — dashboard live, ML pipeline daily on sadalsuud
 - **Repo**: github.com/ducroq/augur
 - **agent-ready-projects**: v1.9.0
