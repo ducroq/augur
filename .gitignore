@@ -78,6 +78,10 @@ ml/models/*.tmp
 # river_model.pkl and state.json are committed daily by sadalsuud
 !ml/models/river_model.pkl
 !ml/models/state.json
+# A/B experiment subdirs — committed on the experiment's feature branch only;
+# local copies on main after a checkout-back are leftovers.
+ml/models/river_baseline/
+ml/models/river_p1/
 
 # ML training data (derived, rebuild with consolidate.py)
 ml/data/*.parquet
