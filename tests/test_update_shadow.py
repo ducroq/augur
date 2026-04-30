@@ -162,6 +162,24 @@ class TestComputeCqrQ:
         assert q > 0
         assert n_days == 4
 
+    def test_n_calib_days_counts_only_window(self):
+        """n_calib_days must reflect days actually in apply_cqr's [cutoff_start, cutoff_end)
+        window, not the entire calibration_history (which can span much longer)."""
+        rows = []
+        # 30 days of calibration but apply_cqr will only use the trailing 7
+        for d in range(30):
+            day_str = (pd.Timestamp("2026-04-01") + pd.Timedelta(days=d)).strftime("%Y-%m-%d")
+            for h in range(24):
+                ts = f"{day_str}T{h:02d}:00:00+00:00"
+                rows.append({
+                    "timestamp_utc": ts, "eval_day": day_str,
+                    "p10": 10.0, "p50": 20.0, "p90": 30.0, "realized": 25.0,
+                })
+        # today is 2026-04-30; calib_days=7 → window is [2026-04-23, 2026-04-30)
+        # which contains 7 distinct days (4-23 .. 4-29)
+        _, n_days = compute_cqr_q(rows, today="2026-04-30", calib_days=7)
+        assert n_days == 7
+
     def test_q_zero_when_not_enough_calib_days(self):
         # apply_cqr's MIN_CALIB_DAYS=3 — give 2 distinct days only
         rows = []

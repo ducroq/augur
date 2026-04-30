@@ -160,9 +160,12 @@ def compute_cqr_q(
     df = df.dropna(subset=["realized"])
     if df.empty:
         return 0.0, 0
-    # Insert a placeholder row for `today` so apply_cqr returns its q. We use
-    # the day boundary timestamp; values are dummies — they don't enter calibration
-    # because they're filtered out by mask `(ts < cutoff_end)` and also have NaN realized.
+    # Insert a placeholder row for `today` so apply_cqr returns its q. The
+    # placeholder has realized=NaN, which produces nonconformity=NaN in
+    # apply_cqr (line 49) and is therefore dropped by the .dropna() at line 61
+    # — that's why it doesn't contaminate the calibration set, NOT the
+    # `ts < cutoff_end` timestamp filter. Multiple rows with `eval_day == today`
+    # are fine; apply_cqr maps them all to the same `day_to_q[today]` value.
     today_row = pd.DataFrame(
         [
             {
@@ -181,10 +184,15 @@ def compute_cqr_q(
     if today_rows.empty:
         return 0.0, 0
     q = float(today_rows["cqr_q"].iloc[0])
-    n_calib_days = (
-        pd.to_datetime(df["timestamp_utc"], utc=True).dt.date.nunique()
-    )
-    return q, int(n_calib_days)
+    # Count distinct calibration days actually inside the trailing window
+    # apply_cqr used (rather than the entire history) so the reported number
+    # matches the data behind q.
+    cutoff_end = pd.Timestamp(today, tz="UTC")
+    cutoff_start = cutoff_end - pd.Timedelta(days=calib_days)
+    ts_series = pd.to_datetime(df["timestamp_utc"], utc=True)
+    in_window = (ts_series >= cutoff_start) & (ts_series < cutoff_end)
+    n_calib_days = int(ts_series[in_window].dt.date.nunique())
+    return q, n_calib_days
 
 
 # ---------- training & prediction -------------------------------------------
@@ -199,8 +207,12 @@ def select_training_window(
     return parquet.loc[mask]
 
 
+MIN_WINDOW_DENSITY = 0.75  # warn if clean rows < 75% of expected hours
+
+
 def fit_multi_horizon(
     parquet_window: pd.DataFrame,
+    window_days: int = WINDOW_DAYS,
 ) -> tuple[MultiHorizonLightGBMQuantileForecaster, int]:
     features = build_features(parquet_window)
     target = parquet_window["price_eur_mwh"]
@@ -211,6 +223,13 @@ def fit_multi_horizon(
             f"too few clean rows in training window ({len(X)}); "
             f"need > {max(g[1] for g in DEFAULT_GROUPS)}"
         )
+    expected_hours = window_days * 24
+    if len(X) < MIN_WINDOW_DENSITY * expected_hours:
+        logger.warning(
+            "Training window is sparse: %d clean rows out of %d expected "
+            "(%.0f%% density) — possible upstream data gap",
+            len(X), expected_hours, 100 * len(X) / expected_hours,
+        )
     model = MultiHorizonLightGBMQuantileForecaster()
     model.fit(X, y)
     return model, len(X)
@@ -220,16 +239,18 @@ def predict_72h(
     model: MultiHorizonLightGBMQuantileForecaster,
     parquet: pd.DataFrame,
     t0: pd.Timestamp,
+    horizons: Sequence[int] = HORIZONS,
 ) -> pd.DataFrame:
-    """Return DataFrame indexed by horizon h with columns p10, p50, p90."""
+    """Return DataFrame with columns timestamp_utc, p10, p50, p90 — one row per horizon."""
+    horizons_list = list(horizons)
     features = build_features(parquet.loc[parquet.index <= t0])
     feat_t0 = features.loc[[t0]].dropna()
     if feat_t0.empty:
         raise ValueError(f"No clean feature row at t0={t0!r} (NaNs in lags)")
-    preds = model.predict_horizons(feat_t0, horizons=list(HORIZONS))
-    # preds shape (1, 72, 3) — sorted [P10, P50, P90] per horizon
+    preds = model.predict_horizons(feat_t0, horizons=horizons_list)
+    # preds shape (1, n_horizons, 3) — sorted [P10, P50, P90] per horizon
     p10, p50, p90 = preds[0, :, 0], preds[0, :, 1], preds[0, :, 2]
-    timestamps = [t0 + pd.Timedelta(hours=h) for h in HORIZONS]
+    timestamps = [t0 + pd.Timedelta(hours=h) for h in horizons_list]
     return pd.DataFrame(
         {"timestamp_utc": timestamps, "p10": p10, "p50": p50, "p90": p90}
     )
@@ -338,7 +359,7 @@ def run_shadow_update(
 
     # 5. Train multi-horizon model on rolling window
     window = select_training_window(parquet, t0, window_days)
-    model, n_train_samples = fit_multi_horizon(window)
+    model, n_train_samples = fit_multi_horizon(window, window_days=window_days)
     logger.info(
         "Trained MultiHorizon model on %d clean rows from window %s..%s",
         n_train_samples,
@@ -347,7 +368,7 @@ def run_shadow_update(
     )
 
     # 6. Predict + widen with CQR
-    preds = predict_72h(model, parquet, t0)
+    preds = predict_72h(model, parquet, t0, horizons=horizons)
     preds = widen_with_cqr(preds, q)
 
     # 7. Append today's preds (without realised) to pending

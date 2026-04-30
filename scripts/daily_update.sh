@@ -33,7 +33,11 @@ cd $AUGUR_DIR && git pull --quiet
 
 # Load environment
 source $AUGUR_DIR/.venv/bin/activate
-export $(cat $AUGUR_DIR/.env | xargs)
+# Conventional safe pattern — handles quoted values with spaces, unlike
+# `export $(cat .env | xargs)` which word-splits on whitespace.
+set -a
+source $AUGUR_DIR/.env
+set +a
 
 # Run ARF model update (production — must succeed)
 echo "Running ARF model update..."
