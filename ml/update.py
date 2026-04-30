@@ -141,6 +141,7 @@ def update_model(model, state, data):
     # Rolling error history for confidence bands (keep last 500 errors)
     error_history = state.get("error_history", [])
     error_hours = state.get("error_hours", [])
+    error_prices = state.get("error_prices", [])
 
     errors = []
     for ts, price in new_prices.items():
@@ -167,10 +168,12 @@ def update_model(model, state, data):
         errors.append(abs(err))
         error_history.append(err)
         error_hours.append(ts.hour)
+        error_prices.append(float(price))
 
     # Trim to last 500 (parallel arrays — must stay aligned)
     error_history = error_history[-500:]
     error_hours = error_hours[-500:]
+    error_prices = error_prices[-500:]
 
     # Update state
     n_new = len(errors)
@@ -182,6 +185,7 @@ def update_model(model, state, data):
     state["price_buffer"] = fb.get_price_buffer()
     state["error_history"] = error_history
     state["error_hours"] = error_hours
+    state["error_prices"] = error_prices
 
     if mae is not None:
         state.setdefault("metrics", {})["update_mae"] = round(mae, 2)
@@ -194,6 +198,28 @@ def update_model(model, state, data):
             np.mean([abs(e) for e in error_history[-168:]]), 2
         )
 
+    # ARF slice-MAE on realised < LOW_PRICE_THRESHOLD — formal evaluable for
+    # promotion criterion (a) of the LightGBM-shadow plan §6. error_prices was
+    # introduced in EXP-009 M3 step 3; legacy state.json entries pre-dating it
+    # have shorter error_prices than error_history. Pair only the tail-aligned
+    # window: alignment grows naturally as new hours roll the buffer.
+    LOW_PRICE_THRESHOLD = 30.0
+    state["metrics"]["mae_at_low_price_threshold"] = LOW_PRICE_THRESHOLD
+    n_aligned = min(len(error_history), len(error_prices))
+    if n_aligned > 0:
+        errs_aligned = error_history[-n_aligned:]
+        prices_aligned = error_prices[-n_aligned:]
+        low_errs = [
+            abs(e) for e, p in zip(errs_aligned, prices_aligned) if p < LOW_PRICE_THRESHOLD
+        ]
+        state["metrics"]["mae_at_low_price_n"] = len(low_errs)
+        state["metrics"]["mae_at_low_price"] = (
+            round(float(np.mean(low_errs)), 2) if low_errs else None
+        )
+    else:
+        state["metrics"]["mae_at_low_price"] = None
+        state["metrics"]["mae_at_low_price_n"] = 0
+
     # Append to metrics history (one entry per daily update, cap at 365 days)
     if mae is not None:
         history_entry = {
@@ -203,6 +229,8 @@ def update_model(model, state, data):
             "last_week_mae": round(state["metrics"].get("last_week_mae", mae), 2),
             "n_samples": prev_n + n_new,
             "mae_vs_exchange": None,  # backfilled in main() if exchange data available
+            "mae_at_low_price": state["metrics"].get("mae_at_low_price"),
+            "mae_at_low_price_n": state["metrics"].get("mae_at_low_price_n", 0),
         }
         metrics_history = state.get("metrics_history", [])
         metrics_history.append(history_entry)
@@ -506,8 +534,10 @@ def write_forecast_json(forecast, forecast_upper, forecast_lower, state, output_
     with open(output_path, "w") as f:
         json.dump(output, f, indent=2)
 
-    # Save timestamped archive copy for backtesting
-    archive_dir = output_dir.parent / "ml" / "forecasts"
+    # Save timestamped archive copy for backtesting. ``output_dir`` is
+    # ``augur_dir/static/data``; the archive lives under ``augur_dir/ml/forecasts``
+    # (per CLAUDE.md "Forecast archive: timestamped copies in ml/forecasts/").
+    archive_dir = output_dir.parent.parent / "ml" / "forecasts"
     archive_dir.mkdir(parents=True, exist_ok=True)
     datestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
     archive_path = archive_dir / f"{datestamp}_forecast.json"

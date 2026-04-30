@@ -4,6 +4,54 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
+## 2026-04-29 — LightGBM-Quantile shadow: backtest + band fix (EXP-009, EXP-010)
+
+**Trigger**: Plan milestone 2 (`docs/lightgbm-quantile-shadow-plan.md`) — first comparison numbers vs ARF on the regime-shift period.
+
+**What ran**: Walk-forward backtest harness (`ml/shadow/backtest.py`, `ml/shadow/features_pandas.py`) over 2026-04-01 → 2026-04-28, fitting `LightGBMQuantileForecaster` on a rolling 28-day window per evaluation day, predicting the next 24 hours with realised lag inputs. Single-horizon, perfect-lag — apples-to-apples with River ARF's `update_mae`. 24-column ARF parity feature set; `renewable_pressure` not yet included.
+
+**Result vs ARF (apples-to-apples h+1 window 2026-04-14 → 04-28)**: 15 calendar days, ARF cron skipped 04-22 so 14 days are merge-evaluable. All MAE numbers below are h+1 perfect-lag (next-hour given realised lag inputs) — apples-to-apples with ARF's `update_mae`. Iterated 72h behaviour is a separate question and is deferred to milestone 3.
+
+| | LightGBM | ARF (`update_mae`) |
+|---|---|---|
+| Mean MAE h+1 | **13.21** | **21.95** |
+| Wins | **14 / 14 evaluable days** | — |
+| Mean improvement | **+46 %** | — |
+| Worst day (04-26, min realised −413 EUR/MWh) | 60.72 | 69.05 |
+| Recovery 04-27/-28 | 12.25 / 8.67 | 27.79 / 28.96 |
+
+LightGBM beats ARF on every evaluable day of the comparison window, including the regime-shift extreme days; the recovery on 04-27/-28 is the cleanest signal that the new architecture handles the regime that broke ARF. (LightGBM also has predictions for 04-22 with MAE 8.17, but ARF skipped that date so it's not in the merged comparison.)
+
+**Issue surfaced — band miscalibration**: Raw P80 empirical coverage was 56.3 %, well below the [75 %, 85 %] target in plan §6 (b). Diagnostic (`ml/shadow/backtest_results/diagnose_bands.py`) showed the miss is **chronic** (24 / 28 days under target, 0 over) and **bilateral** (25 % below P10, 19 % above P90), correlated negatively with realised volatility. Pinball-loss minimization on small finite samples gives systematically narrow quantile estimates.
+
+**Fix — split-conformal correction (EXP-010)**: `ml/shadow/conformal.py` adds CQR (Romano, Patterson, Candès 2019) with a 7-day rolling calibration window. 2x2 matrix `{28d, 56d} × {raw, CQR}` showed both CQR variants land in target (28d: 0.768, 56d: 0.765); 56d marginally improves point predictions (MAE 12.20 vs 12.83, evening peak 11.42 vs 13.26) without extra infrastructure. Per-day coverage is bimodal (over-cover calm, under-cover volatile) but the 14-day aggregate is stably 0.775 — and the 14-day aggregate is what plan §6 actually measures.
+
+**Decision — final design for milestone 3**: `window_days=56` + CQR(7-day calibration, target 0.80). Plan §6 readings:
+
+- (a) MAE on realised < 30 EUR/MWh ≥ 25 % better than ARF — **Likely PASS**, formally TBD (ARF slice MAE not in `metrics_history.csv`; milestone 3 cron will log it alongside).
+- (b) P80 empirical coverage in [75 %, 85 %] — **PASS** (0.775 over the 14-day window).
+- (c) Weekday evening peak (16-19 UTC) MAE ≤ +10 % of ARF — **PASS** (11.42 vs ARF 21.95 mean).
+
+**Open items for milestone 3** (gathered from this work + a review battery on 2026-04-29):
+
+- **HMAC-sign pickle artifacts before sadalsuud writes one.** `LightGBMQuantileForecaster.load` uses `pickle.load` with no integrity check; reuse existing `HMAC_KEY_B64` infrastructure (precedent: `utils/secure_data_handler.py`). Security MEDIUM, prereq for any cron landing.
+- **ARF slice-MAE logging in cron** so promotion criterion (a) becomes formally evaluable rather than "Likely PASS, formally TBD".
+- **`renewable_pressure` ablation** on the 56d_cqr backtest harness before the 14-day shadow window starts.
+- **Per-day coverage caveat for criterion (b)**. Aggregate P80 = 0.775 passes [75%, 85%], but 04-25 / 04-26 (the regime-shift days) sit at ~0.46 / ~0.50 even with CQR. Show per-day alongside aggregate in any promotion doc; consider ACI (Gibbs & Candès 2021) if per-day stability becomes a criterion.
+- **Always state h+1 qualifier with MAE headlines** until iterated multi-horizon validation lands.
+- Code nits worth folding in along the way: warning instead of silent skip on short training windows in `backtest.py:73`; `pd.to_datetime(..., utc=True)` in `compute_metrics`; build prediction DataFrames from `X_eval.index` instead of positional `zip`.
+
+**Branch**: `feat/lightgbm-shadow`. ARF cron continues to drive the dashboard.
+
+**Artifacts**:
+- `ml/shadow/backtest_results/summary.md` — milestone 2 detailed summary
+- `ml/shadow/backtest_results/milestone_2_5_summary.md` — milestone 2.5 detailed summary
+- `ml/shadow/backtest_results/predictions.parquet`, `predictions_28d.parquet`, `predictions_56d.parquet` — full per-hour predictions
+- `ml/shadow/backtest_results/comparison.csv`, `matrix_summary.csv`, `band_diagnostic.csv`, `matrix_per_day.csv`
+- `experiments/registry.jsonl` — EXP-009 (backtest), EXP-010 (CQR)
+
+---
+
 ## 2026-04-28 — River ARF retired (end-of-run)
 
 **Trigger**: Live `mae` climbed from 12.16 (04-21) to 35.58 (04-28) — roughly 3× the post-warmup baseline. Forecast forensics on the 04-25 → 04-28 archives localised the failure to the 09–13 UTC solar trough where the model overpredicts by 55–80 EUR/MWh while realised prices crash to −20 to −30 EUR/MWh.

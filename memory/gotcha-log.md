@@ -34,11 +34,30 @@
 **Pattern**: When a feature has been shown low-importance by Lasso (temperature dropped per `memory/ml-decisions.md`), "perfect" vs "noisy" variants of that feature family are not meaningfully different. Test the assumption before architecting around it.
 **Status**: [RESOLVED] — captured in `docs/long-history-mini-results.md` on `feat/long-history-warmup` branch.
 
-### Python stdout encoding breaks on Unicode arrows under Git Bash (2026-04-19)
+### Backtest "N/N wins" claim missed an ARF cron-skip day (2026-04-29)
+**Problem**: Milestone 2 writeup led with "LightGBM wins 14/14 days" on the 14-day apples-to-apples window. Surfaced in review: window is 15 calendar days (04-14 → 04-28 inclusive), but ARF's `metrics_history.csv` is missing 04-22 (cron skip). The merge produced 14 rows — every one a LGBM win — so "14/14 wins" is technically correct but reads as "swept a contiguous 14-day window" when actually it's "all 14 evaluable days out of 15 calendar days, with 04-22 unrepresented in ARF". LGBM had predictions for 04-22 too (MAE 8.17) and would have won.
+**Root cause**: When merging on an external metrics series with cron gaps, headlines built from the merge silently inherit the gap. Sample-size phrasing didn't distinguish "evaluable rows" from "calendar days".
+**Fix**: State explicitly in summary: "LGBM wins all N evaluable days of the M-day calendar window; the gap on YYYY-MM-DD is an external-cron skip, not a LGBM failure." Done in `ml/shadow/backtest_results/summary.md`, `milestone_2_5_summary.md`, `docs/model-progress-log.md`.
+**Pattern**: Whenever a comparison merges against an external metrics series (ARF's `metrics_history.csv`, an exchange feed, etc.), check `len(merged) == calendar_days` before stating "N/N" claims. ARF cron has historical gaps on 04-08 and 04-22 in this corpus; future merges into this series should expect occasional skips.
+**Status**: [RESOLVED]
+
+---
+
+### Backtest MAE headlines need an explicit horizon qualifier (2026-04-29)
+**Problem**: Milestone 2/2.5 summaries originally led with "MAE 12.83" / "+46% vs ARF" without specifying that this measures next-hour prediction with realized lag inputs ("h+1 perfect-lag"). The deployed system forecasts 72 hours ahead via iterated lag feeding; iterated MAE will be materially higher. A reader who saw only the headline could assume the deployed system would land at 12-13 EUR/MWh — which is the model-quality ceiling, not the deployed-system quality. Surfaced in the data-analyzer review.
+**Root cause**: Internal comparison framework focuses on h+1 because that's apples-to-apples with ARF's `update_mae` (which is also predict-before-learn at h+1). Easy to forget the qualifier when stating numbers in summaries.
+**Fix**: Always pair MAE headlines from a contemporaneous-prediction backtest with the qualifier "h+1 perfect-lag" or equivalent. Once iterated multi-horizon validation lands (milestone 3+), state which horizon the headline measures. Updated `summary.md`, `milestone_2_5_summary.md`, `model-progress-log.md`, `memory/arf-retired.md` (auto-memory).
+**Pattern**: For any forecasting model with a multi-step horizon, the headline metric must specify the horizon it covers. Single-step quality is the ceiling, not the operating point.
+**Status**: [RESOLVED]
+
+---
+
+### Python stdout encoding breaks on Unicode arrows under Git Bash (2026-04-19, recurred 2026-04-29)
 **Problem**: Probe script printing `→` arrow crashed with `UnicodeEncodeError: 'charmap' codec can't encode character '\u2192'` on Windows. Aborted a multi-probe parallel run mid-way.
 **Root cause**: Windows Python defaults to cp1252 stdout when invoked via Git Bash without explicit encoding. Non-ASCII output fails immediately.
-**Fix**: Set `PYTHONIOENCODING=utf-8` before the python invocation, or avoid non-ASCII characters in print statements for throwaway scripts.
-**Pattern**: If running ad-hoc python on Windows Git Bash with any non-ASCII output, prepend `PYTHONIOENCODING=utf-8`. For saved scripts, use ASCII-only separators (`->`, `..`) over Unicode.
+**Fix**: Set `PYTHONIOENCODING=utf-8` before the python invocation, or avoid non-ASCII characters in print statements for committed scripts.
+**Recurrence (2026-04-29)**: Same trap in `ml/shadow/backtest.py` startup line — `print(f"... {a} -> {b} ...")` originally written with a Unicode arrow. Caught immediately on first invocation; one-character fix.
+**Pattern**: If running ad-hoc python on Windows Git Bash with any non-ASCII output, prepend `PYTHONIOENCODING=utf-8`. For committed scripts use ASCII-only separators (`->`, `..`) over Unicode — environment-independent and survives cp1252 callers. Two recurrences in 10 days makes this a write-time discipline, not a runtime workaround.
 **Status**: [RESOLVED]
 
 ---

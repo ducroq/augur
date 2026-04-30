@@ -17,6 +17,7 @@ config/local/
 # Decrypted data files
 static/data/*.json
 !static/data/augur_forecast.json
+!static/data/augur_forecast_shadow.json
 data/*.json
 
 # Hugo build files
@@ -82,6 +83,17 @@ ml/models/*.tmp
 # local copies on main after a checkout-back are leftovers.
 ml/models/river_baseline/
 ml/models/river_p1/
+
+# Experiment subdirectories: pickles/state are noisy, keep only backtest reports
+ml/models/river_baseline/*
+ml/models/river_p1/*
+!ml/models/river_baseline/backtest_report.json
+!ml/models/river_p1/backtest_report.json
+
+# EXP-009 shadow: pickle is regenerated nightly from the rolling training
+# window; only state/forecast/eval-log carry across runs and need committing.
+ml/models/shadow/shadow_model.pkl
+ml/models/shadow/shadow_model.pkl.hmac
 
 # ML training data (derived, rebuild with consolidate.py)
 ml/data/*.parquet

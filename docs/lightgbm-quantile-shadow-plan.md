@@ -85,10 +85,10 @@ Only when all three hold for 14 consecutive days do we promote. Anything weaker 
 |---|---|---|---|
 | 0. Reconsolidate parquet through 2026-04-28 | ✅ done 2026-04-28 (local) | 1 h | `training_history.parquet` rebuilt to 5,039 rows; April captured (100 negative-price hours, min −413 EUR/MWh, 0% April NaN). Parquet is gitignored — sadalsuud regenerates separately. |
 | 1. `ml/shadow/lightgbm_quantile.py` model wrapper | ✅ done 2026-04-28 (commit `cb5d2f2` on `feat/lightgbm-shadow`) | 2 h | 18 unit tests pass; full repo suite 35/35. `lightgbm>=4.0` added to `requirements.txt` on the same branch. |
-| 2. Backtest harness over April 2026 holdout | pending | 2 h | first comparison numbers vs ARF on the regime-shift period |
+| 2. Backtest harness over April 2026 holdout (incl. 2.5 band fix) | ✅ done 2026-04-29 (commits `461ee44`, milestone 2.5 commit) | ~4 h | LightGBM beats ARF 14/14 days on the apples-to-apples 14-day window (mean MAE 13.21 vs 21.95, +46%). Raw P80 coverage 56.3% surfaced as a chronic miscalibration; addressed with split-conformal correction (`ml/shadow/conformal.py`). Final design: 56-day window + CQR (7-day calibration, target 0.80), aggregate coverage 77.5% on the 14-day window. Registered as EXP-009 (backtest) and EXP-010 (CQR) in `experiments/registry.jsonl`. Single-horizon perfect-lag eval; iterated 72h-ahead deferred to milestone 3. |
 | 3. Nightly shadow update wired into cron | pending | 2 h | shadow forecast file appearing daily on origin/main |
 | 4. 14-day shadow window | pending | 14 d | eval log populated |
-| 5. Promotion decision + EXP-009 register or park | pending | — | `experiments/registry.jsonl` updated either way |
+| 5. Promotion decision + EXP-009/010 outcome | pending | — | `experiments/registry.jsonl` updated with promotion or park decision |
 
 Total active work before the 14-day waiting period: roughly one focused day. The waiting period dominates.
 
