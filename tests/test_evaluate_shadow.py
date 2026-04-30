@@ -116,6 +116,7 @@ class TestEvaluateOneDay:
         out = evaluate_one_day("2026-04-29", rows, arf_predictions=None)
         assert out is not None
         assert out["n_overlap_hours"] == 24
+        assert out["n_low_price_hours"] == 0
         assert out["lightgbm_mae"] == 10.0
         # realised 60 >= 30, so no low-price slice
         assert out["lightgbm_mae_at_low_price"] is None
@@ -123,6 +124,9 @@ class TestEvaluateOneDay:
         assert out["lightgbm_band_coverage_p80"] == 1.0
         assert out["arf_mae"] is None
         assert out["arf_mae_at_low_price"] is None
+        # No ARF predictions → peak fields all null
+        assert out["lightgbm_peak_hour_mae"] is None
+        assert out["arf_peak_hour_mae"] is None
         assert out["peak_hour_mae_delta"] is None
 
     def test_lightgbm_vs_arf_full_overlap(self):
@@ -134,6 +138,9 @@ class TestEvaluateOneDay:
         assert out["lightgbm_mae"] == 10.0
         assert out["arf_mae"] == 10.0
         # 2026-04-29 is a Wednesday (UTC). Peak hours 16,17,18,19 = 4 hours.
+        # Both models have constant errors on every hour so peak MAE == full-day MAE.
+        assert out["lightgbm_peak_hour_mae"] == 10.0
+        assert out["arf_peak_hour_mae"] == 10.0
         assert out["peak_hour_mae_delta"] == 0.0
 
     def test_low_price_slice(self):
@@ -151,6 +158,8 @@ class TestEvaluateOneDay:
         assert out["lightgbm_mae"] == 20.0
         # Slice MAE on real<30 = 30
         assert out["lightgbm_mae_at_low_price"] == 30.0
+        # 12 of the 24 hours had realised < 30
+        assert out["n_low_price_hours"] == 12
 
     def test_band_coverage_uses_p10_p90(self):
         # Realised 60, p10=70, p90=80 -> realised below p10 -> coverage 0
@@ -168,14 +177,21 @@ class TestEvaluateOneDay:
             rows.append(_calib_row(ts, "2026-04-29", 0.0, 50.0, 80.0, 70.0))
         ts_to_arf = {pd.Timestamp(r["timestamp_utc"]): 60.0 for r in rows}
         out = evaluate_one_day("2026-04-29", rows, arf_predictions=ts_to_arf)
-        assert out["peak_hour_mae_delta"] == 10.0  # both models share same overall MAEs
+        # Both models constant: peak MAE == full-day MAE
+        assert out["lightgbm_peak_hour_mae"] == 20.0
+        assert out["arf_peak_hour_mae"] == 10.0
+        assert out["peak_hour_mae_delta"] == 10.0
+        # Sanity: criterion (c) reader can compute relative delta directly from log
+        assert out["peak_hour_mae_delta"] / out["arf_peak_hour_mae"] == 1.0
 
     def test_weekend_has_no_peak_delta(self):
         # 2026-05-02 is a Saturday — no weekday peak hours
         rows = _full_day_calibration("2026-05-02", 50.0, 60.0, 40.0, 70.0)
         ts_to_arf = {pd.Timestamp(r["timestamp_utc"]): 70.0 for r in rows}
         out = evaluate_one_day("2026-05-02", rows, arf_predictions=ts_to_arf)
-        # No weekday peak hours → peak_delta None
+        # No weekday peak hours → peak fields all null
+        assert out["lightgbm_peak_hour_mae"] is None
+        assert out["arf_peak_hour_mae"] is None
         assert out["peak_hour_mae_delta"] is None
         # MAE still computed
         assert out["lightgbm_mae"] == 10.0

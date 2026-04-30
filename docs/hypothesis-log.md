@@ -46,31 +46,31 @@ rows = [json.loads(l) for l in open("ml/shadow/eval_log.jsonl") if l.strip()][-1
 lgbm_low = np.mean([r["lightgbm_mae_at_low_price"] for r in rows if r["lightgbm_mae_at_low_price"] is not None])
 arf_low  = np.mean([r["arf_mae_at_low_price"]      for r in rows if r["arf_mae_at_low_price"]      is not None])
 ratio_a = lgbm_low / arf_low
-n_low = sum(... )  # need to add n_low_price_hours to schema (see prereqs)
+n_low = sum(r["n_low_price_hours"] for r in rows)
 
 # (b) Coverage — both guards
 mean_cov = np.mean([r["lightgbm_band_coverage_p80"] for r in rows])
 n_low_days = sum(1 for r in rows if r["lightgbm_band_coverage_p80"] < 0.60)
 
-# (c) Peak-hour delta
-# Requires arf_peak_hour_mae in schema (see prereqs)
-peak_ratios = [(r["lightgbm_peak_hour_mae"] / r["arf_peak_hour_mae"]) for r in rows if r["arf_peak_hour_mae"]]
-mean_peak_ratio = np.mean(peak_ratios)
+# (c) Peak-hour delta — directly evaluable from the log
+peak_ratios = [r["lightgbm_peak_hour_mae"] / r["arf_peak_hour_mae"]
+               for r in rows
+               if r["arf_peak_hour_mae"] and r["lightgbm_peak_hour_mae"]]
+mean_peak_ratio = np.mean(peak_ratios) if peak_ratios else None
 
 # Decision
 PASS_A = ratio_a <= 0.75 and n_low >= 50
 PASS_B = 0.75 <= mean_cov <= 0.85 and n_low_days < 3
-PASS_C = mean_peak_ratio <= 1.10
+PASS_C = mean_peak_ratio is not None and mean_peak_ratio <= 1.10
 PROMOTE = PASS_A and PASS_B and PASS_C
 ```
 
 Failure of any one criterion **does not** automatically refute the hypothesis — read the signals against the alternatives above. Refutation requires (a) failing AND none of the failure-mode signals firing, or any criterion failing for a reason not anticipated here.
 
-**Prerequisites — schema gaps surfaced by round-2 review (must land before this hypothesis is evaluable):**
+**Prerequisites — schema gaps surfaced by round-2 review:**
 
-- Add `n_low_price_hours` (int) to `evaluate_one_day`'s output dict and write to eval_log. Today the slice n is implicit in `lightgbm_mae_at_low_price is not None` but the count itself isn't recorded.
-- Add `arf_peak_hour_mae` (float|null) and `lightgbm_peak_hour_mae` (float|null) to `evaluate_one_day` output and write to eval_log. The current `peak_hour_mae_delta` is in EUR/MWh, not relative — without the two underlying values, criterion (c) cannot be evaluated from the log alone.
-- Migrate sadalsuud's existing `static/ml/forecasts/` archives to `ml/forecasts/` (path-fix from M3 review fixup A) so historical ARF predictions are findable by `evaluate_shadow.py`.
+- ✅ `n_low_price_hours`, `arf_peak_hour_mae`, `lightgbm_peak_hour_mae` added to `evaluate_one_day` output and eval_log schema (commit landing this hypothesis update).
+- ⏳ Migrate sadalsuud's existing `static/ml/forecasts/` archives to `ml/forecasts/` (path-fix from M3 review fixup A) so historical ARF predictions are findable by `evaluate_shadow.py`. Server-side; not blocking the hypothesis log itself but blocking M4 cron from producing useful `arf_*` fields.
 
 **Revisit trigger:** When `ml/shadow/eval_log.jsonl` contains 14 contiguous days of rows (date column), evaluating from the *first* row whose `arf_mae` is non-null. Earliest plausible date assuming sadalsuud cron starts 2026-05-01 and the prerequisites land first: 2026-05-15.
 

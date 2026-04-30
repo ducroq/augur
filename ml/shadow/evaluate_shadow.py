@@ -10,12 +10,15 @@ specified in the LightGBM-shadow plan §5 and appends one row to the JSONL log.
 Schema (one row per fully-realised eval day):
     date                          str  YYYY-MM-DD UTC
     n_overlap_hours               int  hours where both models predicted
+    n_low_price_hours             int  hours where realised < 30 EUR/MWh (transparency for criterion (a))
     lightgbm_mae                  float
     arf_mae                       float | null  (null when no ARF archive overlaps)
     lightgbm_mae_at_low_price     float | null  (realised < 30 EUR/MWh; null when n=0)
     arf_mae_at_low_price          float | null
     lightgbm_band_coverage_p80    float  (post-CQR — p10/p90 in pending are CQR-widened)
-    peak_hour_mae_delta           float | null  (lightgbm - arf MAE on weekday 16-19 UTC)
+    lightgbm_peak_hour_mae        float | null  (weekday 16-19 UTC; null when no weekday peak in day)
+    arf_peak_hour_mae             float | null
+    peak_hour_mae_delta           float | null  (lightgbm_peak - arf_peak; same hours, apples-to-apples)
 
 Promotion criteria (plan §6) read this log:
     (a) lightgbm_mae_at_low_price ≤ 0.75 * arf_mae_at_low_price (>=25% relative win)
@@ -137,6 +140,7 @@ def evaluate_one_day(
 
     lgbm_mae = float(df["lgbm_abs_err"].mean())
     low_mask = df["realized"] < LOW_PRICE_THRESHOLD
+    n_low_price = int(low_mask.sum())
     lgbm_low_mae = (
         float(df.loc[low_mask, "lgbm_abs_err"].mean()) if low_mask.any() else None
     )
@@ -147,6 +151,8 @@ def evaluate_one_day(
 
     arf_mae: float | None = None
     arf_low_mae: float | None = None
+    lgbm_peak_mae: float | None = None
+    arf_peak_mae: float | None = None
     peak_delta: float | None = None
 
     if arf_predictions:
@@ -167,9 +173,9 @@ def evaluate_one_day(
                 & (ts.dt.weekday < 5)
             )
             if peak_mask.any():
-                lgbm_peak = float(with_arf.loc[peak_mask, "lgbm_abs_err"].mean())
-                arf_peak = float(with_arf.loc[peak_mask, "arf_abs_err"].mean())
-                peak_delta = lgbm_peak - arf_peak
+                lgbm_peak_mae = float(with_arf.loc[peak_mask, "lgbm_abs_err"].mean())
+                arf_peak_mae = float(with_arf.loc[peak_mask, "arf_abs_err"].mean())
+                peak_delta = lgbm_peak_mae - arf_peak_mae
 
     def _round(x: float | None, n: int = 3) -> float | None:
         return None if x is None else round(x, n)
@@ -177,11 +183,14 @@ def evaluate_one_day(
     return {
         "date": eval_day,
         "n_overlap_hours": int(n_overlap),
+        "n_low_price_hours": n_low_price,
         "lightgbm_mae": _round(lgbm_mae),
         "arf_mae": _round(arf_mae),
         "lightgbm_mae_at_low_price": _round(lgbm_low_mae),
         "arf_mae_at_low_price": _round(arf_low_mae),
         "lightgbm_band_coverage_p80": _round(band_coverage, 4),
+        "lightgbm_peak_hour_mae": _round(lgbm_peak_mae),
+        "arf_peak_hour_mae": _round(arf_peak_mae),
         "peak_hour_mae_delta": _round(peak_delta),
     }
 
