@@ -534,8 +534,10 @@ def write_forecast_json(forecast, forecast_upper, forecast_lower, state, output_
     with open(output_path, "w") as f:
         json.dump(output, f, indent=2)
 
-    # Save timestamped archive copy for backtesting
-    archive_dir = output_dir.parent / "ml" / "forecasts"
+    # Save timestamped archive copy for backtesting. ``output_dir`` is
+    # ``augur_dir/static/data``; the archive lives under ``augur_dir/ml/forecasts``
+    # (per CLAUDE.md "Forecast archive: timestamped copies in ml/forecasts/").
+    archive_dir = output_dir.parent.parent / "ml" / "forecasts"
     archive_dir.mkdir(parents=True, exist_ok=True)
     datestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
     archive_path = archive_dir / f"{datestamp}_forecast.json"
