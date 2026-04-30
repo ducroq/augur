@@ -85,6 +85,11 @@ ml/models/river_p1/*
 !ml/models/river_baseline/backtest_report.json
 !ml/models/river_p1/backtest_report.json
 
+# EXP-009 shadow: pickle is regenerated nightly from the rolling training
+# window; only state/forecast/eval-log carry across runs and need committing.
+ml/models/shadow/shadow_model.pkl
+ml/models/shadow/shadow_model.pkl.hmac
+
 # ML training data (derived, rebuild with consolidate.py)
 ml/data/*.parquet
 
