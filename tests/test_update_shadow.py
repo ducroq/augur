@@ -16,7 +16,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ml.shadow.secure_pickle import HMAC_KEY_ENV, load_verified_pickle, sidecar_path
+from ml.shadow.lightgbm_quantile import MultiHorizonLightGBMQuantileForecaster
+from ml.shadow.secure_pickle import HMAC_KEY_ENV, sidecar_path
 from ml.shadow.update_shadow import (
     DEFAULT_PARQUET,
     HORIZONS,
@@ -306,6 +307,8 @@ class TestRunShadowUpdateSmoke:
         assert meta["cqr_target_coverage"] == 0.80
         assert meta["cqr_calib_days_used"] == 0  # first run
 
-        # Signed pickle round-trips
-        model = load_verified_pickle(shadow_dir / SHADOW_MODEL_FILENAME)
+        # Signed pickle round-trips through the model's HMAC-verified loader
+        model = MultiHorizonLightGBMQuantileForecaster.load(
+            shadow_dir / SHADOW_MODEL_FILENAME
+        )
         assert hasattr(model, "predict_horizons")

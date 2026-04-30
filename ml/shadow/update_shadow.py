@@ -45,7 +45,8 @@ from ml.shadow.lightgbm_quantile import (
     DEFAULT_GROUPS,
     MultiHorizonLightGBMQuantileForecaster,
 )
-from ml.shadow.secure_pickle import save_signed_pickle
+# save/load on MultiHorizonLightGBMQuantileForecaster are HMAC-protected via
+# secure_pickle as of EXP-009 M3 review fixup B.
 
 logger = logging.getLogger(__name__)
 
@@ -367,7 +368,7 @@ def run_shadow_update(
     # 8. Persist artifacts
     shadow_dir.mkdir(parents=True, exist_ok=True)
     model_path = shadow_dir / SHADOW_MODEL_FILENAME
-    save_signed_pickle(model, model_path)
+    model.save(model_path)  # HMAC-signed via secure_pickle (see lightgbm_quantile.py)
     logger.info("Saved HMAC-signed model to %s", model_path)
 
     forecast, upper, lower = format_forecast_dicts(preds)

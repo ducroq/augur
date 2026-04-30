@@ -1,5 +1,6 @@
 """Tests for LightGBMQuantileForecaster — fit/predict/save/load + parquet smoke."""
 
+import base64
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +14,13 @@ from ml.shadow.lightgbm_quantile import (
     LightGBMQuantileForecaster,
     MultiHorizonLightGBMQuantileForecaster,
 )
+from ml.shadow.secure_pickle import HMAC_KEY_ENV
+
+
+@pytest.fixture(autouse=True)
+def _hmac_key(monkeypatch):
+    """Autouse: save/load route through secure_pickle which requires HMAC_KEY_B64."""
+    monkeypatch.setenv(HMAC_KEY_ENV, base64.b64encode(b"k" * 32).decode("ascii"))
 
 
 # Fast hyperparams for unit tests — accuracy doesn't matter, exception-freeness does.
@@ -361,3 +369,45 @@ class TestMultiHorizonSaveLoad:
         m = MultiHorizonLightGBMQuantileForecaster()
         with pytest.raises(RuntimeError, match="unfit"):
             m.save(tmp_path / "x.pkl")
+
+
+class TestSaveLoadHMACEnforcement:
+    """Verify that save/load on both classes route through secure_pickle.
+
+    Closes the M3-review HIGH finding: ``.load()`` classmethods previously did
+    raw ``pickle.load`` and bypassed HMAC verification.
+    """
+
+    def test_single_horizon_load_fails_on_tampered_pickle(self, synthetic_xy, tmp_path):
+        from ml.shadow.secure_pickle import HMACVerificationError
+
+        X, y = synthetic_xy
+        m = LightGBMQuantileForecaster(hyperparams=FAST_HP).fit(X, y)
+        path = tmp_path / "m.pkl"
+        m.save(path)
+        # Tamper the pickle body — the sidecar still holds the *original* digest.
+        path.write_bytes(b"\x00" * 16)
+        with pytest.raises(HMACVerificationError):
+            LightGBMQuantileForecaster.load(path)
+
+    def test_multi_horizon_load_fails_on_tampered_pickle(self, synthetic_timeseries, tmp_path):
+        from ml.shadow.secure_pickle import HMACVerificationError
+
+        X, y = synthetic_timeseries
+        m = MultiHorizonLightGBMQuantileForecaster(hyperparams=FAST_HP).fit(X, y)
+        path = tmp_path / "mh.pkl"
+        m.save(path)
+        path.write_bytes(b"\x00" * 16)
+        with pytest.raises(HMACVerificationError):
+            MultiHorizonLightGBMQuantileForecaster.load(path)
+
+    def test_single_horizon_load_fails_without_key(self, synthetic_xy, tmp_path, monkeypatch):
+        from ml.shadow.secure_pickle import HMACVerificationError
+
+        X, y = synthetic_xy
+        m = LightGBMQuantileForecaster(hyperparams=FAST_HP).fit(X, y)
+        path = tmp_path / "m.pkl"
+        m.save(path)
+        monkeypatch.delenv(HMAC_KEY_ENV, raising=False)
+        with pytest.raises(HMACVerificationError, match="unset"):
+            LightGBMQuantileForecaster.load(path)

@@ -15,7 +15,6 @@ Two wrappers:
 
 from __future__ import annotations
 
-import pickle
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
@@ -23,6 +22,8 @@ from typing import Sequence
 import numpy as np
 import pandas as pd
 from lightgbm import LGBMRegressor
+
+from ml.shadow.secure_pickle import load_verified_pickle, save_signed_pickle
 
 DEFAULT_QUANTILES: tuple[float, float, float] = (0.10, 0.50, 0.90)
 # Plan §2 horizon groups: momentum, intraday weather, multi-day weather+calendar.
@@ -105,25 +106,23 @@ class LightGBMQuantileForecaster:
         return np.sort(raw, axis=1)
 
     def save(self, path: Path | str) -> None:
+        """HMAC-signed save via ``secure_pickle.save_signed_pickle``."""
         if not self.models:
             raise RuntimeError("Cannot save unfit model")
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "wb") as f:
-            pickle.dump(
-                {
-                    "quantiles": self.quantiles,
-                    "hp": self.hp,
-                    "models": self.models,
-                    "feature_names": self.feature_names,
-                },
-                f,
-            )
+        save_signed_pickle(
+            {
+                "quantiles": self.quantiles,
+                "hp": self.hp,
+                "models": self.models,
+                "feature_names": self.feature_names,
+            },
+            path,
+        )
 
     @classmethod
     def load(cls, path: Path | str) -> "LightGBMQuantileForecaster":
-        with open(path, "rb") as f:
-            payload = pickle.load(f)
+        """HMAC-verified load via ``secure_pickle.load_verified_pickle``."""
+        payload = load_verified_pickle(path)
         inst = cls(quantiles=payload["quantiles"], hyperparams=payload["hp"])
         inst.models = payload["models"]
         inst.feature_names = payload["feature_names"]
@@ -285,26 +284,24 @@ class MultiHorizonLightGBMQuantileForecaster:
         return out
 
     def save(self, path: Path | str) -> None:
+        """HMAC-signed save via ``secure_pickle.save_signed_pickle``."""
         if self.feature_names is None:
             raise RuntimeError("Cannot save unfit model")
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "wb") as f:
-            pickle.dump(
-                {
-                    "groups": self.groups,
-                    "quantiles": self.quantiles,
-                    "hp": self.hp,
-                    "group_models": self.group_models,
-                    "feature_names": self.feature_names,
-                },
-                f,
-            )
+        save_signed_pickle(
+            {
+                "groups": self.groups,
+                "quantiles": self.quantiles,
+                "hp": self.hp,
+                "group_models": self.group_models,
+                "feature_names": self.feature_names,
+            },
+            path,
+        )
 
     @classmethod
     def load(cls, path: Path | str) -> "MultiHorizonLightGBMQuantileForecaster":
-        with open(path, "rb") as f:
-            payload = pickle.load(f)
+        """HMAC-verified load via ``secure_pickle.load_verified_pickle``."""
+        payload = load_verified_pickle(path)
         inst = cls(
             groups=payload["groups"],
             quantiles=payload["quantiles"],
