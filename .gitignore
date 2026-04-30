@@ -79,6 +79,12 @@ ml/models/*.tmp
 !ml/models/river_model.pkl
 !ml/models/state.json
 
+# Experiment subdirectories: pickles/state are noisy, keep only backtest reports
+ml/models/river_baseline/*
+ml/models/river_p1/*
+!ml/models/river_baseline/backtest_report.json
+!ml/models/river_p1/backtest_report.json
+
 # ML training data (derived, rebuild with consolidate.py)
 ml/data/*.parquet
 
