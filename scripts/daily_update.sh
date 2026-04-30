@@ -34,10 +34,16 @@ cd $AUGUR_DIR && git pull --quiet
 # Load environment
 source $AUGUR_DIR/.venv/bin/activate
 # Conventional safe pattern — handles quoted values with spaces, unlike
-# `export $(cat .env | xargs)` which word-splits on whitespace.
-set -a
-source $AUGUR_DIR/.env
-set +a
+# `export $(cat .env | xargs)` which word-splits on whitespace. Guarded
+# so a missing .env doesn't abort under `set -e` and kill the ARF cron
+# (deployment-troubleshooter BLOCKER from EXP-009 M3 round-2 review).
+if [ -f "$AUGUR_DIR/.env" ]; then
+    set -a
+    source $AUGUR_DIR/.env
+    set +a
+else
+    echo "WARN: $AUGUR_DIR/.env not found — relying on cron-supplied env vars."
+fi
 
 # Run ARF model update (production — must succeed)
 echo "Running ARF model update..."
