@@ -9,6 +9,24 @@
 
 ---
 
+### sadalsuud venv missing a Python dep that the cron script silently needed (2026-04-30)
+**Problem**: First manual dry-run of EXP-009 M3 shadow pipeline on sadalsuud crashed with `ModuleNotFoundError: No module named 'lightgbm'`. The M3 commits added `lightgbm>=4.0` to `requirements.txt` but cron doesn't `pip install -r requirements.txt` — it just activates the venv and runs.
+**Root cause**: `scripts/daily_update.sh` activates `.venv` and runs Python directly. There's no dependency-install step. New deps land in requirements.txt locally, get pushed to origin, sadalsuud pulls main, and the cron uses whatever the venv currently has — which may not match requirements.txt.
+**Fix**: `pip install lightgbm>=4.0` manually in sadalsuud's venv. Updated `memory/sadalsuud-server.md` (auto-memory) with the manual-install discipline.
+**Pattern**: When adding a new Python dep that ships in cron, install it manually on sadalsuud BEFORE the next cron, OR extend `daily_update.sh` with an idempotent install (`pip install -r requirements.txt --quiet` is fast on a no-op). The dry-run-before-cron discipline catches this in 30 seconds; the alternative is silent shadow-block failure for a day until someone reads the log.
+**Status**: [RESOLVED] — installed manually 2026-04-30; augur#12 (systemd migration) should also address this with a service-file `ExecStartPre` that ensures deps are current.
+
+---
+
+### Path-fix commit left orphan tracked files in the wrong location (2026-04-30)
+**Problem**: M3 review fixup A redirected ARF forecast archives from `static/ml/forecasts/` (where the buggy `output_dir.parent` calculation wrote them) to `ml/forecasts/` (the documented location). On sadalsuud, the migration `mv` for the existing files surfaced as a working-tree disaster: `git status` showed dozens of deleted files, and the deletions weren't committed to ANY branch. The next `git pull` or branch checkout would have either conflicted or wiped the moved files.
+**Root cause**: `static/ml/forecasts/` was NOT gitignored (only `static/data/*.json` was). So the buggy code had been committing forecast archives to git for weeks. The path-fix commit corrected future writes but didn't address the historical files at the old path — leaving them tracked forever, and any filesystem-level migration showing up as untracked deletions on every machine that runs the cron.
+**Fix**: On sadalsuud, `git restore static/ml/forecasts/` to undo the local deletion (files are tracked, restoration is a checkout); leave the old files in place as frozen historical archives; new writes go to the new path. Both locations now exist; the duplication wastes ~few MB.
+**Pattern**: A path-fix commit should EITHER (a) include `git rm -r <old-path>/` in the same commit so the move is atomic, OR (b) add `<old-path>/` to `.gitignore` so future writes to that path stop being tracked but historical files remain. Option (a) loses history, option (b) leaves orphan tracked files. Check whether the old path was gitignored BEFORE the fix; if not, the fix is incomplete without one of those follow-ups.
+**Status**: [RESOLVED] — sadalsuud and Windows both reconciled; old archives retained as historical reference.
+
+---
+
 ### Pandas mixed timezone offsets in CSV parse to object dtype (2026-04-28)
 **Problem**: `pd.read_csv("metrics_trajectory.csv", parse_dates=["commit_date"])` returned the column as object dtype instead of datetime64. Subsequent `.dt.tz_convert(...)` raised `AttributeError: Can only use .dt accessor with datetimelike values`.
 **Root cause**: The CSV had ISO-8601 timestamps spanning the EU DST transition — values like `2026-03-26T15:18:55+01:00` and `2026-03-29T16:45:06+02:00` in the same column. Pandas' `parse_dates` heuristic falls back to object dtype rather than picking a single dtype with mixed offsets.

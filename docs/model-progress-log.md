@@ -133,3 +133,35 @@ These have been stuck at warmup values (13.8 / 21.12) since April 2, while real 
 **Expected outcome**: Wider forecast range beyond exchange horizon. Actual improvement measurable after next daily update on sadalsuud.
 
 ---
+
+## 2026-04-30 — EXP-009 milestone 3: LightGBM-Quantile shadow pipeline shipped + deployed
+
+**Changes** (merge `84a1af4`/`f77aa5d` to `main`, 14 commits — 6 step + 3 review-fixup A/B/C + 2 prereq + 1 dry-run-fix D + 1 hypothesis-log seed):
+
+1. **`ml/shadow/lightgbm_quantile.py`** — `MultiHorizonLightGBMQuantileForecaster`: 9 LGBM models (3 horizon groups × 3 quantiles), direct multi-horizon via `horizon_h` as a stacked feature. No recursive lag substitution → no variance-collapse pathology. Default groups `(1,6), (7,24), (25,72)`.
+
+2. **`ml/shadow/secure_pickle.py`** — HMAC-SHA256 sidecar (`*.pkl.hmac`) sign/verify. Used by `MultiHorizonLightGBMQuantileForecaster.save/load` so deserialization never runs on an unverified file. Closes the unsigned-pickle RCE risk before sadalsuud writes its first artifact.
+
+3. **`ml/update.py`** — added `error_prices` parallel array + `mae_at_low_price` (slice-MAE on realised < 30 EUR/MWh) so promotion criterion (a) is formally evaluable from ARF state.json. Backward-compatible with legacy state.json (only tail-aligned window contributes).
+
+4. **`ml/shadow/update_shadow.py`** — nightly retrain + predict orchestration. Backfills realised prices into `pending_predictions` from prior runs, computes CQR q (7-day calibration, target 0.80), trains on rolling 56-day window, predicts 72 horizons, widens bands by q. Writes signed pickle + `shadow_state.json` + `static/data/augur_forecast_shadow.json` (NOT consumed by dashboard during shadow phase per plan §5).
+
+5. **`ml/shadow/evaluate_shadow.py`** — daily LightGBM-vs-ARF metrics logger. Cross-references shadow predictions against ARF archives at `ml/forecasts/{YYYYMMDD_HHMM}_forecast.json`, writes one JSON line per fully-realised eval day to `ml/shadow/eval_log.jsonl`. Schema includes `n_low_price_hours`, `lightgbm_peak_hour_mae`, `arf_peak_hour_mae` so all three plan §6 criteria are evaluable directly from the log.
+
+6. **`scripts/daily_update.sh`** — extended with the shadow block under `set +e` so shadow failures don't block the ARF commit. Re-consolidates parquet from energyDataHub each run. Best-effort-adds shadow artifacts (`shadow_state.json`, `augur_forecast_shadow.json`, `eval_log.jsonl`); `shadow_model.pkl` + sidecar are gitignored (regenerated nightly from rolling window).
+
+7. **Path-fix in `ml/update.py:540`** — ARF forecast archive_dir was `output_dir.parent / ml / forecasts` (resolved to `static/ml/forecasts`); now `output_dir.parent.parent / ml / forecasts`. Without this, eval_log.jsonl could never populate `arf_*` fields. Sadalsuud archive history migrated 2026-04-30.
+
+8. **`docs/hypothesis-log.md`** — adopted from ovr.news pattern, M4 promotion-decision hypothesis seeded with falsification criteria pre-committed (concrete numbers, failure-mode signals, runnable Method snippet).
+
+**Reviews**: two rounds of review battery (code-reviewer, security-auditor, data-analyzer, deployment-troubleshooter). Round 1 found 2 HIGH (archive path, gitignore exception), 1 HIGH security (`.load` HMAC bypass), 1 medium (xargs `.env`), 5 medium/low — all CLOSED in fixups A/B/C. Round 2 found 1 BLOCKER (`.env` source under `set -e` would kill ARF cron) — closed in fixup D. Two open caveats deferred to documentation: exogenous-freshness skew (round-1) and bimodal P80 coverage (M2.5).
+
+**Deployment**: merged to `main` 2026-04-30; sadalsuud pulled the merge after archive-path migration (`mv static/ml/forecasts/* ml/forecasts/`); manual dry-run of consolidate + update_shadow + evaluate_shadow succeeded end-to-end. Caught one real bug (lightgbm not in venv, installed manually). First production cron run with the new pipeline: 2026-05-01 14:45 UTC.
+
+**Tests**: 158 passing (was 35 pre-M3). New suites: `test_lightgbm_quantile.py` (37 incl. multi-horizon + HMAC enforcement), `test_secure_pickle.py` (22), `test_update_slice_mae.py` (10), `test_update_shadow.py` (20), `test_evaluate_shadow.py` (22), `test_update_archive_path.py` (1).
+
+**M4 expected outcome**: 14 days of `eval_log.jsonl` rows. Hypothesis log pre-commits: criterion (a) ≥25% relative MAE win at realised<30 with ≥50 low-price hours; (b) coverage in [0.75, 0.85] AND fewer than 3 days below 0.60; (c) peak-hour delta ≤ +10% relative. First eval row covers `eval_day=2026-04-30`. Cron will continue ARF in production until M5 (promotion decision) ratifies replacement.
+
+**What was NOT changed**: ARF model architecture, dashboard frontend (still reads `augur_forecast.json`), Netlify build pipeline. Shadow artifacts are committed to the repo but not consumed by the dashboard.
+
+---
