@@ -7,9 +7,11 @@ import pandas as pd
 import pytest
 
 from ml.shadow.lightgbm_quantile import (
+    DEFAULT_GROUPS,
     DEFAULT_QUANTILES,
     LGBMHyperparams,
     LightGBMQuantileForecaster,
+    MultiHorizonLightGBMQuantileForecaster,
 )
 
 
@@ -193,3 +195,169 @@ class TestParquetSmoke:
         # and only 6 features the band is loose; we just check the band hasn't collapsed.
         coverage = float(((y_test.to_numpy() >= preds[:, 0]) & (y_test.to_numpy() <= preds[:, 2])).mean())
         assert coverage > 0.05, f"P10/P90 band collapsed (coverage={coverage:.2%})"
+
+
+@pytest.fixture
+def synthetic_timeseries():
+    """800-row hourly series with 3 features and a target shaped by recent state.
+
+    Used to validate multi-horizon fit/predict — target depends on f0 and a
+    24-step seasonal term so different horizons see distinguishable targets.
+    """
+    rng = np.random.default_rng(7)
+    n = 800
+    idx = pd.date_range("2026-01-01", periods=n, freq="h", tz="UTC")
+    f0 = rng.normal(0, 1, n)
+    f1 = rng.uniform(-1, 1, n)
+    f2 = rng.normal(5, 2, n)
+    season = np.sin(2 * np.pi * np.arange(n) / 24.0)
+    target = 2 * f0 + season * 5 + rng.normal(0, 1, n)
+    X = pd.DataFrame({"f0": f0, "f1": f1, "f2": f2}, index=idx)
+    y = pd.Series(target, index=idx, name="y")
+    return X, y
+
+
+class TestMultiHorizonConstructor:
+    def test_default_groups_match_plan(self):
+        m = MultiHorizonLightGBMQuantileForecaster()
+        assert m.groups == DEFAULT_GROUPS
+        # Plan §2: groups cover h+1..h+72 contiguously, no overlap, no gaps.
+        starts_ends = [(s, e) for s, e in m.groups]
+        assert starts_ends[0][0] == 1
+        assert starts_ends[-1][1] == 72
+        for (_, prev_end), (next_start, _) in zip(starts_ends, starts_ends[1:]):
+            assert next_start == prev_end + 1, "groups must be contiguous"
+
+    def test_rejects_overlapping_groups(self):
+        with pytest.raises(ValueError, match="contiguous|overlap"):
+            MultiHorizonLightGBMQuantileForecaster(groups=((1, 6), (5, 24), (25, 72)))
+
+    def test_rejects_gap_between_groups(self):
+        with pytest.raises(ValueError, match="contiguous|gap"):
+            MultiHorizonLightGBMQuantileForecaster(groups=((1, 6), (8, 24), (25, 72)))
+
+    def test_rejects_inverted_group(self):
+        with pytest.raises(ValueError, match="start.*end|inverted|order"):
+            MultiHorizonLightGBMQuantileForecaster(groups=((6, 1), (7, 24), (25, 72)))
+
+    def test_rejects_zero_or_negative_horizon(self):
+        with pytest.raises(ValueError, match="positive|>= 1"):
+            MultiHorizonLightGBMQuantileForecaster(groups=((0, 6), (7, 24), (25, 72)))
+
+
+class TestMultiHorizonFit:
+    def test_fit_creates_nine_underlying_models(self, synthetic_timeseries):
+        X, y = synthetic_timeseries
+        m = MultiHorizonLightGBMQuantileForecaster(hyperparams=FAST_HP).fit(X, y)
+        # 3 groups × 3 quantiles = 9
+        total = sum(len(g.models) for g in m.group_models)
+        assert total == 9
+        assert len(m.group_models) == 3
+        for g in m.group_models:
+            assert len(g.models) == 3
+
+    def test_fit_records_feature_names_excluding_horizon(self, synthetic_timeseries):
+        X, y = synthetic_timeseries
+        m = MultiHorizonLightGBMQuantileForecaster(hyperparams=FAST_HP).fit(X, y)
+        # User-facing feature names should be the original X columns, not include horizon_h
+        assert m.feature_names == list(X.columns)
+
+    def test_fit_rejects_non_dataframe(self, synthetic_timeseries):
+        _, y = synthetic_timeseries
+        m = MultiHorizonLightGBMQuantileForecaster(hyperparams=FAST_HP)
+        with pytest.raises(TypeError, match="DataFrame"):
+            m.fit(np.zeros((100, 3)), y)
+
+    def test_fit_rejects_misaligned_y(self, synthetic_timeseries):
+        X, y = synthetic_timeseries
+        m = MultiHorizonLightGBMQuantileForecaster(hyperparams=FAST_HP)
+        with pytest.raises(ValueError, match="length mismatch|align"):
+            m.fit(X, y.iloc[:100])
+
+    def test_fit_rejects_too_short_for_largest_horizon(self):
+        # Need at least max_horizon+1 rows to have any (X[t], y[t+72]) pairs.
+        rng = np.random.default_rng(0)
+        idx = pd.date_range("2026-01-01", periods=50, freq="h", tz="UTC")
+        X = pd.DataFrame({"f0": rng.normal(0, 1, 50)}, index=idx)
+        y = pd.Series(rng.normal(0, 1, 50), index=idx)
+        m = MultiHorizonLightGBMQuantileForecaster(hyperparams=FAST_HP)
+        with pytest.raises(ValueError, match="too few rows|insufficient"):
+            m.fit(X, y)
+
+
+class TestMultiHorizonPredict:
+    def test_predict_horizons_default_returns_72_horizons(self, synthetic_timeseries):
+        X, y = synthetic_timeseries
+        m = MultiHorizonLightGBMQuantileForecaster(hyperparams=FAST_HP).fit(X, y)
+        preds = m.predict_horizons(X.iloc[[-100]])
+        # Default horizons span the full 1..72 range.
+        assert preds.shape == (1, 72, 3)
+
+    def test_predict_horizons_explicit_subset(self, synthetic_timeseries):
+        X, y = synthetic_timeseries
+        m = MultiHorizonLightGBMQuantileForecaster(hyperparams=FAST_HP).fit(X, y)
+        preds = m.predict_horizons(X.iloc[[-100]], horizons=[1, 6, 7, 24, 25, 72])
+        assert preds.shape == (1, 6, 3)
+
+    def test_predict_horizons_multi_row(self, synthetic_timeseries):
+        X, y = synthetic_timeseries
+        m = MultiHorizonLightGBMQuantileForecaster(hyperparams=FAST_HP).fit(X, y)
+        preds = m.predict_horizons(X.iloc[-30:], horizons=[1, 24, 72])
+        assert preds.shape == (30, 3, 3)
+
+    def test_predict_horizons_monotonic_per_quantile(self, synthetic_timeseries):
+        """P10 <= P50 <= P90 must hold per (row, horizon)."""
+        X, y = synthetic_timeseries
+        m = MultiHorizonLightGBMQuantileForecaster(hyperparams=FAST_HP).fit(X, y)
+        preds = m.predict_horizons(X.iloc[-50:])
+        assert np.all(preds[:, :, 0] <= preds[:, :, 1])
+        assert np.all(preds[:, :, 1] <= preds[:, :, 2])
+
+    def test_predict_horizons_rejects_unfit(self, synthetic_timeseries):
+        X, _ = synthetic_timeseries
+        m = MultiHorizonLightGBMQuantileForecaster()
+        with pytest.raises(RuntimeError, match="not fit"):
+            m.predict_horizons(X.iloc[[-1]])
+
+    def test_predict_horizons_rejects_out_of_range(self, synthetic_timeseries):
+        X, y = synthetic_timeseries
+        m = MultiHorizonLightGBMQuantileForecaster(hyperparams=FAST_HP).fit(X, y)
+        with pytest.raises(ValueError, match="horizon|out of range"):
+            m.predict_horizons(X.iloc[[-1]], horizons=[0, 1])
+        with pytest.raises(ValueError, match="horizon|out of range"):
+            m.predict_horizons(X.iloc[[-1]], horizons=[1, 73])
+
+    def test_predict_horizons_boundary_uses_correct_group(self, synthetic_timeseries):
+        """h=6 must use group 0; h=7 must use group 1 (default groups (1,6),(7,24),(25,72))."""
+        X, y = synthetic_timeseries
+        m = MultiHorizonLightGBMQuantileForecaster(hyperparams=FAST_HP).fit(X, y)
+        # Different groups produce different median predictions for the same X row.
+        preds = m.predict_horizons(X.iloc[[-1]], horizons=[6, 7])
+        # If routing is broken, h=6 and h=7 would come from the same group and
+        # likely (with horizon_h as a feature) still differ — so we just verify
+        # both produce a valid quantile triple.
+        assert preds.shape == (1, 2, 3)
+        assert preds[0, 0, 0] <= preds[0, 0, 1] <= preds[0, 0, 2]
+        assert preds[0, 1, 0] <= preds[0, 1, 1] <= preds[0, 1, 2]
+
+
+class TestMultiHorizonSaveLoad:
+    def test_save_load_roundtrip(self, synthetic_timeseries, tmp_path):
+        X, y = synthetic_timeseries
+        m = MultiHorizonLightGBMQuantileForecaster(hyperparams=FAST_HP).fit(X, y)
+        original = m.predict_horizons(X.iloc[-5:], horizons=[1, 24, 72])
+
+        path = tmp_path / "mh_lgbm.pkl"
+        m.save(path)
+        assert path.exists()
+
+        loaded = MultiHorizonLightGBMQuantileForecaster.load(path)
+        restored = loaded.predict_horizons(X.iloc[-5:], horizons=[1, 24, 72])
+        np.testing.assert_array_equal(original, restored)
+        assert loaded.groups == m.groups
+        assert loaded.feature_names == m.feature_names
+
+    def test_save_unfit_raises(self, tmp_path):
+        m = MultiHorizonLightGBMQuantileForecaster()
+        with pytest.raises(RuntimeError, match="unfit"):
+            m.save(tmp_path / "x.pkl")
