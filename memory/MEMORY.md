@@ -53,13 +53,15 @@
 
 ## Open Issues
 
-- **EXP-009 M4**: 14-day shadow window collection on sadalsuud. First eval_log row writes 2026-05-01 cron. Promotion decision blocks on M4. See `docs/hypothesis-log.md` for the pre-committed Method.
-- **#12 augur**: migrate sadalsuud orchestration cron→systemd + run augur AFTER EDH collector. Currently augur runs at 14:45 UTC, EDH collects at ~15:20 UTC, so parquet always trails by 24h.
+- **EXP-009 M4**: 14-day shadow window collection on sadalsuud. First eval_log row writes 2026-05-01 cron. Calendar trigger 2026-05-22 alongside M5 triage. Promotion decision blocks on M4. See `docs/hypothesis-log.md` for the pre-committed Method.
+- **#13 augur**: M5 follow-through — three resolution paths (promote / park / extend) once M4 hypothesis resolves. Conditional implementation work: dashboard config-flag swap, ARF cron retirement, archive. Detailed checklists per path in the issue.
+- **#12 augur**: migrate sadalsuud orchestration cron→systemd + run augur AFTER EDH collector. Currently augur runs at 14:45 UTC, EDH collects at ~15:20 UTC, so parquet always trails by 24h. Ideally land before M5 (path A) so promote-to-production isn't on top of broken orchestration.
 - **Deferred caveats from M3 review** (documented in `memory/arf-retired.md` auto-memory, surface here for repo readers):
   - Exogenous freshness skew: `consolidate.py` overwrites parquet rows with later forecast vintages — backtest sees fresher exogenous than live cron will get. Live MAE will be 0–20% worse than backtest +46% delta suggested. Hypothesis 2 in hypothesis log tests this empirically.
   - Bimodal P80 coverage: regime-shift days hold 46–50% even with CQR; M2.5 found aggregate 77.5% over 14 days. Hypothesis adds a "fewer than 3 of 14 days below 0.60" guard for criterion (b).
-- EXP-007 (parked, `feat/new-features-ttf-genmix`): Phase 1 TTF + genmix gave −1.28 EUR/MWh MAE, below the ≥2 gate. Revisit when ~60 days of genmix history accumulates (late May 2026) or in a harder holdout.
+- **EXP-007 reframed → candidate EXP-011** (parked, `feat/new-features-ttf-genmix`): Phase 1 TTF + genmix gave −1.28 EUR/MWh MAE against ARF, below the ≥2 gate. **Baseline shifted post-EXP-008 ARF retirement** — original framing no longer applies (ARF tooling `warmup_p1`/`backtest_p1` doesn't extend to LGBM). New framing: add TTF + genmix lag24h to LGBM-Q via `ml/shadow/features_pandas.py`, re-run via `ml/shadow/backtest.py`, gate at ≥1 EUR/MWh improvement vs LGBM-without-features (lower than ADR-005's ≥2 because stacking on stronger baseline). Conditional on M5 path A. Calendar trigger 2026-05-22 alongside M5 triage. Parsers in `ml/data/consolidate.py` on the parked branch are reusable; the rest is rewrite. See `~/.claude/projects/C--local-dev-augur/memory/project_new_features_rewarmup.md` (auto-memory) for full reframing.
 - #2-4: New ML features (NED production, gas/carbon prices, cross-border flows)
 - #5: Backtesting framework from archived forecasts
 - #6-7: Model variants (peak/off-peak, larger ARF ensemble or Prophet)
 - #8-10: Product expansion (SaaS API, ensemble forecasting, multi-country)
+- **agent-ready-projects#12** (framework-level, not augur): calendar-bridge skill candidate for v1.11+ — plant `Review by:` dates from hypothesis logs into Google Calendar. Filed 2026-04-30 from this session's transcription friction.
