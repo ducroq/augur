@@ -61,8 +61,12 @@ try:
     ts = datetime.fromisoformat(last)
     print(int((datetime.now(timezone.utc) - ts).total_seconds() / 3600))
 except Exception:
-    print(0)
-" 2>/dev/null || echo 0)
+    # File missing or last_run_utc malformed/null — treat as 'should-have-state-but-doesn't',
+    # i.e. always alarm. Cost: one false alarm on the first cron after a fresh M3-style
+    # deployment (before shadow_state.json exists). Gain: silent state-file deletion
+    # or null'd timestamp can't go undetected.
+    print(999)
+" 2>/dev/null || echo 999)
 if [ "${SHADOW_PRE_AGE_H:-0}" -gt 36 ]; then
     echo "ALARM: shadow_state.json is ${SHADOW_PRE_AGE_H}h stale at start of run (>36h). Likely silent failure on prior run(s)."
     SHADOW_WAS_STALE=1
