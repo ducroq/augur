@@ -1,7 +1,9 @@
 """Nightly shadow update for the EXP-009 LightGBM-Quantile pipeline.
 
 CLI:
-    python -m ml.shadow.update_shadow --augur-dir /path/to/augur
+    python -m ml.shadow.update_shadow
+    # All paths default from _REPO_ROOT; override individually with
+    # --parquet / --shadow-dir / --forecast-out for ad-hoc runs.
 
 Order of operations per run:
     1. Load shadow state and the consolidated parquet

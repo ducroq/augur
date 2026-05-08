@@ -1,7 +1,11 @@
 """Daily LightGBM-vs-ARF evaluation for the EXP-009 shadow pipeline.
 
 CLI:
-    python -m ml.shadow.evaluate_shadow --augur-dir /path/to/augur
+    python -m ml.shadow.evaluate_shadow \\
+        --shadow-dir <path>/ml/models/shadow \\
+        --arf-forecasts-dir <path>/ml/forecasts \\
+        --eval-log <path>/ml/shadow/eval_log.jsonl
+    # All three default from _REPO_ROOT for in-repo runs.
 
 For every fully-realised eval day in shadow_state.json's calibration_history
 that is not yet present in eval_log.jsonl, computes the side-by-side metrics

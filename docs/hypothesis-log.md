@@ -72,12 +72,14 @@ Failure of any one criterion **does not** automatically refute the hypothesis �
 - ✅ `n_low_price_hours`, `arf_peak_hour_mae`, `lightgbm_peak_hour_mae` added to `evaluate_one_day` output and eval_log schema (commit landing this hypothesis update).
 - ⏳ Migrate sadalsuud's existing `static/ml/forecasts/` archives to `ml/forecasts/` (path-fix from M3 review fixup A) so historical ARF predictions are findable by `evaluate_shadow.py`. Server-side; not blocking the hypothesis log itself but blocking M4 cron from producing useful `arf_*` fields.
 
-**Revisit trigger:** When `ml/shadow/eval_log.jsonl` contains 14 contiguous days of rows (date column), evaluating from the *first* row whose `arf_mae` is non-null. Earliest plausible date assuming sadalsuud cron starts 2026-05-01 and the prerequisites land first: 2026-05-15.
+**Revisit trigger:** When `ml/shadow/eval_log.jsonl` contains 14 contiguous days of rows (date column), evaluating from the *first* row whose `arf_mae` is non-null. Original assumption was sadalsuud cron starting 2026-05-01 → earliest 2026-05-15; in practice the shadow CLI was broken on cron from 2026-05-01 to 2026-05-07 inclusive (`memory/gotcha-log.md` 2026-05-08 entry, fix in commit `d620b45`), so cron effectively starts 2026-05-08 → earliest 2026-05-22.
 
-**Review by:** 2026-05-22 (one week buffer past 2026-05-15 to handle cron interruptions or prereq delays).
+The first eval row (date=2026-04-30, n=72) was produced by a one-shot manual bootstrap on 2026-05-08 and had known structural issues: 72h forced into one `eval_day`, ARF-archive coverage matched only 40 of 72 LGBM hours so `lightgbm_mae_at_low_price` was computed over a different sample than `arf_mae_at_low_price`. **The bootstrap row was deleted from `eval_log.jsonl`** AND the 72 corresponding entries (all tagged `eval_day=2026-04-30`) were purged from `shadow_state.json:calibration_history`, with `last_cqr_q` and `last_cqr_n_calib_days` reset to 0. The purge prevents `evaluate_shadow.find_eligible_eval_days` from re-logging the same broken row on the next cron tick. CQR rebuilds within ~7 days from real nightly runs.
+
+**Review by:** 2026-05-29 (one week buffer past 2026-05-22 to handle cron interruptions).
 
 **Domain:** EXP-009, LightGBM shadow, promotion decision
-**Status:** open — blocked on prereqs above
+**Status:** open — cron unblocked 2026-05-08; M4 window in collection
 
 ---
 
