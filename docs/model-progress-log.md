@@ -4,6 +4,28 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
+## 2026-05-08 — M4 collection delayed 8 days by silent CLI failure; observability hardening shipped
+
+**Trigger**: Day-7 sanity check on `ml/shadow/eval_log.jsonl` ahead of the M4 promotion vote (~2026-05-22 expected). File didn't exist; `shadow_state.json:last_run_utc` was frozen at 2026-04-30; calibration_history empty.
+
+**Root cause**: `scripts/daily_update.sh:63` invoked `python -m ml.shadow.update_shadow --augur-dir $AUGUR_DIR`, but `update_shadow.py`'s argparse only defines `--parquet/--shadow-dir/--forecast-out`. argparse exited rc=2 every night from 2026-05-01 to 2026-05-07. Failure was hidden by three concurrent factors: shadow block runs under `set +e` (correct, ARF must not be blocked), git step uses `[ -f ... ] && git add` (correct, must tolerate missing files), and the commit message was hardcoded as "ARF + LGBM-shadow" regardless of which steps actually ran. See `memory/gotcha-log.md` top entry for the silent-failure mechanism in full.
+
+**Impact on M4**: 7 nights of shadow-step failures = zero eval rows logged. M4 14-day window cron-effective start slipped from 2026-04-30 → **2026-05-08**. First real eval row expected 2026-05-09; promotion review **2026-05-29** (per updated `docs/hypothesis-log.md`).
+
+**Fixes shipped (5 commits, all on main)**:
+- `d620b45` — drop the rejected flag (the actual bug)
+- `8c217a6` — docstring CLIs corrected, pre-flight heartbeat on `last_run_utc` (alarms if >36h), dynamic commit message reflecting `SHADOW_UPDATE_RC`/`SHADOW_EVAL_RC`/staleness, env-gated Healthchecks.io ping at end of script
+- `0225fe1` — heartbeat alarms on missing/malformed state too (was only stale)
+- `c135b4a` — `umask 027` + self-heal `chmod 640` on cron log file (security-auditor MEDIUM finding)
+
+**Live wiring on sadalsuud (2026-05-08)**: `HEALTHCHECKS_SHADOW_URL` appended to `~/local_dev/augur/.env`; first ping registered (HC dashboard green); cron log mode hardened to 640. HC alerts within 25h of any shadow silence going forward.
+
+**Bootstrap state cleanup**: A manual rehearsal of `update_shadow.py` produced a structurally-anomalous eval row (72h forced into one `eval_day=2026-04-30`, ARF archive coverage matched only 40 of 72 LGBM hours). Row was deleted from `eval_log.jsonl` and the 72 corresponding entries purged from `shadow_state.json:calibration_history`; `last_cqr_q` and `last_cqr_n_calib_days` reset to 0. Method snippet in hypothesis-log starts cleanly from real nightly data.
+
+**Verdict**: Pipeline back online. Observability now solid for the silent-failure mode that bit. Open follow-ups (deferred): CI smoke test on `daily_update.sh`, CLI harmonization across the two shadow scripts, `update_shadow.py` pending-dedup logic (see gotcha-log "appends to pending_predictions without dedup" entry). M4 collection in progress.
+
+---
+
 ## 2026-04-29 — LightGBM-Quantile shadow: backtest + band fix (EXP-009, EXP-010)
 
 **Trigger**: Plan milestone 2 (`docs/lightgbm-quantile-shadow-plan.md`) — first comparison numbers vs ARF on the regime-shift period.

@@ -9,6 +9,16 @@
 
 ---
 
+### update_shadow.py appends to pending_predictions without dedup — running twice on same parquet stacks duplicates (2026-05-08)
+**Problem**: During the silent-failure recovery, I ran `update_shadow.py` manually at 08:45 UTC for bootstrap, then a smoke-test rehearsal at 08:46 UTC, then the cron would have run at 14:45 UTC. All three runs see the same parquet (EDH at 16:00 UTC hadn't dropped yet) so each picks the same `t0=2026-05-07 21:00 UTC` and generates 72 pending predictions with the same `eval_day=2026-05-07`. Result: 144 pending entries (and would have been 216 after cron) for the same eval_day, with two-three predictions per timestamp. When realised, all get moved to calibration_history → the May 7 eval row's MAE/coverage averages over multiple prediction sets, polluting M4 promotion data.
+**Root cause**: `run_shadow_update` at `ml/shadow/update_shadow.py:385` does `state["pending_predictions"] = trim_to_recent_days(list(state["pending_predictions"]) + new_pending, MAX_HISTORY_DAYS)` — it appends without deduplicating against existing entries with the same (timestamp, eval_day). `trim_to_recent_days` only trims by calendar day, not by uniqueness. Normally invisible because t0 advances daily as parquet advances; bites when t0 stays the same across runs.
+**Fix (operational)**: Reset `pending_predictions = []` on sadalsuud before tonight's cron so the stacked dups are gone. Cron then produces canonical first set.
+**Fix (code, not done)**: Add dedup logic in `run_shadow_update` after the append — `seen = {(r["timestamp_utc"], r["eval_day"]): r for r in pending}; pending = list(seen.values())` keeps the most-recent prediction per (timestamp, eval_day) tuple. ~3 lines, idempotent. Worth landing before the next M3-style deployment.
+**Pattern**: Any append-only state structure that lives across runs and depends on a monotonic upstream (here: parquet timestamps advancing) silently degrades when the upstream stalls. Worth either (a) deduping at write time, or (b) asserting upstream advanced before writing.
+**Status**: [RESOLVED operationally] for this session via state reset. [OPEN code] — dedup logic deferred.
+
+---
+
 ### Shadow cron failed silently for 7 nights — argparse mismatch hidden by non-blocking + conditional-add (2026-05-08)
 **Problem**: M3 deployed 2026-04-30. By 2026-05-08, shadow pipeline had run successfully ONCE: `shadow_state.json:last_run_utc` frozen at Apr 30, `calibration_history` empty, `eval_log.jsonl` never created — yet daily commits May 1-7 were titled "Daily update YYYY-MM-DD — ARF + LGBM-shadow", strongly suggesting shadow was running. M4 14-day window was effectively at day 0, not day 7.
 **Root cause**: `scripts/daily_update.sh:63` called `python -m ml.shadow.update_shadow --augur-dir $AUGUR_DIR`, but `update_shadow.py`'s argparse only defines `--parquet/--shadow-dir/--forecast-out`. argparse exits rc=2 every night. `evaluate_shadow.py` (called next) accepts the flags it's passed, so the asymmetry only bit the update step.
@@ -17,8 +27,15 @@
   1. Shadow block runs under `set +e` (correct, ARF must not be blocked) → failure rc swallowed
   2. Git step uses `[ -f ... ] && git add` (correct, must tolerate missing files) → no commit-time signal
   3. Commit message hardcoded as "ARF + LGBM-shadow" regardless of which steps ran → log lies
-  Each layer is defensible alone; together they're a silent-failure factory. Mitigations to consider: (a) dynamic commit message reflecting `SHADOW_UPDATE_RC`; (b) heartbeat check that fails if `shadow_state.json:last_run_utc` is older than 36h; (c) CI smoke test that runs `daily_update.sh` against a fixture parquet to catch CLI mismatches before they hit cron.
-**Status**: [RESOLVED] — script fixed, 1 eval_log row backfilled (2026-04-30), pending now seeded for May 7 forecast window. Cron will pick up the fix on next pull.
+  Each layer is defensible alone; together they're a silent-failure factory.
+**Mitigations shipped this session**:
+  - ✅ (a) Dynamic commit message reflecting `SHADOW_UPDATE_RC`/`SHADOW_EVAL_RC`/staleness — commit `8c217a6`
+  - ✅ (b) Pre-flight heartbeat check on `shadow_state.json:last_run_utc` — alarms if >36h or missing/malformed (`8c217a6` + `0225fe1`)
+  - ✅ (extra) Healthchecks.io ping on shadow success — alerts within 25h of any silence (`8c217a6` + live wiring)
+  - ✅ (extra) Log file mode hardened to 640 — `umask 027` + self-heal chmod (`c135b4a`)
+  - ❌ (c) CI smoke test running `daily_update.sh` against a fixture parquet — deferred (M4 window is the binding constraint)
+  - ❌ (extra) CLI harmonization across `update_shadow.py` / `evaluate_shadow.py` — deferred
+**Status**: [RESOLVED] 2026-05-08 — fix in `d620b45`, observability in `8c217a6`/`0225fe1`/`c135b4a`. Bootstrap state cleaned (eval_log empty, 72 misclassified calibration entries purged, CQR reset). M4 14-day window cron-effective 2026-05-08; first real eval row 2026-05-09; promotion review 2026-05-29.
 
 ---
 

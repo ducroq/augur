@@ -2,7 +2,7 @@
 
 Energy price forecasting platform for the Netherlands. Combines data from 18+ APIs (via energyDataHub), ML-based week-ahead price predictions, and an interactive dashboard for smart consumption (heat pumps, EV charging, industrial thermal).
 
-- **Stack**: Python 3.12 (ML pipeline), Hugo + Plotly.js (dashboard), River ARF (production — retired 2026-04-28 but cron continues until shadow promoted) + LightGBM-Quantile multi-horizon (M3 deployed 2026-04-30, M4 14-day shadow window in progress)
+- **Stack**: Python 3.12 (ML pipeline), Hugo + Plotly.js (dashboard), River ARF (production — retired 2026-04-28 but cron continues until shadow promoted) + LightGBM-Quantile multi-horizon (M3 deployed 2026-04-30; M4 14-day shadow window cron-effective 2026-05-08 after silent-failure recovery; review-by 2026-05-29)
 - **Status**: Production — dashboard live, ML pipeline daily on sadalsuud
 - **Repo**: github.com/ducroq/augur
 - **agent-ready-projects**: v1.9.0
@@ -72,7 +72,7 @@ Client browser (https://energy.jeroenveen.nl):
 ```
 
 ### ML Pipeline (live)
-- **Status (2026-04-30)**: ARF in production driving the dashboard; LightGBM-Quantile multi-horizon running in shadow alongside (M4 14-day window in progress, M5 promotion decision pending — see `docs/hypothesis-log.md`). ARF retired as a model 2026-04-28 but its cron output still feeds the dashboard until shadow validation completes. See `docs/river-arf-retrospective.md` for retirement rationale, `docs/lightgbm-quantile-shadow-plan.md` for replacement plan.
+- **Status (2026-05-08)**: ARF in production driving the dashboard; LightGBM-Quantile shadow running alongside. M4 14-day window cron-effective **2026-05-08** after a silent-failure recovery (CLI flag mismatch hid 7 nights of shadow-step failures May 1-7; see `memory/gotcha-log.md` top entry, fixed in commits `d620b45`/`8c217a6`/`0225fe1`/`c135b4a`). First real eval row expected 2026-05-09; promotion review **2026-05-29**. Observability now: pre-flight heartbeat on `last_run_utc`, dynamic commit message reflecting per-step return codes, Healthchecks.io ping on shadow success (alerts within 25h of any silence). M5 promotion decision pending — see `docs/hypothesis-log.md`. ARF retired as a model 2026-04-28 but its cron output still feeds the dashboard until shadow validation completes. See `docs/river-arf-retrospective.md` for retirement rationale, `docs/lightgbm-quantile-shadow-plan.md` for replacement plan.
 
 **ARF (production)**:
 - Model: River ARFRegressor (10 trees), continuous online learning
