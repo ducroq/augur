@@ -60,7 +60,10 @@ SHADOW_CONSOLIDATE_RC=$?
 
 if [ $SHADOW_CONSOLIDATE_RC -eq 0 ]; then
     echo "Running shadow update (LightGBM-Quantile)..."
-    python -m ml.shadow.update_shadow --augur-dir $AUGUR_DIR
+    # update_shadow.py derives all paths from _REPO_ROOT; no flags needed.
+    # NB: evaluate_shadow.py below still takes explicit --shadow-dir / --arf-forecasts-dir / --eval-log.
+    # See augur follow-up: harmonize the two CLIs.
+    python -m ml.shadow.update_shadow
     SHADOW_UPDATE_RC=$?
 
     if [ $SHADOW_UPDATE_RC -eq 0 ]; then

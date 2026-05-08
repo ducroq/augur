@@ -9,6 +9,19 @@
 
 ---
 
+### Shadow cron failed silently for 7 nights — argparse mismatch hidden by non-blocking + conditional-add (2026-05-08)
+**Problem**: M3 deployed 2026-04-30. By 2026-05-08, shadow pipeline had run successfully ONCE: `shadow_state.json:last_run_utc` frozen at Apr 30, `calibration_history` empty, `eval_log.jsonl` never created — yet daily commits May 1-7 were titled "Daily update YYYY-MM-DD — ARF + LGBM-shadow", strongly suggesting shadow was running. M4 14-day window was effectively at day 0, not day 7.
+**Root cause**: `scripts/daily_update.sh:63` called `python -m ml.shadow.update_shadow --augur-dir $AUGUR_DIR`, but `update_shadow.py`'s argparse only defines `--parquet/--shadow-dir/--forecast-out`. argparse exits rc=2 every night. `evaluate_shadow.py` (called next) accepts the flags it's passed, so the asymmetry only bit the update step.
+**Fix**: Drop the flag — `update_shadow.py` defaults resolve from `_REPO_ROOT` (line 59-62). Single-line script edit. Followup TODO: harmonize the two CLIs so daily_update.sh has one consistent invocation pattern.
+**Pattern (the silent-failure mechanism)**: Three layers conspired to hide this for a week:
+  1. Shadow block runs under `set +e` (correct, ARF must not be blocked) → failure rc swallowed
+  2. Git step uses `[ -f ... ] && git add` (correct, must tolerate missing files) → no commit-time signal
+  3. Commit message hardcoded as "ARF + LGBM-shadow" regardless of which steps ran → log lies
+  Each layer is defensible alone; together they're a silent-failure factory. Mitigations to consider: (a) dynamic commit message reflecting `SHADOW_UPDATE_RC`; (b) heartbeat check that fails if `shadow_state.json:last_run_utc` is older than 36h; (c) CI smoke test that runs `daily_update.sh` against a fixture parquet to catch CLI mismatches before they hit cron.
+**Status**: [RESOLVED] — script fixed, 1 eval_log row backfilled (2026-04-30), pending now seeded for May 7 forecast window. Cron will pick up the fix on next pull.
+
+---
+
 ### sadalsuud venv missing a Python dep that the cron script silently needed (2026-04-30)
 **Problem**: First manual dry-run of EXP-009 M3 shadow pipeline on sadalsuud crashed with `ModuleNotFoundError: No module named 'lightgbm'`. The M3 commits added `lightgbm>=4.0` to `requirements.txt` but cron doesn't `pip install -r requirements.txt` — it just activates the venv and runs.
 **Root cause**: `scripts/daily_update.sh` activates `.venv` and runs Python directly. There's no dependency-install step. New deps land in requirements.txt locally, get pushed to origin, sadalsuud pulls main, and the cron uses whatever the venv currently has — which may not match requirements.txt.
