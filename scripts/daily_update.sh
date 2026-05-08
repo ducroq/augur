@@ -16,8 +16,17 @@
 
 set -e
 
+# Defense-in-depth: any files this script creates inherit mode 640 (rw for owner,
+# r for group, none for others). The cron log itself is created by cron's
+# redirection (not this script), so we also chmod it explicitly below.
+umask 027
+
 AUGUR_DIR=$HOME/local_dev/augur
 DATAHUB_DIR=$HOME/local_dev/energydatahub
+
+# Self-correct the cron log file mode every run, in case cron's umask
+# created it world-readable. Silent + non-blocking — this should never fail.
+chmod 640 "$AUGUR_DIR/logs/daily_update.log" 2>/dev/null || true
 
 echo "========================================"
 echo "Augur daily update: $(date -u '+%Y-%m-%d %H:%M UTC')"
