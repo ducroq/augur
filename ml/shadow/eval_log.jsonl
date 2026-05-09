@@ -1,0 +1,1 @@
+{"date": "2026-05-08", "n_overlap_hours": 24, "n_low_price_hours": 7, "lightgbm_mae": 25.782, "arf_mae": 39.305, "lightgbm_mae_at_low_price": 64.614, "arf_mae_at_low_price": 104.189, "lightgbm_band_coverage_p80": 0.2083, "lightgbm_peak_hour_mae": null, "arf_peak_hour_mae": null, "peak_hour_mae_delta": null}
