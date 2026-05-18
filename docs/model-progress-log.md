@@ -4,6 +4,53 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
+## 2026-05-18 — M4 mid-window preview: CQR healthy, low-price failure is structural, methodology ambiguity surfaces
+
+**Trigger**: Calendar-scheduled mid-window sanity-check on M4 collection. 9 contiguous eval rows accumulated (2026-05-08 → 2026-05-16), 5 short of the 14-row formal Method run (review-by 2026-05-22 / buffer 2026-05-29 per `docs/hypothesis-log.md`).
+
+**Pipeline health**: ✅ — cron firing on schedule (last run 2026-05-17 14:45 UTC), state file healthy, shadow JSON written, 7 CQR calibration days active, 9 contiguous eval rows. Observability hardening from 2026-05-08 is doing its job.
+
+**Method snippet preview against 9 rows (non-binding, framework-explicit: preview ≠ Method run)**:
+
+| Criterion | All 9 rows | 8 rows (drop 05-08 cron-shake-out) | Threshold |
+|---|---|---|---|
+| (a) low-price MAE ratio | 0.94 ❌ | 1.10 ❌ | ≤ 0.75 |
+| (a) n_low_price hours | 35 ❌ | 28 ❌ | ≥ 50 |
+| (b) mean P80 coverage | 0.722 ❌ | 0.786 ✅ | [0.75, 0.85] |
+| (b) days < 0.60 | 2 ✅ | 1 ✅ | < 3 |
+| (c) peak-hour ratio | 0.484 ✅✅ | 0.484 ✅✅ | ≤ 1.10 |
+| overall MAE ratio | 0.58 | 0.57 | (informational) |
+| live/backtest ratio | 1.41 ⚠️ | 1.34 ⚠️ | [1.0, 1.20] |
+
+**Three threads investigated to root cause:**
+
+**1. `last_cqr_q = 0.0` is correct behavior, not a bug.**
+- Diagnostic: 7-day calibration window has 81.7% inside-band rate (target 80%); p80 of nonconformity is **−1.09 EUR/MWh** — even the 80th-percentile residual sits *inside* the band. `conformal.py:74` clamps `max(q, 0.0)` correctly.
+- Implication: LGBM's nominal P10/P90 are intrinsically calibrated on the 7-day window. Criterion (b) aggregate target is structurally achievable; per-day volatility (0.21 → 1.00 range) is the residual concern.
+
+**2. Criterion (a) low-price MAE failure has a structural cause — not data-thin.**
+- Both models miss solar-driven negative midday prices badly; ARF "wins" by accident via mean-reversion bias.
+- Sample evidence (eval_day=2026-05-15 low-price hours, 14 hours, h=19..h=48):
+  - LGBM p50: 57-100 EUR/MWh, mean error **74 EUR/MWh**
+  - ARF: 25-40 EUR/MWh, mean error **31 EUR/MWh**
+  - Realized: −1 to +20 EUR/MWh
+- LGBM errors scale with horizon: h≤24 mean 64 EUR/MWh, h>24 mean 81 EUR/MWh. Long-horizon weakness consistent with weather-lag feature thinning at h>48.
+- ARF's accidental win: its mean-reversion toward ~30 EUR/MWh anchors closer to realized 0 than LGBM's "midday is expensive" prior (~70 EUR/MWh).
+- **This is structural**, not a sample-size issue. Extending the window won't fix it. Path C (extend) is therefore *not* the framework-correct triage if (a) fails with n_low ≥ 50 on 2026-05-22.
+
+**3. Live-vs-backtest skew (hypothesis #2): real but secondary.**
+- Live MAE 17.73 / backtest h+1 MAE 13.21 = ratio 1.34, outside [1.0, 1.20] band. Roughly +10% explainable by horizon-mix (backtest h+1 only, live h+1..h+72); residual ~+24% likely freshness skew per Alternative 1 (`consolidate.py` overwrite semantics, augur#12 territory). Doesn't change the M4 decision; corroborates the post-decision investigation.
+
+**Methodology ambiguity surfaced (relevant for 2026-05-22 read, not changeable now):**
+
+`evaluate_one_day(eval_day=D)` scores **predictions made on D** (h+1..h+72), not **predictions for D from various horizons**. Criterion (a) plan-text "MAE on hours where realised < 30 EUR/MWh" is therefore evaluated on a 72-hour forward window where long-horizon errors dominate the low-price slice — and LGBM is structurally weak there. ARF gets scored on the same target hours but from its own earlier forecast issuance, so the comparison is apples-to-apples for *target timestamps* even though horizons differ between models. Decision deferred to 2026-05-22 interpretation: report decomposed-by-horizon as supplementary evidence; do not modify Method or eval_log schema mid-window (framework: "Don't loosen Method when the answer arrives").
+
+**Expected 2026-05-22 outcome (pre-committed prediction, framework-allowed)**: (a) fails for structural reasons, (b) passes once 05-08 ages out of the window, (c) crushes it. **Triage path → B (park) with structural-failure-mode reason**, not C (extend window). The postmortem becomes a useful next-bet seed: longer training history to capture multi-year solar evolution, separate model heads per horizon group, or explicit solar-forecast features at long horizons.
+
+**Verdict**: No code changes today. Findings logged here as pre-existing context for the 2026-05-22 formal Method run. Calendar hold for 2026-05-22 stands as scheduled.
+
+---
+
 ## 2026-05-08 — M4 collection delayed 8 days by silent CLI failure; observability hardening shipped
 
 **Trigger**: Day-7 sanity check on `ml/shadow/eval_log.jsonl` ahead of the M4 promotion vote (~2026-05-22 expected). File didn't exist; `shadow_state.json:last_run_utc` was frozen at 2026-04-30; calibration_history empty.

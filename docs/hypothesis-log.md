@@ -78,6 +78,8 @@ The first eval row (date=2026-04-30, n=72) was produced by a one-shot manual boo
 
 **Review by:** 2026-05-29 (one week buffer past 2026-05-22 to handle cron interruptions).
 
+**Pre-read caveat (added 2026-05-18 mid-window preview, not a Method change):** `evaluate_one_day` aggregates **predictions made on day D, targeting D..D+3** (h+1..h+72). Criterion (a)'s low-price slice is therefore dominated by long-horizon hours where LGBM is structurally weakest (see `docs/model-progress-log.md` 2026-05-18 entry). The 2026-05-22 read should report criterion (a) decomposed by horizon (h≤24 vs h>24) as supplementary evidence, computed from `calibration_history` without touching the eval_log schema. If (a) fails with n_low ≥ 50 and the long-horizon decomposition shows the failure concentrated at h>24, the framework-correct triage is **Path B (park) with structural-failure-mode reason** — *not* Path C (extend window), since more days won't fix a model-design limit.
+
 **Domain:** EXP-009, LightGBM shadow, promotion decision
 **Status:** open — cron unblocked 2026-05-08; M4 window in collection
 

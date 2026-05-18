@@ -18,7 +18,7 @@
 - ML pipeline: **live** — River ARF on sadalsuud, daily cron at 16:45 CEST (14:45 UTC); LightGBM-Quantile shadow runs alongside ARF after M3 merged 2026-04-30
 <!-- verify: cd /c/local_dev/augur && [ -f scripts/daily_update.sh ] && grep -q "ml.shadow.update_shadow" scripts/daily_update.sh && echo PASS || echo FAIL -->
 - ARF retired 2026-04-28 (EXP-008) — structural ceiling on negative-price prediction; cron continues running until LGBM shadow promotion (M5)
-- **LightGBM-Quantile shadow M0-M3 done, merged to main 2026-04-30** (`84a1af4`/`f77aa5d`). 9 LGBM models (3 horizon groups x 3 quantiles), 56-day rolling window, CQR(7d, 0.80) bands. Deployed and dry-run-validated on sadalsuud. M4 = 14-day shadow window, first eval row writes 2026-05-01 cron.
+- **LightGBM-Quantile shadow M0-M3 done, merged to main 2026-04-30** (`84a1af4`/`f77aa5d`). 9 LGBM models (3 horizon groups x 3 quantiles), 56-day rolling window, CQR(7d, 0.80) bands. M4 14-day window cron-effective 2026-05-08 after silent-failure recovery; 9 rows collected as of 2026-05-18.
 <!-- verify: cd /c/local_dev/augur && git log --oneline main | grep -q "Merge feat/lightgbm-shadow" && [ -f ml/shadow/update_shadow.py ] && [ -f ml/shadow/evaluate_shadow.py ] && echo PASS || echo FAIL -->
 - M4 promotion-decision hypothesis pinned in `docs/hypothesis-log.md` with falsification criteria pre-committed
 - ENTSO-E collector recovered ~2026-04-18 after 03-26 outage; guard in `parse_price_file()` remains
@@ -53,7 +53,7 @@
 
 ## Open Issues
 
-- **EXP-009 M4**: 14-day shadow window collection on sadalsuud. First eval_log row writes 2026-05-01 cron. Calendar trigger 2026-05-22 alongside M5 triage. Promotion decision blocks on M4. See `docs/hypothesis-log.md` for the pre-committed Method.
+- **EXP-009 M4**: 14-day shadow window collection on sadalsuud. Cron-effective start slipped from 2026-04-30 to **2026-05-08** (silent CLI failure 2026-05-01..05-07, see gotcha-log + `docs/model-progress-log.md` 2026-05-08 entry). **9 of 14 rows collected as of 2026-05-18**; Review-by **2026-05-22** formal / **2026-05-29** buffer. Mid-window preview 2026-05-18 surfaced: CQR working as designed (bands intrinsically calibrated → q=0 correct), criterion (a) preview-failing for structural reason (LGBM weak at h>24 on solar-driven negative midday prices, ARF wins by mean-reversion accident), (c) crushing it. Pre-committed expectation: Path B (park with structural reason). See `docs/model-progress-log.md` 2026-05-18 entry and `docs/hypothesis-log.md` pre-read caveat for the data.
 - **#13 augur**: M5 follow-through — three resolution paths (promote / park / extend) once M4 hypothesis resolves. Conditional implementation work: dashboard config-flag swap, ARF cron retirement, archive. Detailed checklists per path in the issue.
 - **#12 augur**: migrate sadalsuud orchestration cron→systemd + run augur AFTER EDH collector. Currently augur runs at 14:45 UTC, EDH collects at ~15:20 UTC, so parquet always trails by 24h. Ideally land before M5 (path A) so promote-to-production isn't on top of broken orchestration.
 - **Deferred caveats from M3 review** (documented in `memory/arf-retired.md` auto-memory, surface here for repo readers):
