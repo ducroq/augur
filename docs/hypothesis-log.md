@@ -104,7 +104,7 @@ The eval_log records full-day mean MAE, not h+1. The live mean is a mix of h+1..
 
 **Revisit trigger:** Same as the §6 hypothesis above (14-day eval_log window).
 
-**Review by:** 2026-05-22.
+**Review by:** 2026-05-29 (bumped from 2026-05-22 to align with §6 hypothesis after the 05-22→05-23 verdict-session slip; resolution co-occurs with the Method run regardless).
 
 **Domain:** EXP-009, exogenous data freshness, live-vs-backtest skew
 **Status:** open

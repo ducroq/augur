@@ -81,11 +81,16 @@ def run_method(rows: list[dict]) -> dict:
     mean_cov = float(np.mean(covs))
     n_low_cov_days = sum(1 for c in covs if c < 0.60)
 
-    # (c) Weekday-evening-peak (16-19 UTC) MAE ratio
+    # (c) Weekday-evening-peak (16-19 UTC) MAE ratio.
+    # Explicit None/zero checks mirror the (a) guard; truthy filter would
+    # silently drop legitimate zero-MAE days (implausible in EUR/MWh but
+    # consistent guards are safer than asymmetric ones).
     peak_ratios = [
         r["lightgbm_peak_hour_mae"] / r["arf_peak_hour_mae"]
         for r in rows
-        if r["arf_peak_hour_mae"] and r["lightgbm_peak_hour_mae"]
+        if r["arf_peak_hour_mae"] is not None
+        and r["lightgbm_peak_hour_mae"] is not None
+        and r["arf_peak_hour_mae"] != 0.0
     ]
     mean_peak_ratio = float(np.mean(peak_ratios)) if peak_ratios else None
 
