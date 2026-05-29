@@ -174,9 +174,18 @@ Two seeds, ranked by likely impact:
    loss at p10** (or **CRPS** for the whole distribution) directly tests "does
    the lower band reach negative territory when it should?" — and ARF, whose
    lower band is hard-clamped at 0 in `ml/update.py`, loses by construction.
-   Open a literature-review task before EXP-012 to fix the metric problem
-   first; promoting a model on the wrong criterion would be exactly the
-   framework violation the hypothesis-log was set up to prevent.
+   A focused literature review (Nowotarski & Weron 2018; Lago et al. 2021;
+   Gneiting & Ranjan 2011; Lerch et al. 2017 on the forecaster's dilemma)
+   was done 2026-05-29 and is filed as
+   `docs/metric-redesign-literature-review.md`. It recommends a three-part
+   criterion: aggregate skill score (CRPS / mean quantile score), threshold-
+   weighted CRPS with pre-committed left-tail threshold (the propriety-
+   preserving replacement for our fixed-30-EUR slice), and pinball-at-p10
+   plus lower-side coverage as a calibration diagnostic. The whole package is
+   tested for significance with Diebold-Mariano. **First experiment after
+   M4 should be EXP-012: refit LGBM at 9-19 quantiles and re-evaluate on the
+   M4 window data using the new metrics**, to verify the criterion
+   discriminates correctly *before* committing it to a future shadow.
 2. **Fix exogenous freshness (augur#12) before shadowing a new model class.**
    Companion-hypothesis ratio 1.84 means the freshness skew is empirically
    real, not theoretical. Any next-bet shadow that doesn't fix this is testing
