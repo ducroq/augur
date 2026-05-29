@@ -21,6 +21,7 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 | Changing ML pipeline, model, or forecast logic | `docs/model-progress-log.md` — add dated entry with rationale, evidence, and outcome |
 | Logging or citing an experiment (A/B, warmup, ablation) | `experiments/registry.jsonl` — append one line per experiment; schema in `experiments/README.md` |
 | Taking a provisional position to revisit later | `docs/hypothesis-log.md` — Position / Alternative / Method / Revisit trigger / Review-by; surface due items in `/curate` |
+| Looking up citations or starting a literature pass | `docs/literature.md` — topic-indexed bibliography; per-topic deep-dives live as separate `docs/*.md` files (e.g. `metric-redesign-literature-review.md`) |
 | Ending a session | Run `/curate` — review gotchas, promote patterns, check doc sync |
 | Monthly or after major restructuring | Run `/audit-context` — structural health audit |
 

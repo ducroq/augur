@@ -182,10 +182,23 @@ Two seeds, ranked by likely impact:
    weighted CRPS with pre-committed left-tail threshold (the propriety-
    preserving replacement for our fixed-30-EUR slice), and pinball-at-p10
    plus lower-side coverage as a calibration diagnostic. The whole package is
-   tested for significance with Diebold-Mariano. **First experiment after
-   M4 should be EXP-012: refit LGBM at 9-19 quantiles and re-evaluate on the
-   M4 window data using the new metrics**, to verify the criterion
-   discriminates correctly *before* committing it to a future shadow.
+   tested for significance with Diebold-Mariano.
+
+   **EXP-012 ran 2026-05-29 to validate this criterion on the existing M4
+   window data** (see `docs/exp-012-results.md` and EXP-012 in
+   `experiments/registry.jsonl`). **Outcome: hypothesis refuted with
+   nuance.** LGBM wins decisively on aggregate skill (MQS 10.22 vs ARF MAE
+   35.13, DM p < 0.0001) — that part of the criterion redesign is
+   validated. But ARF *also* wins on twCRPS (p=0.94) and pinball-at-p10
+   (p=0.92): the literature-review prediction "ARF loses by construction
+   because its lower band is clamped at 0" doesn't hold in the M4 data —
+   the clamp wasn't binding and ARF's EWM-derived band lands in a hard-to-
+   beat zone. **Updated next-bet design**: use CRPS / mean quantile score
+   as the primary skill criterion (validated), treat tail metrics as
+   *descriptive not promotion-gating* until the long-horizon mechanism is
+   understood, lower-side coverage as a guardrail only. EXP-013 candidate:
+   9-quantile backtest on a longer window to confirm overall-skill picture
+   at finer resolution and characterise tail behaviour.
 2. **Fix exogenous freshness (augur#12) before shadowing a new model class.**
    Companion-hypothesis ratio 1.84 means the freshness skew is empirically
    real, not theoretical. Any next-bet shadow that doesn't fix this is testing
