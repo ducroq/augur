@@ -1,5 +1,7 @@
 # Data Formats — energyDataHub
 
+> **Last verified 2026-05-29**: schema v2.1, endpoint list, and unit conventions all still match the published energyDataHub artefacts on sadalsuud. Re-verify if energyDataHub bumps its schema version.
+
 ## Schema v2.1 Structure
 
 All data published as standardized JSON:
