@@ -38,10 +38,23 @@ quantiles (deferred to a possible EXP-013).
 
 ## 2. Headline numbers
 
-Pre-committed `twCRPS` left-tail threshold: `q05(realized) = -4.07
-EUR/MWh` (5th percentile of realized prices in the window). Negative
-threshold means we're asking "did the model anticipate prices crashing
-to or below ≈ -4 EUR/MWh?"
+Pre-committed `twCRPS` left-tail threshold: **`q05(realised, April 2026)
+= -27.76 EUR/MWh`** (5th percentile of realised prices in the EXP-009
+backtest window, which precedes the EXP-012 evaluation window and is
+therefore strictly pre-committed). An earlier draft of this report used
+`q05` of the in-window realised, which broke the pre-commitment property
+that makes twCRPS proper; the data-analyzer review of 2026-05-29 caught
+this and the threshold was moved to the April window.
+
+**Implementation caveat (also surfaced by the 2026-05-29 review)**: the
+twCRPS computed here is the per-quantile-decomposition variant — average
+pinball loss across the quantiles whose predicted value falls below the
+threshold — not the canonical Gneiting & Ranjan (2011) form that
+integrates the Brier score `(F̂(z) − 1{y ≤ z})²` over `z ≤ c`. The two
+forms answer different questions and a model that never predicts into
+the tail (ARF here, with threshold -27.76) gets a "score" of zero under
+the variant we computed, which can mislead a naïve "lower is better"
+reading. See §3 for what this means for the comparison.
 
 ### Criterion (a) — recomputed for sanity
 
@@ -63,8 +76,9 @@ LGBM significantly wins; p ≥ 0.50 means LGBM doesn't win (and may lose).
 | Metric | LGBM | ARF | mean diff | DM stat | DM p | Direction |
 |---|---|---|---|---|---|---|
 | Mean quantile score / MAE | **10.22** | 35.13 | -24.91 | -13.14 | <0.0001 | **LGBM wins decisively** |
-| twCRPS (left-tail at -4.07) | 0.109 | 0.023 | +0.086 | +1.52 | 0.94 | ARF wins |
-| Pinball-at-p10 | 7.97 | 7.14 | +0.83 | +1.40 | 0.92 | ARF wins (not sig.) |
+| twCRPS variant (left-tail at -27.76, pre-committed) | 0.0245 | 0.0000 | +0.0245 | +2.28 | 0.99 | ARF "wins" by abstention (see §3) |
+| twCRPS variant (left-tail at -4.07, in-sample, draft only) | 0.109 | 0.023 | +0.086 | +1.52 | 0.94 | not pre-committed; preserved for transparency |
+| Pinball-at-p10 | 7.97 | 7.14 | +0.83 | +1.40 | 0.92 | LGBM does not win; modest evidence ARF wins |
 | Lower-side coverage (target 0.90) | 0.809 | 0.824 | | | | Both under-cover |
 | Winkler IS (α=0.20) | 149.7 | 192.6 | | | | LGBM wins (descriptive) |
 
@@ -86,18 +100,46 @@ win on pinball-at-p10 is driven by the long-horizon hours.
 
 The review predicted "ARF's clamped-at-zero lower band loses by
 construction" on pinball-at-p10. **It doesn't, because the band isn't
-actually clamped at 0 in the M4 window.** ARF's lower band is
-`point - 1.282·EWM_std` (Gaussian assumption from EWM error stats with
-24h half-life). On 2026-05-14 the lower band averaged 10.5 EUR/MWh —
-well above zero. The clamp in `ml/update.py` only bites when
-`point - 1.282·EWM_std < 0`, which apparently happens less often in this
-window than the prior assumption suggested.
+actually clamped at 0 in the M4 window.** ARF's lower band is computed
+as `point - 1.282·EWM_std` (a Gaussian-residual assumption applied to
+EWM-tracked error stats). On 2026-05-14 the lower band averaged 10.5
+EUR/MWh — well above zero. The clamp at `ml/update.py:365` only bites
+when `point - 1.282·EWM_std < 0`, which happens less often in this
+window than the prior assumption suggested. The ARF-lower-as-p10
+substitution we use here implicitly assumes Gaussian zero-mean residuals,
+which the EWM tracking does not strictly guarantee — so ARF's "p10" is a
+miscalibrated p10 surrogate, and the pinball-at-p10 comparison is best
+read as "ARF lower band vs LGBM p10" rather than a clean quantile
+comparison.
 
 The ARF lower band ends up in a "naturally cautious" zone (positive but
-not too high) that's surprisingly hard to beat on pinball-at-p10. LGBM
-at long horizons over-extrapolates downward (p10 sometimes very
-negative) and gets punished by pinball when the realized doesn't dip
-that far.
+substantially below the point) that's surprisingly hard to beat on
+pinball-at-p10. LGBM at long horizons over-extrapolates downward (p10
+sometimes very negative) and gets punished by pinball when the realised
+doesn't dip that far.
+
+### The twCRPS variant doesn't measure what we wanted
+
+A second methodological lesson surfaced after we re-ran with the
+pre-committed threshold (-27.76 EUR/MWh). LGBM scored 0.0245; ARF scored
+**exactly 0.0000**. The implementation only fires pinball contributions
+for quantiles whose predicted value falls *below* the threshold. ARF's
+point forecasts essentially never go below -27.76, so its "weight" is
+always zero and it scores 0 by abstention. A model that never predicts
+into the extreme tail gets a perfect twCRPS variant score regardless of
+whether the realisations actually fell into the tail.
+
+This is a different question from the canonical Gneiting & Ranjan (2011)
+twCRPS, which integrates the Brier score over thresholds and *does*
+penalise a model whose CDF stays at 0 below threshold when realisations
+fall there. The variant we computed reduces to "of the times you
+predicted into the tail, how accurate were you?" — which a no-extrapolation
+model wins by abstaining.
+
+Treat the twCRPS numbers in this report as descriptive, not as
+falsification of the literature recommendation. A properly-implemented
+threshold-integral twCRPS may well behave differently on this data;
+deferred to a follow-up.
 
 ### What the new criterion correctly surfaces
 
@@ -204,7 +246,8 @@ conditioning.
   data shows that clamp doesn't bite in the M4 window. Either the
   clamp doesn't activate as often as the memory suggested, or the
   memory was written about a regime where it did. Worth checking
-  `ml/update.py:337` and the ARF metrics_history for clamp incidence.
+  `ml/update.py:365` (the actual clamp line; older docs cite line 337,
+  which is stale) and the ARF metrics_history for clamp incidence.
 
 ## 6. Artefacts
 

@@ -1,4 +1,4 @@
-# How a pre-committed promotion criterion failed twice, and what we learned
+# Three iterations of a promotion criterion, and what each one taught us
 
 *Draft. Audience: applied ML practitioners and energy-forecasting folk. Tone:
 case study, honest about the mistakes. Style: polish later, capture now.*
@@ -6,11 +6,15 @@ case study, honest about the mistakes. Style: polish later, capture now.*
 **One-line summary.** We set up a structured pre-committed promotion criterion
 for an electricity-price forecasting model. It failed in a way that pointed
 at a methodological flaw in the criterion itself, not the model. We
-researched the literature, got a recommended fix, and tested the fix on the
-same data before committing it to another shadow window. The literature's
-prediction was *also* wrong, in an interesting and instructive way. The
-framework — pre-commit, test on existing data, iterate — caught both
-mistakes before either could damage a production decision.
+researched the literature, applied the recommended replacement, found *its*
+headline prediction was also wrong on our data — and then, after a review
+battery flagged a propriety violation in our own implementation, found that
+the recommended replacement's *implementation* needs more care than the
+literature review suggested. Three iterations, each one narrower and more
+honest than the last. The existing pre-commit-and-test discipline (already
+in the project's hypothesis-log structure) made each iteration legible; a
+discretionary review battery between iterations caught what the discipline
+alone could not.
 
 ---
 
@@ -65,9 +69,12 @@ The shadow plan §6 set three promotion criteria, all to be evaluated over a
 
 All three had to hold to justify replacing ARF on the dashboard. The
 criteria were pre-committed in a hypothesis log file before the shadow
-started accumulating data. The file explicitly stated: *"Don't loosen Method
-when the answer arrives; if you want to redefine the bet, open a new entry."*
-This is the discipline that makes a falsifiable test mean anything.
+started accumulating data, following the project's existing process for
+provisional positions: a `Position / Alternative / Method / Revisit
+trigger / Review-by` template that predates this experiment. That file
+explicitly stated: *"Don't loosen Method when the answer arrives; if you
+want to redefine the bet, open a new entry."* We didn't invent this
+discipline for the M4 bet — but we did rely on it.
 
 Criterion (a) was the deliberate one. ARF's structural failure was on
 negative midday prices, so the natural test of the replacement was: *does
@@ -78,9 +85,12 @@ threshold reflected the regime we cared about.
 
 ## 3. The M4 verdict, May 29 2026
 
-After 20 days of nightly cron predictions (the first 6 days of which were
-discarded as cron-shake-out per the pre-committed window-selection rule), we
-ran the Method on the trailing 14:
+After 20 days of nightly cron predictions, we ran the Method on the
+trailing-14 window (2026-05-14 → 2026-05-27). The pre-committed
+window-selection rule was "most-recent 14 days only, ignore earlier
+rows from cron-shake-out" — taking the trailing 14 of 20 leaves the
+first 6 unused as an arithmetic consequence, not because of a named
+6-day discard clause.
 
 | Criterion | Value | Threshold | Verdict |
 |---|---|---|---|
@@ -103,36 +113,56 @@ EUR/MWh, ARF 39.04. **LightGBM is 38% better on the unsliced average.**
 How can a model be 38% better overall, 55% better on evening peaks, and 61%
 *worse* on the low-price slice?
 
-## 4. Forecaster's dilemma
+## 4. Two interpretations, both partly right
 
-The answer turns out to be a known trap in forecast evaluation, named in a
-2017 paper by Lerch, Thorarinsdottir, Ravazzolo and Gneiting: the
-*forecaster's dilemma*. When you condition your evaluation slice on the
-realised outcome, you bias the comparison.
+The puzzle admits two readings, and a careful diagnosis has to entertain
+both before picking.
 
-Concretely. ARF's forecasts during the May 2026 window clustered in a
-mean-reverting band around 50–80 EUR/MWh during midday hours. The realised
-midday prices crashed to −20. ARF's errors on those hours were 70–100
-EUR/MWh wide — *all systematically positive*. LightGBM, trying to forecast
-the crash, swung its p50 prediction much lower — toward 0 or sometimes
-slightly negative — but at long horizons couldn't reach down to the
-realised −20. Its errors were also 70–100 EUR/MWh wide, but with a
-different sign structure.
+**Reading A: metric artefact.** When you condition an evaluation slice on
+the *realised* outcome and then score with a non-strictly-proper
+comparison, you bias the result. This is the *forecaster's dilemma*
+named by Lerch, Thorarinsdottir, Ravazzolo and Gneiting (2017, *Statistical
+Science* 32: 106-127). MAE is a point-forecast loss, not a scoring rule
+in the Gneiting-Raftery sense — but the elicitation logic still applies:
+conditioning on `Y < c` and then ranking models by absolute error within
+that slice can favour a model whose predictions cluster near a
+climatological mean over one whose predictions try to forecast the
+extreme regime. A trivially-constant "predict the climatological mean
+forever" forecaster can win this kind of slice by being closest to the
+conditioning event in expectation. The fix is to use a *propriety-
+preserving* slice — a threshold-weighted score with the threshold fixed
+*before* the realised data is seen — not a condition-on-y comparison.
+This trap has been known in the forecast-evaluation literature since at
+least the early 2010s. We re-derived it the hard way.
 
-MAE on a low-realised slice treats both equally. But ARF and LightGBM are
-failing differently. ARF is *timid in the right direction*: it doesn't
-predict the crash, but it's positioned closer to a baseline that's
-asymmetrically less wrong on the conditioning event we selected. LightGBM
-attempts the forecast and over- or under-shoots in ways that look bad
-under absolute error.
+**Reading B: ARF's prior is actually closer to truth here.** This is the
+sympathetic-to-ARF objection. ARF's forecasts during the May 2026 window
+clustered around 50–80 EUR/MWh during midday hours; realised crashed to
+−20. ARF didn't predict the crash but it also wasn't *wildly* off — its
+errors were 70–100 EUR/MWh, systematically positive. LightGBM tried to
+forecast the crash, swung its p50 toward 0 or slightly negative, and at
+long horizons couldn't reach down to the realised −20. Its errors were
+also 70–100 EUR/MWh, with mixed signs. *On absolute error alone*,
+they're comparable; on the conditioning slice ARF is closer. But this
+isn't only a metric bias — at long horizons (h > 48), the features
+LightGBM uses thin out, and there's a real case that a mean-reverting
+prior *is* the better point estimate when the model has no informative
+signal. Per-horizon evidence we'll see in §6 supports this reading.
 
-Worse, MAE on a *condition-on-y-extreme* slice isn't a proper scoring rule.
-You can construct trivial forecasters — predict the climatological mean
-forever — that beat genuine forecasters on extreme-realisation slices,
-because the conditioning step plants a bias toward whoever is closest to a
-constant. The literature has known this since at least the early 2010s. We
-re-derived it from scratch, the hard way, by losing 14 days of shadow time
-to a criterion that couldn't tell us what we thought it was telling us.
+The two readings aren't mutually exclusive, and we don't have to pick
+just one. The honest summary is: the *metric* was rigged against a
+non-baseline-clinging model in a way the literature has named, *and* at
+the horizons where LightGBM lacks signal, a baseline-clinging model
+may genuinely be the better point estimate. Either way, criterion (a)
+as MAE on a fixed-threshold realised-conditioned slice can't tell us
+which it is — it just says "ratio 1.61, fail."
+
+(Worth flagging the rhetoric: an earlier draft of this article called
+ARF "timid in the right direction." That phrasing gives ARF agency it
+doesn't have. ARF's tree leaves contain no negative-price training
+data, so its predictions can't reach low. Calling that "timid" is
+generous; it's structural inability that happens to be on the right
+side of the conditioning slice we picked.)
 
 ## 5. Literature review
 
@@ -154,7 +184,11 @@ trap: **threshold-weighted CRPS** (Gneiting & Ranjan, *JBES*, 2011). twCRPS
 integrates the Brier score over thresholds with a fixed weight function —
 crucially, the threshold is *pre-committed before seeing data*, which makes
 it proper. The 2017 forecaster's dilemma paper from the same group is
-literally the warning against the trap we walked into.
+literally the warning against the trap we walked into. (Caveat surfaced
+by the literature review: de Punder et al. 2025 raise a propriety
+concern for some weight functions; the simple left-tail indicator with
+fixed `c` is the form used in essentially all published EPF/weather
+applications and is the form we use here.)
 
 For comparing a probabilistic forecast to a point forecast: CRPS reduces
 exactly to MAE when the predictive distribution is a point mass (Gneiting &
@@ -173,58 +207,76 @@ So the literature gives a clean recipe. The new criterion design:
 
 All compared with DM. Done.
 
-## 6. The second surprise
+## 6. The second iteration, on existing data
 
-Before committing this to another 14-day shadow window, we did one more
-thing. The shadow had already collected 14 days of LightGBM p10/p50/p90
-predictions and ARF point + EWM-band forecasts on the same timestamps. We
-could *apply the new metrics to the existing data* and see if they
-discriminated the way the literature predicted.
+Before committing the new criterion to another 14-day shadow window, we
+applied it to the data we already had. The shadow had collected 14 days
+of LightGBM p10/p50/p90 predictions and ARF point + EWM-band forecasts
+on the same timestamps. Re-scoring them with the new metrics cost an
+hour of work and let us see whether the literature's prediction held up
+*before* burning another shadow window on it.
 
-This is the test of a metric against itself. If the recipe is right, then
-recomputing M4 with the new metrics should reveal LightGBM's real skill
-that the old criterion (a) hid. Specifically, the literature review made a
-crisp prediction: ARF's lower confidence band is *clamped at 0 in the
-source code*, so it can never reach into negative territory, so it should
-*lose by construction* on pinball-at-p10 — which is exactly the metric that
-asks "did your lower tail reach low enough?"
+This second iteration wasn't part of the framework — it was a
+discretionary "let's check first" move. That distinction matters and
+we'll return to it.
 
-We ran it. 842 paired observations across 14 days. Here's what happened.
+The literature review made a crisp prediction: ARF's lower confidence
+band is *clamped at 0 in the source code* (`ml/update.py:365`), so it
+can never reach into negative territory, so it should *lose by
+construction* on pinball-at-p10 — which is exactly the metric that asks
+"did your lower tail reach low enough?"
 
-| Metric | LightGBM | ARF | DM p (LightGBM wins?) |
+We ran it. 842 paired observations across 14 days.
+
+| Metric | LightGBM | ARF | DM p (one-sided, LightGBM wins?) |
 |---|---|---|---|
-| Mean quantile score / MAE-equiv | **10.22** | 35.13 | < 0.0001 |
-| twCRPS, left-tail at −4.07 | 0.109 | 0.023 | 0.94 |
+| Mean quantile score (3-pt) / MAE-equiv | **10.22** | 35.13 | < 0.0001 |
+| twCRPS variant, left-tail at −27.76 (pre-committed) | 0.0245 | **0.0000** | 0.99 |
 | Pinball-at-p10 | 7.97 | 7.14 | 0.92 |
 | Lower-side coverage (target 0.90) | 0.81 | 0.82 | (both under) |
 | Winkler IS (α = 0.20) | 149.7 | 192.6 | (LightGBM lower) |
 
-The aggregate skill story is exactly what we expected and exactly what the
-old criterion hid. LightGBM's mean quantile score is **3.4× better** than
-ARF's MAE-as-CRPS-equivalent, with Diebold-Mariano significance through the
-floor. Its median forecast is *much* closer to realised, on average, than
-ARF's point forecast. The model is genuinely better at the modal task. Old
-criterion (a) hid this because the conditioning slice happened to favour
-ARF's positioning.
+### Aggregate skill: validated, with one honest caveat
 
-But the tail metrics didn't go the way the literature predicted. ARF wins
-twCRPS, ARF wins pinball-at-p10. The DM p-values are 0.94 and 0.92 — well
-*above* the 0.50 line that would mean "LightGBM doesn't significantly
-win". They mean LightGBM significantly *loses*.
+LightGBM's mean quantile score is **3.4× lower** than ARF's
+MAE-as-CRPS-equivalent (Gneiting & Raftery 2007 §4.2 — CRPS reduces to
+absolute error for a point forecast), with Diebold-Mariano significance
+of `p < 0.0001`. Its median forecast is *much* closer to realised, on
+average, than ARF's point forecast. The model is genuinely better at the
+modal task. Criterion (a) hid this because its conditioning slice
+favoured ARF's positioning.
 
-Why? Because the "ARF lower band is clamped at 0" prediction turned out to
-be **wrong on the May 2026 data**. We checked the actual ARF forecast files
-for the window: on 2026-05-14 the lower band averaged 10.52 EUR/MWh, not 0.
-The clamp in the source code only bites when *point - 1.282·EWM_std* goes
-negative, which apparently happens less often in this window than the
-prior assumption suggested.
+**Caveat we have to flag here, not bury in §9.** LightGBM was trained at
+only 3 quantiles (p10/p50/p90), so the "mean quantile score" reported is
+a 3-point quantile-pinball average, *not* a properly-estimated CRPS. CRPS
+from a finite quantile grid converges as the grid densifies; at 3
+quantiles the estimate is biased and the direction depends on the
+predictive distribution's shape. The DM significance on the 3-point
+score is statistically valid (we're paired-testing the same metric on
+both models) but the "3.4× better" headline shouldn't be quoted as a
+CRPS ratio. A follow-up at 9 or 19 quantiles is queued.
 
-So ARF's lower band lands in a "naturally cautious" zone — positive but
-substantially below the point forecast. That zone turns out to be
-surprisingly hard to beat on pinball-at-p10. LightGBM's quantile output
-sometimes swings its p10 quite negative at long horizons (h > 48), and
-when the realised price doesn't dip that far, pinball punishes the over-
-extrapolation. Per-horizon decomposition:
+### Tail metrics: the prediction didn't hold, in two ways
+
+ARF wins twCRPS, ARF wins pinball-at-p10. DM p-values of 0.99 and 0.92
+under H1 = "LightGBM wins" are equivalent to ~0.01 and ~0.08 under H1 =
+"ARF wins." The first is statistically significant evidence for ARF; the
+second is modest. Neither matches the literature review's prediction.
+
+Two distinct things happened, both worth understanding.
+
+**The "clamped at 0" assumption didn't hold on this data.** We checked
+the actual ARF forecast files for the window: on 2026-05-14 the lower
+band averaged 10.52 EUR/MWh, not 0. The clamp at `ml/update.py:365` only
+bites when `point − 1.282·EWM_std` goes negative, which happens less
+often in this window than the prior memory note assumed. The
+"ARF-lower-as-p10" substitution we use here also implicitly assumes
+Gaussian zero-mean residuals (the 1.282 factor is the standard-normal
+10th percentile); the EWM tracking doesn't strictly guarantee this, so
+ARF's "p10" is a miscalibrated p10 surrogate. The comparison is best
+read as "ARF lower band vs LightGBM p10" rather than a clean
+quantile-vs-quantile comparison. On the per-horizon evidence (next), the
+result holds either way.
 
 | Horizon group | LightGBM p10 pinball | ARF lower-band pinball |
 |---|---|---|
@@ -233,49 +285,104 @@ extrapolation. Per-horizon decomposition:
 | 48 < h ≤ 72 | 9.37 | 7.53 |
 | h > 72 | 11.30 | 7.94 |
 
-LightGBM wins p10 pinball at horizons where it has signal (h ≤ 48). It
-loses where its features have thinned out and the model is essentially
-guessing (h > 48). On aggregate, the long-horizon losses dominate.
+LightGBM wins p10 pinball at h ≤ 48 — the horizons where it has signal.
+It loses at h > 48, where its features thin out and the model is
+essentially guessing. On aggregate, the long-horizon losses dominate.
+This is the Reading-B "ARF's prior is genuinely better at long horizons"
+story showing up in the data, not just a metric artefact.
 
-This is a genuine finding about both models that the original criterion
-(a) couldn't see and that the literature review's prediction had missed.
+**The twCRPS implementation doesn't measure what we wanted it to.** A
+review battery on this article (data-analyzer + code-reviewer +
+skeptical-EPF reviewer, run after a first draft) caught a third issue.
+Our `twcrps_left_tail` implementation is the per-quantile-decomposition
+variant: average pinball loss across the quantiles whose predicted value
+falls below the threshold. With the pre-committed threshold of −27.76,
+ARF's point forecast essentially never goes below the threshold — so its
+weight is *always zero* and its twCRPS variant scores 0.0000 by
+abstention. A model that never predicts into the extreme tail gets a
+"perfect" twCRPS variant score regardless of whether realisations
+actually fell into the tail.
 
-## 7. Why the framework works
+This is a different question from the canonical Gneiting & Ranjan (2011)
+twCRPS, which integrates the Brier score `(F̂(z) − 1{y ≤ z})²` over `z
+≤ c` and *does* penalise a CDF that stays at 0 below the threshold when
+realisations fall there. Our variant reduces to "of the times you
+predicted into the tail, how accurate were you?" — which a
+no-extrapolation model wins by abstaining.
 
-Two pre-committed criteria failed in a row. The first one — fixed-threshold
-MAE-on-slice — was methodologically wrong in a way we didn't appreciate
-until the data hit us. The second one — pinball-at-p10 — was based on a
-literature recommendation that contained an assumption ("ARF clamp binds")
-that didn't hold on our actual data.
+Treat the twCRPS numbers here as descriptive, not as falsification of
+the literature recommendation. A properly-implemented threshold-integral
+twCRPS may well behave differently on this data. We've documented this
+in `ml/shadow/metrics.py` and deferred a canonical implementation to a
+follow-up. The pinball-at-p10 finding is robust to this issue (no
+threshold weighting); the per-horizon table above stands.
 
-Neither failure was a disaster, because the framework caught both before
-they damaged a production decision:
+### Where it leaves us
 
-- **M4** caught the first one because the criterion was pre-committed in a
-  hypothesis log and run mechanically against the trailing window. The
-  decision wasn't "look at the numbers and decide" — it was a script that
-  printed PROMOTE = True or False. There was no room to fudge "but
-  qualitatively LightGBM seems better, let's promote it anyway." The
-  framework forced the question: *if our criterion says no, do we trust
-  our criterion or our gut?* In this case, the criterion turned out to be
-  more right than our gut suggested — the gut wanted to promote LightGBM
-  because of its overall MAE win, but the *failure mode* the criterion
-  detected (long-horizon low-price weakness) is real and would have shown
-  up on the dashboard a week after promotion. Park was correct, even
-  though our reason for parking was wrong.
+So the second iteration left us with three things:
+1. Aggregate skill is real — LightGBM's MQS is decisively better (with
+   the 3-quantile bias caveat).
+2. At long horizons (h > 48), ARF's mean-reverting prior may genuinely
+   be the better point estimate — per-horizon pinball-at-p10 supports
+   this.
+3. The twCRPS variant we implemented doesn't honestly measure tail
+   skill — it rewards abstention. A canonical implementation is
+   future work.
 
-- **EXP-012** caught the second one because before committing the
-  literature-recommended replacement criterion to another 14-day shadow
-  window, we asked "does this criterion work on data we already have?"
-  We had 20 days of paired LightGBM-vs-ARF predictions sitting in a JSON
-  file. Re-scoring them with the new metrics cost an hour of work and
-  prevented running a second shadow on a criterion whose assumptions
-  hadn't been tested.
+## 7. What the framework caught, and what it didn't
 
-The pattern is: pre-commit a criterion, test it against falsifiable data,
-update the criterion when you have evidence that it's wrong, do not update
-it when you don't. Then go around again. Both times, the cycle saved us
-from a worse failure.
+Three iterations, three different kinds of error. It's worth being
+honest about which the framework caught and which were caught by
+discretion.
+
+**Iteration 1 — the criterion-design error.** The first failure
+(fixed-threshold MAE on a realised-conditioned slice) was caught by the
+framework, in the proper sense. The criterion was pre-committed in a
+hypothesis log and run mechanically against the trailing window. The
+decision wasn't "look at the numbers and decide" — it was a script that
+printed PROMOTE = True or False. There was no room to fudge "but
+qualitatively LightGBM seems better, let's promote it anyway." If we
+had ignored the verdict and shipped LightGBM on the strength of its
+overall MAE win, the long-horizon low-price weakness the per-horizon
+table eventually surfaced would have shown up on the dashboard a week
+after promotion. Park was correct, *for reasons we partly misdiagnosed
+at the time*.
+
+**Iteration 2 — the literature-prediction error.** The second failure
+(the "ARF clamp binds, so it loses pinball-at-p10 by construction"
+prediction) was *not* caught by the framework. It was caught by a
+discretionary decision to apply the new metrics to existing data before
+committing them to a new shadow window. That's not part of the
+hypothesis-log discipline; it was a "let's check first" move that
+could just as easily have been skipped. If we had committed to another
+14-day shadow on the new criterion as written, we'd have come back at
+the end of it with the same surprise the existing data already showed.
+
+**Iteration 3 — the implementation error.** The third failure (twCRPS
+variant rewarding abstention) was caught by neither the framework nor
+the EXP-012 first run. It was caught by a review battery — data-analyzer,
+code-reviewer, and a skeptical EPF practitioner reviewer — fired *after*
+the article draft. The framework's pre-committed criteria don't audit
+their own implementation; that's a different kind of check.
+
+Put together, the lesson is narrower than "the framework caught
+everything." It's:
+
+1. *Pre-commitment to a falsifiable criterion* (the framework) prevents
+   ad-hoc post-hoc redefinition. That's table-stakes and it earned its
+   keep at iteration 1.
+2. *Discretionary "test on existing data before the next window"*
+   (between iterations) catches a class of errors the framework can't —
+   wrong assumptions baked into the criterion itself. This needs to be
+   habit, not heroism.
+3. *Independent review of the implementation* (multi-model review
+   battery) catches a third class — propriety violations and
+   implementation drift that neither the framework nor the developer can
+   reliably self-audit.
+
+All three matter. The pattern is: pre-commit, test the criterion
+against existing data, review the implementation. *Then* go around
+again on the actual decision.
 
 ## 8. What we'd do differently
 
@@ -288,11 +395,13 @@ distinguishes LightGBM from ARF correctly, with statistical significance,
 and the conclusion isn't sensitive to slicing tricks. *That's* the
 promotion metric. One number, paired DM test, done.
 
-**Demote tail metrics to descriptive**. Pinball-at-p10 and twCRPS are
-useful diagnostics for understanding where a model wins and loses, but
-they shouldn't be promotion gates. We don't yet understand why ARF's EWM
-band wins them. Until we do — and we have a hypothesis or two, but they
-need their own experiment — they're characterisation tools, not gates.
+**Demote tail metrics to descriptive**. Pinball-at-p10 and (canonically-
+implemented) twCRPS are useful diagnostics for understanding where a
+model wins and loses, but they shouldn't be promotion gates as we
+currently understand them. We don't yet understand why ARF's EWM band
+wins pinball-at-p10, and our twCRPS variant doesn't yet measure tail
+skill the way we wanted it to. Both are characterisation tools, not
+gates, until the implementations and interpretations are cleaner.
 
 **Coverage stays a guardrail.** Lower-side coverage failing for both
 models (0.81 vs 0.90) is a real problem and should block any promotion of
@@ -324,12 +433,14 @@ dominated by one regime. If that's right, the fix might be *horizon-
 conditioned CQR* — separate calibration sets per horizon group — rather
 than a different model class.
 
-**Does the picture change at 9–19 quantiles?** Our LightGBM was trained at
-only 3 quantiles (p10/p50/p90), which makes any "CRPS from pinball-sum"
-estimator biased. The MQS we reported is honestly a 3-point quantile-score
-average, not CRPS proper. Retraining at 9 or 19 quantiles is cheap (just
-more LGBMRegressor instances) and would tell us whether the 3-quantile
-result generalises.
+**Does the picture change at 9–19 quantiles?** Our LightGBM was trained
+at only 3 quantiles (p10/p50/p90); the MQS we reported is a 3-point
+quantile-pinball average, not CRPS proper (as flagged in §6).
+Retraining at 9 or 19 quantiles is cheap (just more LGBMRegressor
+instances) and would tell us whether the 3-quantile result generalises
+— and would also let us compute a canonical Gneiting-Ranjan twCRPS
+properly, addressing the implementation issue our review battery
+surfaced.
 
 **Window dependence.** 14 days is what we had. Best-practice EPF papers
 recommend running the same evaluation at 7, 14, 21 days and confirming
@@ -350,18 +461,36 @@ what the backtest assumed.
 
 The Augur replacement story isn't over. ARF is still driving the dashboard.
 LightGBM is parked but its code is in the tree. The next experiment will
-retrain at 9 quantiles, use mean quantile score as the primary promotion
-criterion, and treat tail metrics as diagnostic rather than gating. If
-that experiment validates the overall-skill picture and we can fix the
-freshness skew, we'll shadow the new design and decide whether to swap on
-the dashboard.
+retrain at 9 or more quantiles, use mean quantile score as the primary
+promotion criterion (with a properly-implemented canonical twCRPS as a
+descriptive tail diagnostic), and treat any non-aggregate tail-skill
+metric as diagnostic rather than gating until we trust both its
+implementation and its interpretation. If that experiment validates the
+overall-skill picture and we can fix the freshness skew, we'll shadow
+the new design and decide whether to swap on the dashboard.
 
-The takeaway isn't a particular model or a particular metric. It's the
-discipline of pre-committing a falsifiable criterion, running it
-mechanically, and *then doing one more cycle* when the answer is suspicious
-— testing the new criterion on existing data before committing it to a new
-window. That second cycle saved us from a worse failure. It will probably
-save the next one too.
+The takeaway isn't a particular model or metric. It's that promoting a
+production model on a non-trivial criterion is a multi-layer problem,
+and *different* practices catch *different* errors:
+
+- Pre-commitment to a falsifiable criterion (the hypothesis-log
+  discipline) catches post-hoc redefinition.
+- "Test the new criterion on existing data before the next window" (a
+  habit, not a framework feature) catches assumptions baked into the
+  criterion.
+- Independent review of the implementation (a multi-model review
+  battery here) catches propriety violations and implementation drift.
+
+The first one is the cheapest and the easiest to skip; the third is the
+slowest and the one most likely to be skipped under time pressure. All
+three earned their keep on this arc. The honest summary isn't "the
+framework caught the mistakes." It's "the framework caught the first
+mistake, the second was caught by a discretionary check that wasn't
+part of the framework, and the third was caught by a discretionary
+review battery that wasn't part of the framework either." All three
+mistakes were instructive. Two of them are the kind of thing the
+literature has been warning about for over a decade and we just hadn't
+internalised yet.
 
 ---
 

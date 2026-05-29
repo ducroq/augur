@@ -307,6 +307,31 @@ def print_report(paired: pd.DataFrame, old: dict, new: NewMetricsResult) -> str:
     return text
 
 
+def _precommitted_threshold_from_april2026() -> float:
+    """Pre-committed twCRPS left-tail threshold = q05 of realised prices in
+    April 2026 (the EXP-009 backtest window — a window distinct from the
+    EXP-012 evaluation window 2026-05-14..2026-05-27).
+
+    Defensibility: this is computed from a calendar period that precedes the
+    evaluation window, so the threshold cannot have been chosen after seeing
+    the evaluation outcomes. The earlier version of this script computed q05
+    from the evaluation window itself, which broke pre-commitment and was
+    flagged by code review.
+    """
+    import pandas as pd
+
+    df = pd.read_parquet(REPO_ROOT / "ml" / "data" / "training_history.parquet")
+    apr = df.loc[
+        (df.index >= "2026-04-01") & (df.index < "2026-05-01"), "price_eur_mwh"
+    ]
+    if len(apr) < 100:
+        raise RuntimeError(
+            f"Pre-committed threshold needs April 2026 data; got n={len(apr)}. "
+            f"Parquet must include April 2026."
+        )
+    return float(apr.quantile(0.05))
+
+
 def main():
     paired = build_paired()
     if len(paired) == 0:
@@ -315,13 +340,18 @@ def main():
         print("shadow_state.json:calibration_history covers them.")
         sys.exit(2)
 
-    # Pre-commit the twCRPS threshold to the 5th percentile of realized — NOT
-    # the lowest, to avoid a 1-observation tail. Document this choice.
-    threshold_q05 = float(np.quantile(paired["realized"], 0.05))
-    print(f"\nPre-committed twCRPS left-tail threshold: q05(realized) = {threshold_q05:.2f} EUR/MWh\n")
+    threshold = _precommitted_threshold_from_april2026()
+    print(
+        f"\nPre-committed twCRPS left-tail threshold: q05(realised, April 2026) "
+        f"= {threshold:.2f} EUR/MWh"
+    )
+    print(
+        f"  (computed from a window distinct from the evaluation period "
+        f"{WINDOW_START}..{WINDOW_END}; preserves pre-commitment)\n"
+    )
 
     old = old_criterion_a(paired)
-    new = compute_new_metrics(paired, threshold=threshold_q05)
+    new = compute_new_metrics(paired, threshold=threshold)
 
     text = print_report(paired, old, new)
 
@@ -345,7 +375,7 @@ def main():
         arf_mae=("arf_abs", "mean"),
     )
     print(summary.to_string())
-    return paired, old, new, threshold_q05, summary
+    return paired, old, new, threshold, summary
 
 
 if __name__ == "__main__":

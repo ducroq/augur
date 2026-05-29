@@ -139,22 +139,37 @@ def twcrps_left_tail(
     taus: np.ndarray,
     threshold: float,
 ) -> np.ndarray:
-    """Threshold-weighted CRPS with left-tail indicator weight at ``threshold``.
+    """Per-quantile-weighted twCRPS variant with left-tail indicator at ``threshold``.
 
-    Implements Gneiting and Ranjan (2011) equation for w(z) = 1{z <= c}.
-    Approximated via the per-quantile decomposition: only quantiles q_tau
-    that lie below the threshold contribute, with each contribution being
-    the pinball loss at that level. Equivalently, this is the integral of
-    the Brier score (F(z) - 1{y <= z})^2 over z <= threshold, estimated
-    from the quantile-CDF.
+    **Important caveat:** this is NOT the canonical Gneiting and Ranjan (2011)
+    twCRPS, which integrates the Brier score ``(F̂(z) - 1{y <= z})^2`` over
+    thresholds ``z <= c``. It is the per-quantile decomposition variant: for
+    each observation, average pinball loss across the quantiles whose
+    predicted value falls below the threshold.
 
-    Concretely we compute, per observation:
+    Concretely, per observation::
 
-      twCRPS_i = sum_j 1{q_hat_ij <= c} * pinball(y_i, q_hat_ij, tau_j)
-                 + (boundary contribution from the partial step at c)
+        score_i = mean over j of   1{q_hat_ij <= c} * pinball(y_i, q_hat_ij, tau_j)
 
-    For simplicity and unbiasedness with a finite grid we use the per-quantile
-    summation form, which is the standard discretisation in EPF practice.
+    This answers a different question from the canonical form:
+        - Canonical twCRPS: "how well does your predictive CDF match the
+          indicator 1{Y <= z} for z below threshold?" — penalises a model
+          that *never* predicts into the tail because its CDF stays at 0
+          for z below threshold, missing realisations that fell into the
+          tail.
+        - This variant: "of the quantiles your model placed below the
+          threshold, how accurate were they?" — gives a score of 0 to a
+          model that *never* predicts a quantile below the threshold,
+          regardless of whether realisations were in the tail.
+
+    For a model with no probabilistic output (point forecast only), the
+    "implicit quantile" is the point. If the point never falls below the
+    threshold, this metric scores 0 trivially — which can mislead a naive
+    "lower is better" reading.
+
+    For honest tail-skill evaluation, prefer the canonical form (TODO:
+    implement) or use this variant alongside a "tail prediction rate"
+    diagnostic so abstention doesn't masquerade as skill.
 
     Args:
         y: realised values, shape (n,)
@@ -163,7 +178,7 @@ def twcrps_left_tail(
         threshold: scalar, pre-committed before observing data.
 
     Returns:
-        Per-observation twCRPS values, shape (n,). Aggregate with ``.mean()``.
+        Per-observation scores, shape (n,). Aggregate with ``.mean()``.
     """
     y = np.asarray(y, dtype=float)
     quantile_preds = np.asarray(quantile_preds, dtype=float)
