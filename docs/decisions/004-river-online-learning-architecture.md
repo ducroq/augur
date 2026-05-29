@@ -1,6 +1,6 @@
 # ADR-004: River Online Learning Architecture
 
-**Status**: Accepted
+**Status**: Superseded by ADR-006 (2026-05-29) — LightGBM-Quantile is now production. ARF cron continues running as a backup signal and as the source of the daily consumer-surcharge cache, but no longer drives the dashboard. See `docs/river-arf-retrospective.md` for the retirement reasoning.
 **Date**: 2026-03-28
 **Context**: Choosing the ML architecture for continuous energy price forecasting
 
