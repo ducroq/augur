@@ -9,6 +9,15 @@
 
 ---
 
+### scipy 1.17 broke statsmodels.api import (2026-05-29)
+**Problem**: While building `ml/shadow/metrics.py:diebold_mariano`, importing `import statsmodels.api as sm` raised `ImportError: cannot import name '_lazywhere' from 'scipy._lib._util'`. statsmodels.distributions.discrete tries to import a private scipy helper that was removed in scipy 1.17.
+**Root cause**: statsmodels (0.14.4 in the dev env) hasn't caught up with scipy 1.17's removal of `_lazywhere`. Augur doesn't pin either, so the project picked up scipy 1.17 from PyPI and broke a transitively-used statsmodels feature.
+**Fix**: Replaced `statsmodels.api.OLS + cov_hac` with a manual Bartlett-kernel Newey-West HAC implementation inline in `diebold_mariano` (~10 lines of numpy). No statsmodels dependency now. See `ml/shadow/metrics.py` and the 2026-05-29 commit that introduced the function.
+**Pattern**: If a project lightly uses statsmodels for one or two utilities, prefer inline numpy implementations over the dependency. Heavier statsmodels use (regression diagnostics, time-series modelling) deserves a pinned scipy version. Either way, run `python -c "import statsmodels.api"` after any scipy upgrade.
+**Status**: [RESOLVED] — manual HAC works; tests pass; no statsmodels in `requirements.txt`.
+
+---
+
 ### Sadalsuud Tailscale outage caught cron mid-run — DNS failure at git pull, then host offline (2026-05-22)
 **Problem**: Healthchecks.io alerted at 17:45 CEST that the Augur-shadow heartbeat had been silent for 25h. Diagnostic showed sadalsuud unreachable on Tailscale (last seen 2h prior), with other HCL-site nodes also offline ~6h prior — site-level network issue. Today's 14:45 UTC cron actually tried to run, but failed at the first `git pull energydatahub` step with `Could not resolve host: github.com`. `set -e` bailed cleanly before any ML steps; no partial state corruption.
 **Root cause**: Tailscale severed at HCL edge site mid-day; LXC host went fully offline shortly after. Not an augur code or orchestration bug — a host-availability failure mode that systemd migration (augur#12) doesn't address.

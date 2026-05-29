@@ -20,6 +20,12 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 
 ## Open
 
+<!-- Curate note (2026-05-29): the two iteration-4/5 EXP-014 entries below
+     are marked Status: resolved in their bodies. They remain in this
+     section pending a structural cleanup pass to move them to ## Resolved.
+     The Status field is authoritative — treat them as resolved when
+     scanning this file. -->
+
 ### [2026-05-29] The Augur method + the M4 arc are publishable if we invest ~2-3 weeks of empirical follow-up
 
 **Position (provisional):** Augur's production stack (ADR-006: LightGBM-Quantile multi-horizon + CQR + horizon-as-feature stacking + 56-day rolling window on NL day-ahead) is *not* novel as a method — every component is in Lago, Marcjasz, De Schutter & Weron (2021) or Nowotarski & Weron (2018). On its own it's a competent application, not a paper. But combined with the five-iteration M4 → EXP-014 narrative arc (`docs/articles/m4-metric-redesign-story.md`) and the promotion method (ADR-007), plus ~2-3 weeks of standard EPF empirical follow-up, the package becomes publishable as an applied methodology paper at *International Journal of Forecasting* practitioner section, IEEE PES workshops, or similar applied-ML venues.

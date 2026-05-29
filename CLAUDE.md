@@ -77,16 +77,14 @@ Client browser (https://energy.jeroenveen.nl):
 - **Why the swap**: five iterations of criterion redesign converged on a single-criterion-plus-guardrail design (skill: paired DM on |y−p50_LGBM| vs |y−point_ARF|, HAC bandwidth 71, p<0.10; calibration: LGBM not >0.02 worse than ARF on either side). Applied to the M4 paired data: LGBM MAE 28.9 vs ARF MAE 38.4 (25% better, DM p=0.029); LGBM lower-side coverage 0.811 vs ARF 0.824 (within tolerance); LGBM upper-side 0.870 vs ARF 0.621 (LGBM materially better). PROMOTE = True. See `docs/articles/m4-metric-redesign-story.md` for the full arc, `docs/hypothesis-log.md` for the pre-committed criteria, `experiments/registry.jsonl` EXP-008..EXP-014.
 - **Known weakness inherited from the swap**: lower-side coverage 0.81 is below the 0.90 nominal target. Same problem ARF had; not made worse by the swap, but worth a follow-up (CQR retune at horizon-conditioned calibration, or ACI). Tracked as the next experiment after augur#12.
 
-**ARF (production)**:
+**ARF (backup signal, retired-as-model 2026-04-28, kept-running 2026-05-29 — see ADR-006 / ADR-004 superseded)**:
 - Model: River ARFRegressor (10 trees), continuous online learning
 - Features: Lasso-selected — price lags, rolling stats, wind speed, solar GHI, load forecast
 - Target: ENTSO-E NL wholesale day-ahead price (EUR/MWh)
-- Consumer forecast: derived from wholesale via auto-computed surcharge (EZ consumer - ENTSO-E × 1.21), fallback chain (recent files → state → default 95 EUR/MWh)
-- Forecast: 72h with 80% confidence band, exchange-informed lags
-- Confidence bands: EWM error stats (half-life 24h) + volatility scaling from price_rolling_std_6h
-- Convergence metric: vs Exchange MAE (tracking daily)
-- Forecast archive: timestamped copies in `ml/forecasts/` on sadalsuud
-- M3 review fixup A added `error_prices` parallel array + `mae_at_low_price` in state for criterion (a) evaluability
+- Consumer forecast: derived from wholesale via auto-computed surcharge (EZ consumer - ENTSO-E × 1.21), fallback chain (recent files → state → default 95 EUR/MWh) — *the cached surcharge is also consumed by LightGBM's consumer-pricing step via `update_shadow.py:read_arf_surcharge`*
+- Forecast: 72h with 80% confidence band, exchange-informed lags (now in `augur_forecast.json` only consumed by Model-tab metric widgets, not dashboard price charts)
+- Forecast archive: timestamped copies in `ml/forecasts/` on sadalsuud (still used by `evaluate_shadow.py` for daily comparison)
+- Retirement reasoning + structural ceiling: `docs/river-arf-retrospective.md` (including post-promotion closing addendum)
 
 **LightGBM-Quantile (production from 2026-05-29)**:
 - Model: 9 LGBMRegressor (3 horizon groups × 3 quantiles p10/p50/p90, horizon-as-feature stacking)
@@ -105,33 +103,67 @@ Client browser (https://energy.jeroenveen.nl):
 
 | Path | What it is |
 |------|-----------|
-| `ml/features/online_features.py` | Shared feature builder for warmup + daily update |
-| `ml/data/consolidate.py` | Parses encrypted energyDataHub history into training parquet |
-| `ml/training/warmup.py` | One-time historical replay through River ARF |
-| `ml/update.py` | Daily entry point: learn + forecast + archive |
-| `ml/models/river_model.pkl` | Trained model artifact (committed daily by sadalsuud) |
-| `ml/models/state.json` | Model state: timestamps, error history, price buffer |
-| `static/js/dashboard.js` | Modular dashboard entry point (preferred) |
-| `static/js/modules/` | ES6 modules: api-client, chart-renderer, data-processor, etc. |
-| `decrypt_data_cached.py` | Production decryption with caching + --force |
-| `utils/secure_data_handler.py` | AES-CBC-256 + HMAC-SHA256 |
-| `scripts/netlify_build.sh` | Shared Netlify build script (all contexts) |
-| `netlify.toml` | Build pipeline: decrypt → hugo |
-| `tests/` | pytest suite for SecureDataHandler + OnlineFeatureBuilder |
-| `layouts/index.html` | Dashboard HTML template |
-| `static/css/style.css` | Glassmorphism dark theme |
-| `experiments/registry.jsonl` | Append-only experiment log (EXP-NNN); schema in `experiments/README.md` |
-| `docs/river-arf-retrospective.md` | ARF retirement postmortem with figures and recovered data |
-| `docs/lightgbm-quantile-shadow-plan.md` | LGBM shadow replacement plan with milestones + promotion criteria §6 |
-| `docs/hypothesis-log.md` | Provisional positions awaiting evidence (M4 hypothesis seeded) |
-| `ml/shadow/lightgbm_quantile.py` | `MultiHorizonLightGBMQuantileForecaster` — 9 LGBM models, horizon-as-feature |
-| `ml/shadow/secure_pickle.py` | HMAC-SHA256 sidecar; `save_signed_pickle` / `load_verified_pickle` |
-| `ml/shadow/update_shadow.py` | Nightly LGBM retrain + 72h predict + CQR widen |
-| `ml/shadow/evaluate_shadow.py` | Daily LGBM-vs-ARF metrics, appends to `ml/shadow/eval_log.jsonl` |
-| `ml/shadow/eval_log.jsonl` | Append-only eval log per fully-realised eval day (M4 promotion data) |
-| `ml/models/shadow/shadow_state.json` | LGBM shadow state: `last_run_utc`, `pending_predictions`, `calibration_history`, CQR stats (NOT under `ml/shadow/`) |
+**Production model pipeline (LightGBM-Quantile, ADR-006)**:
+| Path | What it is |
+|------|-----------|
+| `ml/shadow/lightgbm_quantile.py` | `MultiHorizonLightGBMQuantileForecaster` — 9 LGBM models, horizon-as-feature; `predict(sort=False)` returns raw tau quantiles |
+| `ml/shadow/features_pandas.py` | 24-feature builder for LGBM (price lags, rolling stats, calendar, exogenous, horizon) |
 | `ml/shadow/conformal.py` | Split-conformal CQR band correction (Romano/Patterson/Candès 2019) |
-| `ml/forecasts/{YYYYMMDD_HHMM}_forecast.json` | Timestamped ARF forecast archives (read by `evaluate_shadow.py`) |
+| `ml/shadow/update_shadow.py` | Nightly LGBM retrain + 72h predict + CQR widen + consumer-pricing fields via `read_arf_surcharge` |
+| `ml/shadow/evaluate_shadow.py` | Daily LGBM-vs-ARF metrics, appends to `ml/shadow/eval_log.jsonl` |
+| `ml/shadow/eval_log.jsonl` | Append-only eval log per realised eval day |
+| `ml/shadow/secure_pickle.py` | HMAC-SHA256 sidecar; `save_signed_pickle` / `load_verified_pickle` |
+| `ml/shadow/metrics.py` | Reusable metrics module — pinball, mean_quantile_score, twcrps_left_tail, lower_side_coverage, winkler_interval_score, diebold_mariano (manual Newey-West HAC) |
+| `ml/models/shadow/shadow_model.pkl` | Trained LGBM artifact (HMAC-signed; committed daily by sadalsuud) |
+| `ml/models/shadow/shadow_state.json` | `last_run_utc`, `pending_predictions`, `calibration_history` (with `p10_raw`/`p50_raw`/`p90_raw`), CQR stats |
+| `static/data/augur_forecast_shadow.json` | Production forecast file consumed by `dashboard.js` |
+| `ml/data/consolidate.py` | Parses encrypted energyDataHub history into training parquet |
+| `ml/data/training_history.parquet` | Rolling 56-day training data (gitignored; regenerated nightly) |
+
+**ARF backup pipeline (kept running, ADR-004 superseded)**:
+| Path | What it is |
+|------|-----------|
+| `ml/update.py` | ARF daily entry point — produces `augur_forecast.json` + cached surcharge in `state.json` |
+| `ml/features/online_features.py` | ARF's streaming feature builder |
+| `ml/training/warmup.py` | One-time historical replay (used only when bootstrapping ARF) |
+| `ml/models/river_model.pkl` | ARF model artifact |
+| `ml/models/state.json` | ARF state — *the surcharge cache here is consumed by LightGBM's consumer-pricing step* |
+| `ml/forecasts/{YYYYMMDD_HHMM}_forecast.json` | Timestamped ARF forecast archives (still used by `evaluate_shadow.py`) |
+| `static/data/augur_forecast.json` | ARF forecast file; consumed only by `static/js/modules/model-viz.js` for Model-tab metrics |
+
+**Dashboard + delivery**:
+| Path | What it is |
+|------|-----------|
+| `static/js/dashboard.js` | Dashboard entry; `loadAugurForecast` fetches `augur_forecast_shadow.json` (the swap point — change here to revert) |
+| `static/js/modules/` | ES6 modules: api-client, chart-renderer, data-processor (uses `consumer_forecast`), model-viz (reads ARF metrics), etc. |
+| `layouts/index.html` | Dashboard HTML template (5 tabs: Prices, Weather, Grid, Market, Model) |
+| `static/css/style.css` | Glassmorphism dark theme |
+| `decrypt_data_cached.py` | Production decryption with caching + `--force` (ADR-003) |
+| `utils/secure_data_handler.py` | AES-CBC-256 + HMAC-SHA256 |
+| `scripts/netlify_build.sh` | Shared Netlify build script |
+| `scripts/daily_update.sh` | Sadalsuud cron — ARF backup + parquet consolidate + LGBM retrain + shadow eval + commit + push |
+| `netlify.toml` | Build pipeline: decrypt → hugo |
+
+**Process + experiments**:
+| Path | What it is |
+|------|-----------|
+| `experiments/registry.jsonl` | Append-only experiment log (EXP-001..EXP-014); schema in `experiments/README.md` |
+| `docs/decisions/006-lightgbm-quantile-production-architecture.md` | ADR-006 — what the production system does |
+| `docs/decisions/007-model-promotion-method.md` | ADR-007 — how we decide what to change |
+| `docs/decisions/004-river-online-learning-architecture.md` | ADR-004 — superseded by ADR-006 |
+| `docs/hypothesis-log.md` | Provisional positions awaiting evidence; iteration-4/5 EXP-014 entries resolved 2026-05-29 |
+| `docs/articles/m4-metric-redesign-story.md` | Case-study article — five-iteration arc from M4 park to EXP-014 promotion (~4960 words) |
+| `docs/literature.md` | Topic-indexed bibliography |
+| `docs/metric-redesign-literature-review.md` | Focused EPF metric review (input to EXP-012) |
+| `docs/exp-012-results.md` | EXP-012 + EXP-013 corrections report |
+| `docs/lightgbm-shadow-postmortem.md` | M4 Path B postmortem (historical; superseded by EXP-014 swap) |
+| `docs/lightgbm-quantile-shadow-plan.md` | Original shadow plan (historical) |
+| `docs/river-arf-retrospective.md` | ARF retirement narrative + closing addendum on the EXP-014 promotion |
+| `docs/model-progress-log.md` | Dated narrative log of ML pipeline changes |
+| `tests/` | pytest suite — 177 tests (SecureDataHandler, OnlineFeatureBuilder, LGBM forecaster + multi-horizon + secure_pickle + conformal + backtest + update_shadow + evaluate_shadow + slice MAE + archive path + metrics module) |
+| `scripts/m4_method_run.py` | M4 verdict runner (historical — pre-EXP-014) |
+| `scripts/exp012_evaluate.py` | EXP-012/013 paired-data evaluation (vintage-corrected) |
+| `scripts/exp014_evaluate_promotion.py` | EXP-014 promotion-criterion runner |
 
 ## How to Work Here
 

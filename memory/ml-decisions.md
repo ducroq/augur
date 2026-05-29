@@ -1,5 +1,15 @@
 # ML Architecture Decisions
 
+> **STATUS (2026-05-29): historical — superseded by ADR-006.** This file
+> captures the original Phase 1 / Phase 2 reasoning (XGBoost → River ARF)
+> and the week-ahead horizon thinking from project setup. The production
+> system is now LightGBM-Quantile with a 72-hour horizon (see
+> `docs/decisions/006-lightgbm-quantile-production-architecture.md`).
+> ADR-004 (River) is superseded; ADR-006 (LGBM) is current. ARF still
+> runs as a backup signal but no longer drives the dashboard. Keep this
+> file as historical record; don't extend it without a "still applies"
+> cross-check.
+
 ## Why Week-Ahead (168h) Horizon
 
 Day-ahead is academic standard, but week-ahead enables actual scheduling decisions:
