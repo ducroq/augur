@@ -2,7 +2,7 @@
 
 Energy price forecasting platform for the Netherlands. Combines data from 18+ APIs (via energyDataHub), ML-based week-ahead price predictions, and an interactive dashboard for smart consumption (heat pumps, EV charging, industrial thermal).
 
-- **Stack**: Python 3.12 (ML pipeline), Hugo + Plotly.js (dashboard), River ARF (production — retired as a model 2026-04-28, cron continues driving the dashboard) + LightGBM-Quantile multi-horizon (M4 tested 2026-05-08→05-27 and **parked 2026-05-29 (Path B)**; see `docs/lightgbm-shadow-postmortem.md`)
+- **Stack**: Python 3.12 (ML pipeline), Hugo + Plotly.js (dashboard), **LightGBM-Quantile multi-horizon (production — promoted EXP-014 2026-05-29 after a five-iteration metric-redesign arc)** + River ARF (kept running as backup signal for one rolling-window cycle; retired as a model 2026-04-28 but its cron output still feeds the Model tab metrics)
 - **Status**: Production — dashboard live, ML pipeline daily on sadalsuud
 - **Repo**: github.com/ducroq/augur
 - **agent-ready-projects**: v1.9.0
@@ -50,10 +50,10 @@ energyDataHub (separate repo, 18+ API collectors)
     ▼
 sadalsuud (daily cron 16:45 CEST = 14:45 UTC)
     ├── git pull energyDataHub
-    ├── python -m ml.update              → ARF: learn + generate forecast (production)
-    ├── python -m ml.data.consolidate    → rebuild parquet (parsers still useful post-M4)
-    ├── (parked 2026-05-29) python -m ml.shadow.update_shadow
-    ├── (parked 2026-05-29) python -m ml.shadow.evaluate_shadow
+    ├── python -m ml.update              → ARF: learn + generate forecast (backup signal)
+    ├── python -m ml.data.consolidate    → rebuild parquet for LGBM training
+    ├── python -m ml.shadow.update_shadow → LGBM: retrain on 56-day window, predict 72h (production)
+    ├── python -m ml.shadow.evaluate_shadow → eval log row vs ARF (continued)
     ├── git push augur                   → triggers Netlify rebuild
     │
     │ Note: augur#12 — orchestration is misordered (augur runs before EDH collector at ~15:20 UTC),
@@ -73,7 +73,9 @@ Client browser (https://energy.jeroenveen.nl):
 ```
 
 ### ML Pipeline (live)
-- **Status (2026-05-29)**: ARF cron drives the dashboard; LGBM-Quantile shadow **parked** after M4 Method run on the trailing-14 window 2026-05-14→05-27. Criteria (a) and (b) failed (ratio 1.61 / mean cov 0.696 / 3 days <0.60); (c) passed (peak ratio 0.450). Primary diagnosis: structural long-horizon (h>24) low-price weakness — 72h aggregation forces criterion (a)'s low-price slice into hours LGBM cannot extrapolate to midday solar troughs. Companion live-vs-backtest ratio 1.84 also refuted: freshness skew is material (augur#12). Shadow cron disabled in `scripts/daily_update.sh`, code stays in tree; pre-flight stale check + Healthchecks.io ping also gated off. ARF retired as a model 2026-04-28 but its cron continues feeding the dashboard. Next bet (postmortem §6): **metric redesign before model redesign** — promote pinball-at-p10 / CRPS over MAE on the low-price slice; then prioritise augur#12. See `docs/lightgbm-shadow-postmortem.md` for full diagnosis, `docs/river-arf-retrospective.md` for ARF retirement, `docs/lightgbm-quantile-shadow-plan.md` for the original shadow plan.
+- **Status (2026-05-29 — post EXP-014 promotion)**: LightGBM-Quantile drives the dashboard via `static/data/augur_forecast_shadow.json` (loaded by `static/js/dashboard.js:loadAugurForecast`). ARF cron continues as a backup signal — `static/data/augur_forecast.json` still updates daily and is read by `static/js/modules/model-viz.js` for the Model-tab metric widgets. The shadow now generates consumer-pricing fields too (`update_shadow.py:read_arf_surcharge` reads the cached surcharge from ARF's state.json and applies the same VAT+surcharge transform). To revert: change the path in `dashboard.js:loadAugurForecast` back to `augur_forecast.json`.
+- **Why the swap**: five iterations of criterion redesign converged on a single-criterion-plus-guardrail design (skill: paired DM on |y−p50_LGBM| vs |y−point_ARF|, HAC bandwidth 71, p<0.10; calibration: LGBM not >0.02 worse than ARF on either side). Applied to the M4 paired data: LGBM MAE 28.9 vs ARF MAE 38.4 (25% better, DM p=0.029); LGBM lower-side coverage 0.811 vs ARF 0.824 (within tolerance); LGBM upper-side 0.870 vs ARF 0.621 (LGBM materially better). PROMOTE = True. See `docs/articles/m4-metric-redesign-story.md` for the full arc, `docs/hypothesis-log.md` for the pre-committed criteria, `experiments/registry.jsonl` EXP-008..EXP-014.
+- **Known weakness inherited from the swap**: lower-side coverage 0.81 is below the 0.90 nominal target. Same problem ARF had; not made worse by the swap, but worth a follow-up (CQR retune at horizon-conditioned calibration, or ACI). Tracked as the next experiment after augur#12.
 
 **ARF (production)**:
 - Model: River ARFRegressor (10 trees), continuous online learning
@@ -86,12 +88,16 @@ Client browser (https://energy.jeroenveen.nl):
 - Forecast archive: timestamped copies in `ml/forecasts/` on sadalsuud
 - M3 review fixup A added `error_prices` parallel array + `mae_at_low_price` in state for criterion (a) evaluability
 
-**LightGBM-Quantile shadow (parked 2026-05-29)**:
-- Model: 9 LGBMRegressor (3 horizon groups × 3 quantiles, horizon-as-feature stacking)
-- Training: rolling 56-day window from `ml/data/training_history.parquet`
-- Bands: split-conformal (CQR) with 7-day calibration, target 0.80
-- Eval: `ml/shadow/eval_log.jsonl` — frozen at 20 rows (2026-05-08 → 2026-05-27)
-- Outcome: M4 Method run 2026-05-29 produced PROMOTE = False on (a)+(b); (c) passed. Path B (park) executed. Code stays in tree; re-enable by uncommenting the block in `scripts/daily_update.sh` + the pre-flight stale check. See `docs/lightgbm-shadow-postmortem.md`.
+**LightGBM-Quantile (production from 2026-05-29)**:
+- Model: 9 LGBMRegressor (3 horizon groups × 3 quantiles p10/p50/p90, horizon-as-feature stacking)
+- Training: rolling 56-day window from `ml/data/training_history.parquet` (regenerated nightly by `ml.data.consolidate`)
+- Bands: split-conformal (CQR) with 7-day calibration, target 0.80 — produces `lightgbm_band_coverage_p80` per day
+- Consumer pricing: `update_shadow.py:read_arf_surcharge` reads cached `consumer_surcharge.value_eur_mwh` from ARF's `ml/models/state.json`; consumer = wholesale × VAT × surcharge applied to forecast/upper/lower bands (mirrors `ml/update.py:generate_consumer_forecast`).
+- Output: `static/data/augur_forecast_shadow.json` (loaded by dashboard.js)
+- Eval: `ml/shadow/eval_log.jsonl` continues to log per-day metrics
+- Promotion criterion (now resolved): see `docs/hypothesis-log.md` iteration-5 entry and `scripts/exp014_evaluate_promotion.py`
+- Pickle integrity: HMAC-SHA256 sidecar via `ml/shadow/secure_pickle.py`; verify-before-load
+- Calibration_history schema: `p10/p50/p90` are sorted-CQR-widened; `p10_raw/p50_raw/p90_raw` are the raw tau-quantile model outputs (added 2026-05-29 after EXP-013 code review caught sort-then-pinball bias).
 - Pickle integrity: HMAC-SHA256 sidecar via `ml/shadow/secure_pickle.py`; verify-before-load
 - Open: augur#12 (cron→systemd + run-after-EDH for fresh data)
 

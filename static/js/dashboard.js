@@ -90,11 +90,18 @@ class EnergyDashboard {
     }
 
     /**
-     * Load Augur ML forecast (may not exist yet)
+     * Load Augur ML forecast (may not exist yet).
+     *
+     * EXP-014 promotion (2026-05-29): production model swapped from
+     * ARF (augur_forecast.json) to LightGBM-Quantile shadow
+     * (augur_forecast_shadow.json). ARF cron continues running as a
+     * backup signal, so the Model-tab metric widgets in model-viz.js
+     * still read from augur_forecast.json. To revert the swap, change
+     * the path below back to '/data/augur_forecast.json'.
      */
     async loadAugurForecast() {
         try {
-            const resp = await fetch('/data/augur_forecast.json');
+            const resp = await fetch('/data/augur_forecast_shadow.json');
             if (resp.ok) {
                 this.augurForecast = await resp.json();
             }

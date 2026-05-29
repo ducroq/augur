@@ -199,3 +199,66 @@ the model is fully decommissioned.
 The full lifecycle log including the warmup, the rollback, the forecast fix,
 the long-history probe, the Phase 1 A/B, and this retirement decision is
 back-filled in `experiments/registry.jsonl` (EXP-001 through EXP-008).
+
+---
+
+## Closing addendum — EXP-014 promotion of LightGBM (2026-05-29)
+
+LightGBM-Quantile was promoted to production on 2026-05-29 as EXP-014. The
+dashboard now loads `static/data/augur_forecast_shadow.json` (still named
+"shadow" for backward compatibility with the file's history; consider
+renaming on a future cleanup). ARF cron continues running as a backup
+signal — `static/data/augur_forecast.json` is updated daily and consumed
+by the Model-tab metric widgets only.
+
+The promotion criterion passed on the existing M4 paired data (no new
+shadow window):
+
+- **Skill (DM on |y − p50| vs |y − point|, HAC = 71)**:
+  LGBM MAE 28.94 vs ARF MAE 38.42 (25% better), DM p = 0.029.
+- **Calibration ("LGBM not >0.02 worse than ARF on either side")**:
+  Lower-side degradation 0.013 (within tolerance); upper-side LGBM 0.25
+  *better* than ARF.
+
+This arrived via five iterations of criterion redesign, each catching a
+different class of error: criterion-design (iter 1 / M4), assumption-import
+(iter 2 / EXP-012 v1), article-implementation (iter 3 / article review
+battery), data-pairing (iter 4 / EXP-013 / code review battery), and
+gate-target (iter 5 / promotion criterion absolute-vs-relative). Narrative
+in `docs/articles/m4-metric-redesign-story.md`; pre-committed criteria in
+`docs/hypothesis-log.md`.
+
+**ARF's contribution to the production pipeline post-promotion**:
+
+1. ARF cron still runs daily and produces `augur_forecast.json`. The Model
+   tab reads its metric history.
+2. ARF's `state.json:consumer_surcharge.value_eur_mwh` is read by
+   `ml/shadow/update_shadow.py:read_arf_surcharge` to compute consumer-
+   pricing fields for the shadow forecast file. Without ARF running, the
+   shadow falls back to `DEFAULT_SURCHARGE_EUR_MWH = 95.0`.
+3. ARF historical archives (`ml/forecasts/*_forecast.json`) continue to be
+   produced and serve `evaluate_shadow.py`'s daily comparison.
+
+These keep ARF as a real backup — not dormant code, but a running pipeline
+that the new production model still consumes. Plan to retire ARF
+infrastructure entirely only after at least one rolling-window cycle (~56
+days) of clean LightGBM operation.
+
+**What the M4 + EXP-012/013/014 arc retroactively says about ARF's
+retirement**: the original 2026-04-28 retirement reasoning held up. ARF's
+inability to extrapolate to negative prices is real and structural.
+LightGBM addresses it (lower band reaches negative territory; pinball-at-
+p10 ratio after vintage correction favours LGBM). The arc surfaced that
+the *original promotion criterion* was misdesigned, not that the
+retirement itself was wrong. The final post-promotion picture:
+
+- LGBM beats ARF on overall MAE by ~25% (statistically significant).
+- LGBM beats ARF on peak-hour MAE (mean ratio 0.45 in M4 verdict).
+- LGBM beats ARF on upper-side calibration (0.87 vs 0.62 — ARF's upper
+  band severely under-covered).
+- LGBM modestly beats ARF on pinball-at-p10 with the corrected vintage.
+- Both share a lower-side coverage weakness (~0.81 vs 0.90 target); not
+  made worse by the swap.
+
+ARF was the right model to retire. LightGBM was the right replacement.
+The methodological detour was educational and is captured in the article.

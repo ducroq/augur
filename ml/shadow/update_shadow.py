@@ -306,12 +306,73 @@ def format_forecast_dicts(
     return forecast, upper, lower
 
 
+# EXP-014 promotion (2026-05-29): the shadow now drives the dashboard, so it
+# needs to produce consumer-pricing fields the same way ARF did. We read the
+# surcharge from ARF's state.json (which the production cron updates daily
+# from EZ/ENTSO-E overlap) rather than re-deriving — keeps the two pipelines
+# coupled to the same calibration without duplicating derive_surcharge logic.
+ARF_STATE_PATH = _REPO_ROOT / "ml" / "models" / "state.json"
+VAT_RATE = 1.21
+DEFAULT_SURCHARGE_EUR_MWH = 95.0
+
+
+def read_arf_surcharge() -> float:
+    """Read the consumer surcharge cached by ARF's state.json.
+
+    ARF's daily cron derives this from overlapping Energy Zero / ENTSO-E data
+    and caches it in `consumer_surcharge.value_eur_mwh`. Falls back to the
+    default if ARF state is missing or the field is absent — same fallback
+    semantics as ml.update.derive_surcharge.
+    """
+    try:
+        with open(ARF_STATE_PATH) as f:
+            arf_state = json.load(f)
+        value = arf_state.get("consumer_surcharge", {}).get("value_eur_mwh")
+        if value is None:
+            logger.warning(
+                "ARF state.json missing consumer_surcharge; using default %.2f",
+                DEFAULT_SURCHARGE_EUR_MWH,
+            )
+            return DEFAULT_SURCHARGE_EUR_MWH
+        return float(value)
+    except FileNotFoundError:
+        logger.warning(
+            "ARF state.json not found at %s; using default surcharge %.2f",
+            ARF_STATE_PATH,
+            DEFAULT_SURCHARGE_EUR_MWH,
+        )
+        return DEFAULT_SURCHARGE_EUR_MWH
+
+
+def format_consumer_dicts(
+    forecast: dict, upper: dict, lower: dict, surcharge: float
+) -> tuple[dict, dict, dict]:
+    """Apply consumer markup: price * VAT + surcharge. Lower band floored at 0.
+
+    Mirrors ml.update.generate_consumer_forecast so the dashboard's consumer-
+    pricing chart sees the same shape of data it did under ARF.
+    """
+    consumer: dict[str, float] = {}
+    consumer_upper: dict[str, float] = {}
+    consumer_lower: dict[str, float] = {}
+    for ts, price in forecast.items():
+        consumer[ts] = round(price * VAT_RATE + surcharge, 2)
+    for ts, price in upper.items():
+        consumer_upper[ts] = round(price * VAT_RATE + surcharge, 2)
+    for ts, price in lower.items():
+        consumer_lower[ts] = round(max(price * VAT_RATE + surcharge, 0.0), 2)
+    return consumer, consumer_upper, consumer_lower
+
+
 def write_forecast_json(
     out_path: Path,
     forecast: dict,
     upper: dict,
     lower: dict,
     metadata: dict,
+    consumer: dict | None = None,
+    consumer_upper: dict | None = None,
+    consumer_lower: dict | None = None,
 ) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -320,6 +381,10 @@ def write_forecast_json(
         "forecast_upper": upper,
         "forecast_lower": lower,
     }
+    if consumer is not None:
+        payload["consumer_forecast"] = consumer
+        payload["consumer_forecast_upper"] = consumer_upper or {}
+        payload["consumer_forecast_lower"] = consumer_lower or {}
     tmp = out_path.with_suffix(out_path.suffix + ".tmp")
     with open(tmp, "w") as f:
         json.dump(payload, f, indent=2)
@@ -425,6 +490,10 @@ def run_shadow_update(
     logger.info("Saved HMAC-signed model to %s", model_path)
 
     forecast, upper, lower = format_forecast_dicts(preds)
+    surcharge = read_arf_surcharge()
+    consumer, consumer_upper, consumer_lower = format_consumer_dicts(
+        forecast, upper, lower, surcharge
+    )
     metadata = {
         "model": "LightGBM-Quantile-Multi-Horizon",
         "last_updated": datetime.now(timezone.utc).isoformat(),
@@ -436,9 +505,24 @@ def run_shadow_update(
         "cqr_calib_days_used": n_calib_days,
         "cqr_calib_window_days": DEFAULT_CALIB_DAYS,
         "cqr_target_coverage": DEFAULT_TARGET_COVERAGE,
+        "consumer_surcharge_eur_mwh": round(surcharge, 2),
+        "consumer_vat_rate": VAT_RATE,
     }
-    write_forecast_json(forecast_out, forecast, upper, lower, metadata)
-    logger.info("Wrote shadow forecast to %s", forecast_out)
+    write_forecast_json(
+        forecast_out,
+        forecast,
+        upper,
+        lower,
+        metadata,
+        consumer=consumer,
+        consumer_upper=consumer_upper,
+        consumer_lower=consumer_lower,
+    )
+    logger.info(
+        "Wrote shadow forecast (with consumer fields, surcharge=%.2f) to %s",
+        surcharge,
+        forecast_out,
+    )
 
     state["last_run_utc"] = datetime.now(timezone.utc).isoformat()
     state["last_train_window"] = {
