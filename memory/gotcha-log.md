@@ -9,6 +9,19 @@
 
 ---
 
+### Sadalsuud Tailscale outage caught cron mid-run — DNS failure at git pull, then host offline (2026-05-22)
+**Problem**: Healthchecks.io alerted at 17:45 CEST that the Augur-shadow heartbeat had been silent for 25h. Diagnostic showed sadalsuud unreachable on Tailscale (last seen 2h prior), with other HCL-site nodes also offline ~6h prior — site-level network issue. Today's 14:45 UTC cron actually tried to run, but failed at the first `git pull energydatahub` step with `Could not resolve host: github.com`. `set -e` bailed cleanly before any ML steps; no partial state corruption.
+**Root cause**: Tailscale severed at HCL edge site mid-day; LXC host went fully offline shortly after. Not an augur code or orchestration bug — a host-availability failure mode that systemd migration (augur#12) doesn't address.
+**Fix**: User restarted sadalsuud. Ran `bash scripts/daily_update.sh` manually at 16:52 UTC. Backfill landed commit `1fc3ba5`: 2026-05-21 eval row logged (lgbm_mae=26.339, arf_mae=41.897, coverage=0.375), HC re-pinged. M4 row count crossed 14-row threshold (Method now data-ready for the 2026-05-23 verdict session).
+**Pattern**:
+  1. The May 8 observability layer caught a *different* failure mode (host outage) than what it was designed for (silent rc-swallow). Validates the design — 25h window detects both. Compare to the 7-night blind spot of May 1-7.
+  2. Manual backfill at non-standard UTC time pulled fresher EDH data (drop #21 at 16:00 UTC, vs the 14:45-UTC cron normally seeing the previous day's drop). Tomorrow's cron will learn 0 new ARF samples (data already absorbed), self-correcting the day after. Bounded one-day deviation, no M4 verdict impact (relative LGBM-vs-ARF comparison unaffected).
+  3. `shadow_state.json` lives at `ml/models/shadow/shadow_state.json`, NOT `ml/shadow/` — initial path assumption was wrong; cost ~30s of confusion. Now added to CLAUDE.md Key Paths.
+**Followup**: Created **augur#14** — gap-detection + automated backfill for missed daily runs. Low priority; revisit after M4 verdict. Best landed as part of augur#12's systemd migration.
+**Status**: [RESOLVED] — host back, eval row recovered, M4 row threshold met.
+
+---
+
 ### update_shadow.py appends to pending_predictions without dedup — running twice on same parquet stacks duplicates (2026-05-08)
 **Problem**: During the silent-failure recovery, I ran `update_shadow.py` manually at 08:45 UTC for bootstrap, then a smoke-test rehearsal at 08:46 UTC, then the cron would have run at 14:45 UTC. All three runs see the same parquet (EDH at 16:00 UTC hadn't dropped yet) so each picks the same `t0=2026-05-07 21:00 UTC` and generates 72 pending predictions with the same `eval_day=2026-05-07`. Result: 144 pending entries (and would have been 216 after cron) for the same eval_day, with two-three predictions per timestamp. When realised, all get moved to calibration_history → the May 7 eval row's MAE/coverage averages over multiple prediction sets, polluting M4 promotion data.
 **Root cause**: `run_shadow_update` at `ml/shadow/update_shadow.py:385` does `state["pending_predictions"] = trim_to_recent_days(list(state["pending_predictions"]) + new_pending, MAX_HISTORY_DAYS)` — it appends without deduplicating against existing entries with the same (timestamp, eval_day). `trim_to_recent_days` only trims by calendar day, not by uniqueness. Normally invisible because t0 advances daily as parquet advances; bites when t0 stays the same across runs.

@@ -2,7 +2,7 @@
 
 Energy price forecasting platform for the Netherlands. Combines data from 18+ APIs (via energyDataHub), ML-based week-ahead price predictions, and an interactive dashboard for smart consumption (heat pumps, EV charging, industrial thermal).
 
-- **Stack**: Python 3.12 (ML pipeline), Hugo + Plotly.js (dashboard), River ARF (production — retired 2026-04-28 but cron continues until shadow promoted) + LightGBM-Quantile multi-horizon (M3 deployed 2026-04-30; M4 14-day shadow window cron-effective 2026-05-08 after silent-failure recovery; review-by 2026-05-29)
+- **Stack**: Python 3.12 (ML pipeline), Hugo + Plotly.js (dashboard), River ARF (production — retired as a model 2026-04-28, cron continues driving the dashboard) + LightGBM-Quantile multi-horizon (M4 tested 2026-05-08→05-27 and **parked 2026-05-29 (Path B)**; see `docs/lightgbm-shadow-postmortem.md`)
 - **Status**: Production — dashboard live, ML pipeline daily on sadalsuud
 - **Repo**: github.com/ducroq/augur
 - **agent-ready-projects**: v1.9.0
@@ -50,9 +50,9 @@ energyDataHub (separate repo, 18+ API collectors)
 sadalsuud (daily cron 16:45 CEST = 14:45 UTC)
     ├── git pull energyDataHub
     ├── python -m ml.update              → ARF: learn + generate forecast (production)
-    ├── python -m ml.data.consolidate    → rebuild parquet for shadow training
-    ├── python -m ml.shadow.update_shadow → LGBM shadow: retrain on 56-day window, predict 72h
-    ├── python -m ml.shadow.evaluate_shadow → eval log row vs ARF (shadow phase, M4)
+    ├── python -m ml.data.consolidate    → rebuild parquet (parsers still useful post-M4)
+    ├── (parked 2026-05-29) python -m ml.shadow.update_shadow
+    ├── (parked 2026-05-29) python -m ml.shadow.evaluate_shadow
     ├── git push augur                   → triggers Netlify rebuild
     │
     │ Note: augur#12 — orchestration is misordered (augur runs before EDH collector at ~15:20 UTC),
@@ -72,7 +72,7 @@ Client browser (https://energy.jeroenveen.nl):
 ```
 
 ### ML Pipeline (live)
-- **Status (2026-05-08)**: ARF in production driving the dashboard; LightGBM-Quantile shadow running alongside. M4 14-day window cron-effective **2026-05-08** after a silent-failure recovery (CLI flag mismatch hid 7 nights of shadow-step failures May 1-7; see `memory/gotcha-log.md` top entry, fixed in commits `d620b45`/`8c217a6`/`0225fe1`/`c135b4a`). First real eval row expected 2026-05-09; promotion review **2026-05-29**. Observability now: pre-flight heartbeat on `last_run_utc`, dynamic commit message reflecting per-step return codes, Healthchecks.io ping on shadow success (alerts within 25h of any silence). M5 promotion decision pending — see `docs/hypothesis-log.md`. ARF retired as a model 2026-04-28 but its cron output still feeds the dashboard until shadow validation completes. See `docs/river-arf-retrospective.md` for retirement rationale, `docs/lightgbm-quantile-shadow-plan.md` for replacement plan.
+- **Status (2026-05-29)**: ARF cron drives the dashboard; LGBM-Quantile shadow **parked** after M4 Method run on the trailing-14 window 2026-05-14→05-27. Criteria (a) and (b) failed (ratio 1.61 / mean cov 0.696 / 3 days <0.60); (c) passed (peak ratio 0.450). Primary diagnosis: structural long-horizon (h>24) low-price weakness — 72h aggregation forces criterion (a)'s low-price slice into hours LGBM cannot extrapolate to midday solar troughs. Companion live-vs-backtest ratio 1.84 also refuted: freshness skew is material (augur#12). Shadow cron disabled in `scripts/daily_update.sh`, code stays in tree; pre-flight stale check + Healthchecks.io ping also gated off. ARF retired as a model 2026-04-28 but its cron continues feeding the dashboard. Next bet (postmortem §6): **metric redesign before model redesign** — promote pinball-at-p10 / CRPS over MAE on the low-price slice; then prioritise augur#12. See `docs/lightgbm-shadow-postmortem.md` for full diagnosis, `docs/river-arf-retrospective.md` for ARF retirement, `docs/lightgbm-quantile-shadow-plan.md` for the original shadow plan.
 
 **ARF (production)**:
 - Model: River ARFRegressor (10 trees), continuous online learning
@@ -85,13 +85,12 @@ Client browser (https://energy.jeroenveen.nl):
 - Forecast archive: timestamped copies in `ml/forecasts/` on sadalsuud
 - M3 review fixup A added `error_prices` parallel array + `mae_at_low_price` in state for criterion (a) evaluability
 
-**LightGBM-Quantile shadow (M4)**:
+**LightGBM-Quantile shadow (parked 2026-05-29)**:
 - Model: 9 LGBMRegressor (3 horizon groups × 3 quantiles, horizon-as-feature stacking)
-- Training: rolling 56-day window from `ml/data/training_history.parquet` (regenerated nightly by `ml.data.consolidate`)
-- Bands: split-conformal (CQR) with 7-day calibration, target 0.80 — produces `lightgbm_band_coverage_p80` per day
-- Output: `static/data/augur_forecast_shadow.json` (NOT consumed by dashboard during shadow phase, plan §5)
-- Eval: `ml/shadow/eval_log.jsonl` per fully-realised day, vs ARF on overlapping hours
-- Promotion: 14 days passing all three plan §6 criteria (a, b, c) — see `docs/hypothesis-log.md` for pre-committed Method
+- Training: rolling 56-day window from `ml/data/training_history.parquet`
+- Bands: split-conformal (CQR) with 7-day calibration, target 0.80
+- Eval: `ml/shadow/eval_log.jsonl` — frozen at 20 rows (2026-05-08 → 2026-05-27)
+- Outcome: M4 Method run 2026-05-29 produced PROMOTE = False on (a)+(b); (c) passed. Path B (park) executed. Code stays in tree; re-enable by uncommenting the block in `scripts/daily_update.sh` + the pre-flight stale check. See `docs/lightgbm-shadow-postmortem.md`.
 - Pickle integrity: HMAC-SHA256 sidecar via `ml/shadow/secure_pickle.py`; verify-before-load
 - Open: augur#12 (cron→systemd + run-after-EDH for fresh data)
 
@@ -123,6 +122,7 @@ Client browser (https://energy.jeroenveen.nl):
 | `ml/shadow/update_shadow.py` | Nightly LGBM retrain + 72h predict + CQR widen |
 | `ml/shadow/evaluate_shadow.py` | Daily LGBM-vs-ARF metrics, appends to `ml/shadow/eval_log.jsonl` |
 | `ml/shadow/eval_log.jsonl` | Append-only eval log per fully-realised eval day (M4 promotion data) |
+| `ml/models/shadow/shadow_state.json` | LGBM shadow state: `last_run_utc`, `pending_predictions`, `calibration_history`, CQR stats (NOT under `ml/shadow/`) |
 | `ml/shadow/conformal.py` | Split-conformal CQR band correction (Romano/Patterson/Candès 2019) |
 | `ml/forecasts/{YYYYMMDD_HHMM}_forecast.json` | Timestamped ARF forecast archives (read by `evaluate_shadow.py`) |
 

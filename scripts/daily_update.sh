@@ -5,12 +5,16 @@
 # Order of operations:
 #   1. Pull energyDataHub + Augur
 #   2. Run ARF model update (production — must succeed)
-#   3. Re-consolidate parquet from energyDataHub
-#   4. Run shadow update (LightGBM-Quantile, EXP-009)        — non-blocking
-#   5. Run shadow evaluation (writes eval_log.jsonl)         — non-blocking
+#   3. Re-consolidate parquet from energyDataHub                — non-blocking
+#   4. (PARKED 2026-05-29) Shadow update (LightGBM-Quantile)
+#   5. (PARKED 2026-05-29) Shadow evaluation
 #   6. Commit + push everything
 #
-# Steps 4-5 run with `set +e` so a shadow failure does NOT block the ARF
+# Shadow steps 4-5 parked per M4 Path B outcome (docs/lightgbm-shadow-postmortem.md).
+# Re-enable by uncommenting the block below and the pre-flight stale check.
+# Step 3 (parquet consolidate) still runs — parquet has uses beyond the shadow.
+#
+# Step 3 runs with `set +e` so a consolidate failure does NOT block the ARF
 # commit. The shadow forecast file is not consumed by the dashboard during
 # shadow phase (plan §5), so a stale shadow file is acceptable.
 
@@ -54,32 +58,28 @@ else
     echo "WARN: $AUGUR_DIR/.env not found — relying on cron-supplied env vars."
 fi
 
-# Pre-flight heartbeat: surface yesterday's silent shadow failure (if any).
-# Reads `last_run_utc` from shadow_state.json and yells if it's >36h old.
-# Never blocks ARF. SHADOW_WAS_STALE feeds the commit message below so a
-# recovery shows up in the GitHub commit list, not just the log file.
-# Why this exists: see memory/gotcha-log.md "Shadow cron failed silently
-# for 7 nights" (2026-05-08).
+# Pre-flight stale-state check DISABLED 2026-05-29 per M4 outcome (Path B park).
+# When the shadow block is commented out below, shadow_state.json's last_run_utc
+# stops updating and this check would alarm every night. Re-enable alongside
+# the shadow block. Why it exists: see memory/gotcha-log.md "Shadow cron failed
+# silently for 7 nights" (2026-05-08).
 SHADOW_WAS_STALE=0
-SHADOW_PRE_AGE_H=$(python3 -c "
-import json, sys
-from datetime import datetime, timezone
-try:
-    with open('$AUGUR_DIR/ml/models/shadow/shadow_state.json') as f:
-        last = json.load(f).get('last_run_utc')
-    ts = datetime.fromisoformat(last)
-    print(int((datetime.now(timezone.utc) - ts).total_seconds() / 3600))
-except Exception:
-    # File missing or last_run_utc malformed/null — treat as 'should-have-state-but-doesn't',
-    # i.e. always alarm. Cost: one false alarm on the first cron after a fresh M3-style
-    # deployment (before shadow_state.json exists). Gain: silent state-file deletion
-    # or null'd timestamp can't go undetected.
-    print(999)
-" 2>/dev/null || echo 999)
-if [ "${SHADOW_PRE_AGE_H:-0}" -gt 36 ]; then
-    echo "ALARM: shadow_state.json is ${SHADOW_PRE_AGE_H}h stale at start of run (>36h). Likely silent failure on prior run(s)."
-    SHADOW_WAS_STALE=1
-fi
+SHADOW_PRE_AGE_H=parked
+# SHADOW_PRE_AGE_H=$(python3 -c "
+# import json, sys
+# from datetime import datetime, timezone
+# try:
+#     with open('$AUGUR_DIR/ml/models/shadow/shadow_state.json') as f:
+#         last = json.load(f).get('last_run_utc')
+#     ts = datetime.fromisoformat(last)
+#     print(int((datetime.now(timezone.utc) - ts).total_seconds() / 3600))
+# except Exception:
+#     print(999)
+# " 2>/dev/null || echo 999)
+# if [ "${SHADOW_PRE_AGE_H:-0}" -gt 36 ]; then
+#     echo "ALARM: shadow_state.json is ${SHADOW_PRE_AGE_H}h stale at start of run (>36h). Likely silent failure on prior run(s)."
+#     SHADOW_WAS_STALE=1
+# fi
 
 # Run ARF model update (production — must succeed)
 echo "Running ARF model update..."
@@ -90,33 +90,37 @@ python -m ml.update --data-dir $DATAHUB_DIR/data --augur-dir $AUGUR_DIR
 # the trap restores set -e regardless of how we exit it.
 set +e
 
+# Parquet consolidate runs even with shadow parked — parquet has other uses
+# (ad-hoc analysis, next-bet experiments) and the cost is small.
 echo "Re-consolidating training_history.parquet..."
 python -m ml.data.consolidate --data-dir $DATAHUB_DIR/data
 SHADOW_CONSOLIDATE_RC=$?
 
-if [ $SHADOW_CONSOLIDATE_RC -eq 0 ]; then
-    echo "Running shadow update (LightGBM-Quantile)..."
-    # update_shadow.py derives all paths from _REPO_ROOT; no flags needed.
-    # NB: evaluate_shadow.py below still takes explicit --shadow-dir / --arf-forecasts-dir / --eval-log.
-    # See augur follow-up: harmonize the two CLIs.
-    python -m ml.shadow.update_shadow
-    SHADOW_UPDATE_RC=$?
-
-    if [ $SHADOW_UPDATE_RC -eq 0 ]; then
-        echo "Running shadow evaluation..."
-        python -m ml.shadow.evaluate_shadow --shadow-dir $AUGUR_DIR/ml/models/shadow \
-            --arf-forecasts-dir $AUGUR_DIR/ml/forecasts \
-            --eval-log $AUGUR_DIR/ml/shadow/eval_log.jsonl
-        SHADOW_EVAL_RC=$?
-        if [ $SHADOW_EVAL_RC -ne 0 ]; then
-            echo "WARN: shadow evaluation failed (rc=$SHADOW_EVAL_RC) — continuing"
-        fi
-    else
-        echo "WARN: shadow update failed (rc=$SHADOW_UPDATE_RC) — skipping eval"
-    fi
-else
-    echo "WARN: parquet re-consolidation failed (rc=$SHADOW_CONSOLIDATE_RC) — skipping shadow"
-fi
+# LGBM shadow steps DISABLED 2026-05-29 per M4 outcome (Path B park).
+# See docs/lightgbm-shadow-postmortem.md for diagnosis and next-bet plan.
+# Code stays in tree; re-enable by uncommenting the block below.
+SHADOW_UPDATE_RC=parked
+SHADOW_EVAL_RC=parked
+# if [ $SHADOW_CONSOLIDATE_RC -eq 0 ]; then
+#     echo "Running shadow update (LightGBM-Quantile)..."
+#     python -m ml.shadow.update_shadow
+#     SHADOW_UPDATE_RC=$?
+#
+#     if [ $SHADOW_UPDATE_RC -eq 0 ]; then
+#         echo "Running shadow evaluation..."
+#         python -m ml.shadow.evaluate_shadow --shadow-dir $AUGUR_DIR/ml/models/shadow \
+#             --arf-forecasts-dir $AUGUR_DIR/ml/forecasts \
+#             --eval-log $AUGUR_DIR/ml/shadow/eval_log.jsonl
+#         SHADOW_EVAL_RC=$?
+#         if [ $SHADOW_EVAL_RC -ne 0 ]; then
+#             echo "WARN: shadow evaluation failed (rc=$SHADOW_EVAL_RC) — continuing"
+#         fi
+#     else
+#         echo "WARN: shadow update failed (rc=$SHADOW_UPDATE_RC) — skipping eval"
+#     fi
+# else
+#     echo "WARN: parquet re-consolidation failed (rc=$SHADOW_CONSOLIDATE_RC) — skipping shadow"
+# fi
 
 set -e
 # --- end shadow block ----------------------------------------------------
@@ -149,7 +153,9 @@ git diff --cached --quiet && echo "No changes to commit" || {
 # endpoint's natural absence-detection alerts on shadow failure (not just
 # script execution). Set HEALTHCHECKS_SHADOW_URL in .env to enable;
 # unset = silently skip (no-op).
-if [ -n "${HEALTHCHECKS_SHADOW_URL:-}" ] && [ "${SHADOW_UPDATE_RC:-1}" -eq 0 ]; then
+# String equality (not -eq) because SHADOW_UPDATE_RC may be a sentinel like
+# "parked" when the shadow block is disabled (post-M4, 2026-05-29).
+if [ -n "${HEALTHCHECKS_SHADOW_URL:-}" ] && [ "${SHADOW_UPDATE_RC:-1}" = "0" ]; then
     curl -fsS --retry 3 --max-time 10 "$HEALTHCHECKS_SHADOW_URL" > /dev/null \
         && echo "Healthchecks ping sent." \
         || echo "WARN: Healthchecks ping failed (non-fatal)."

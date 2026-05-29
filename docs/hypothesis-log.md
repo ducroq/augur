@@ -20,7 +20,13 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 
 ## Open
 
-### [2026-04-30] LightGBM-Quantile shadow will pass plan §6 over a 14-day window
+*(none — both prior open entries resolved 2026-05-29)*
+
+---
+
+## Resolved
+
+### [2026-04-30 → resolved 2026-05-29] LightGBM-Quantile shadow will pass plan §6 over a 14-day window
 
 **Position (provisional):** EXP-009 milestone 3 landed the shadow pipeline (commits `2ec7a54..46c5ca5` on `feat/lightgbm-shadow`, including the round-1 + round-2 review fixups). Once sadalsuud starts producing daily eval-log rows, the LightGBM-Quantile multi-horizon model will pass all three of `docs/lightgbm-quantile-shadow-plan.md` §6 criteria over the first 14 contiguous days, justifying promotion to production. Concrete forecasts grounded in the EXP-009 backtest (LightGBM 14/14 vs ARF, +46% aggregate MAE, h+1 perfect-lag) and the M2.5 CQR result (aggregate coverage 77.5%):
 
@@ -81,11 +87,32 @@ The first eval row (date=2026-04-30, n=72) was produced by a one-shot manual boo
 **Pre-read caveat (added 2026-05-18 mid-window preview, not a Method change):** `evaluate_one_day` aggregates **predictions made on day D, targeting D..D+3** (h+1..h+72). Criterion (a)'s low-price slice is therefore dominated by long-horizon hours where LGBM is structurally weakest (see `docs/model-progress-log.md` 2026-05-18 entry). The 2026-05-22 read should report criterion (a) decomposed by horizon (h≤24 vs h>24) as supplementary evidence, computed from `calibration_history` without touching the eval_log schema. If (a) fails with n_low ≥ 50 and the long-horizon decomposition shows the failure concentrated at h>24, the framework-correct triage is **Path B (park) with structural-failure-mode reason** — *not* Path C (extend window), since more days won't fix a model-design limit.
 
 **Domain:** EXP-009, LightGBM shadow, promotion decision
-**Status:** open — cron unblocked 2026-05-08; M4 window in collection
+**Status:** resolved (refuted) — see Resolution below.
+
+**Resolution (2026-05-29):** Refuted. Method verdict PROMOTE = False. Trailing-14
+window 2026-05-14 → 2026-05-27 of `ml/shadow/eval_log.jsonl`:
+- (a) ratio_a = 1.610 (threshold ≤ 0.75) — **FAIL** in the wrong direction (LGBM
+  61% worse than ARF on the low-price slice). n_low = 69 ≥ 50 rules out
+  Alternative-3 (power deficit), so Path C is off the table.
+- (b) mean cov = 0.696 (target [0.75, 0.85]) **FAIL**; 3 days < 0.60 — second
+  guard tripped (Alternative-2 fired).
+- (c) mean peak ratio = 0.450 (threshold ≤ 1.10) — **PASS** decisively.
+
+Primary failure mode: **structural (a)** — exactly as the 2026-05-18 mid-window
+preview anticipated. 72h aggregation forces the low-price slice into long-
+horizon (h>24) midday hours where LGBM cannot extrapolate to negative/sub-30
+EUR/MWh prices. Supplementary horizon decomposition from
+`shadow_state.json:calibration_history`: 0 low-price entries at h ≤ 24, 200 at
+h > 24 with mean |p50 − realized| = 71.2 EUR/MWh — structural error, not
+spike-driven. Bimodal coverage Alternative also fired (3 days < 0.60). Path B
+(park) executed per augur#13. Full diagnosis in `docs/lightgbm-shadow-postmortem.md`
+including the meta-finding that criterion (a) as MAE is methodologically weak
+for the question "can the model express negative prices?" — recorded as
+postmortem §6 next-bet seed (metric redesign before model redesign).
 
 ---
 
-### [2026-04-30] Live shadow MAE will be no more than 20% worse than backtest h+1 MAE
+### [2026-04-30 → resolved 2026-05-29] Live shadow MAE will be no more than 20% worse than backtest h+1 MAE
 
 **Position (provisional):** EXP-009 backtest mean MAE was 13.21 EUR/MWh on 14 evaluable days of April 2026 (h+1 perfect-lag, single-horizon `LightGBMQuantileForecaster`). The new multi-horizon model with `horizon_h` as a feature should perform similarly at h+1 (it sees the same features at horizon=1) and somewhat worse at longer horizons. Live performance is *bounded above* by the backtest because `consolidate.py` overwrites parquet rows with later forecast vintages — backtest sees fresher exogenous than live cron will get (round-1 code-reviewer finding). Expect: 14-day mean `lightgbm_mae` from eval_log between 13.5 and 16.0 EUR/MWh.
 
@@ -107,10 +134,14 @@ The eval_log records full-day mean MAE, not h+1. The live mean is a mix of h+1..
 **Review by:** 2026-05-29 (bumped from 2026-05-22 to align with §6 hypothesis after the 05-22→05-23 verdict-session slip; resolution co-occurs with the Method run regardless).
 
 **Domain:** EXP-009, exogenous data freshness, live-vs-backtest skew
-**Status:** open
+**Status:** resolved (refuted) — see Resolution below.
 
----
-
-## Resolved
-
-*(none yet — entries move here with a one-line outcome when revisited)*
+**Resolution (2026-05-29):** Refuted. Observed `overall_lgbm_mae` = 24.32 EUR/MWh
+over the trailing-14 window, ratio vs backtest h+1 of 13.21 = **1.84** (target
+[1.0, 1.20]; refutation at > 1.20). Freshness skew is empirically material,
+not theoretical. Some of the gap is horizon-mix (the live mean averages
+h+1..h+72 while backtest measured h+1 only), but 1.84 exceeds even a
+generous +5-10% horizon-mix + +5-10% freshness budget. Argues for prioritising
+augur#12 (cron→systemd + run-after-EDH, so live exogenous matches backtest
+freshness) **before** any next-bet shadow experiment — testing a new model
+class through a layer of confounding data staleness wastes the shadow.
