@@ -243,18 +243,42 @@ def predict_72h(
     t0: pd.Timestamp,
     horizons: Sequence[int] = HORIZONS,
 ) -> pd.DataFrame:
-    """Return DataFrame with columns timestamp_utc, p10, p50, p90 — one row per horizon."""
+    """Return DataFrame with columns timestamp_utc, p10, p50, p90 plus raw
+    columns p10_raw, p50_raw, p90_raw — one row per horizon.
+
+    The non-raw p10/p50/p90 columns are row-sorted (p10 <= p50 <= p90 always).
+    The _raw columns hold the actual tau=0.10/0.50/0.90 model outputs; they
+    can differ when independent quantile regressions cross. Pinball-at-tau
+    scoring should use the _raw columns; band-coverage display can use
+    either. Added 2026-05-29 after code-review battery on EXP-012 caught
+    that pinball-at-p10 on the sorted "p10" is min(q0.10, q0.50, q0.90),
+    not the true 10th-percentile prediction.
+    """
     horizons_list = list(horizons)
     features = build_features(parquet.loc[parquet.index <= t0])
     feat_t0 = features.loc[[t0]].dropna()
     if feat_t0.empty:
         raise ValueError(f"No clean feature row at t0={t0!r} (NaNs in lags)")
-    preds = model.predict_horizons(feat_t0, horizons=horizons_list)
-    # preds shape (1, n_horizons, 3) — sorted [P10, P50, P90] per horizon
-    p10, p50, p90 = preds[0, :, 0], preds[0, :, 1], preds[0, :, 2]
+    # Sorted (default) — used for CQR widening + dashboard band display.
+    preds_sorted = model.predict_horizons(feat_t0, horizons=horizons_list, sort=True)
+    p10, p50, p90 = preds_sorted[0, :, 0], preds_sorted[0, :, 1], preds_sorted[0, :, 2]
+    # Raw (unsorted) — preserve actual tau=0.10/0.50/0.90 model outputs.
+    preds_raw = model.predict_horizons(feat_t0, horizons=horizons_list, sort=False)
+    # raw columns are in the order of self.quantiles = (0.10, 0.50, 0.90).
+    p10_raw = preds_raw[0, :, 0]
+    p50_raw = preds_raw[0, :, 1]
+    p90_raw = preds_raw[0, :, 2]
     timestamps = [t0 + pd.Timedelta(hours=h) for h in horizons_list]
     return pd.DataFrame(
-        {"timestamp_utc": timestamps, "p10": p10, "p50": p50, "p90": p90}
+        {
+            "timestamp_utc": timestamps,
+            "p10": p10,
+            "p50": p50,
+            "p90": p90,
+            "p10_raw": p10_raw,
+            "p50_raw": p50_raw,
+            "p90_raw": p90_raw,
+        }
     )
 
 
@@ -373,7 +397,10 @@ def run_shadow_update(
     preds = predict_72h(model, parquet, t0, horizons=horizons)
     preds = widen_with_cqr(preds, q)
 
-    # 7. Append today's preds (without realised) to pending
+    # 7. Append today's preds (without realised) to pending.
+    # p10/p50/p90 are sorted-and-CQR-widened (used for band coverage + dashboard).
+    # p10_raw/p50_raw/p90_raw are the raw tau=0.10/0.50/0.90 model outputs
+    # (used for pinball-at-tau scoring; see predict_72h docstring).
     new_pending = [
         {
             "timestamp_utc": pd.Timestamp(row["timestamp_utc"]).isoformat(),
@@ -381,6 +408,9 @@ def run_shadow_update(
             "p10": float(row["p10_cqr"]),
             "p50": float(row["p50"]),
             "p90": float(row["p90_cqr"]),
+            "p10_raw": float(row["p10_raw"]),
+            "p50_raw": float(row["p50_raw"]),
+            "p90_raw": float(row["p90_raw"]),
         }
         for _, row in preds.iterrows()
     ]

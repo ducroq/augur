@@ -1,4 +1,4 @@
-# Three iterations of a promotion criterion, and what each one taught us
+# Four iterations of a promotion criterion, and what each one taught us
 
 *Draft. Audience: applied ML practitioners and energy-forecasting folk. Tone:
 case study, honest about the mistakes. Style: polish later, capture now.*
@@ -6,15 +6,17 @@ case study, honest about the mistakes. Style: polish later, capture now.*
 **One-line summary.** We set up a structured pre-committed promotion criterion
 for an electricity-price forecasting model. It failed in a way that pointed
 at a methodological flaw in the criterion itself, not the model. We
-researched the literature, applied the recommended replacement, found *its*
-headline prediction was also wrong on our data — and then, after a review
-battery flagged a propriety violation in our own implementation, found that
-the recommended replacement's *implementation* needs more care than the
-literature review suggested. Three iterations, each one narrower and more
-honest than the last. The existing pre-commit-and-test discipline (already
-in the project's hypothesis-log structure) made each iteration legible; a
-discretionary review battery between iterations caught what the discipline
-alone could not.
+researched the literature, applied the recommended replacement, *thought*
+its headline prediction was wrong on our data — then a review battery on
+the article flagged an implementation propriety violation, and a second
+review battery on the code found a data-pairing bug whose correction
+*reversed* one of the headline conclusions and showed the literature
+review's original prediction was directionally right after all. Four
+iterations, each one narrower and more honest than the last. The
+pre-commit-and-test discipline (the project's existing hypothesis-log
+process) caught the first error; discretionary review batteries caught
+errors two through four. None of those review batteries are part of the
+framework; they were judgment calls between iterations.
 
 ---
 
@@ -226,19 +228,20 @@ can never reach into negative territory, so it should *lose by
 construction* on pinball-at-p10 — which is exactly the metric that asks
 "did your lower tail reach low enough?"
 
-We ran it. 842 paired observations across 14 days.
+We ran it. 546 paired observations across 14 days (after the vintage fix
+discussed in §6.5 below — the first version reported 842).
 
 | Metric | LightGBM | ARF | DM p (one-sided, LightGBM wins?) |
 |---|---|---|---|
-| Mean quantile score (3-pt) / MAE-equiv | **10.22** | 35.13 | < 0.0001 |
-| twCRPS variant, left-tail at −27.76 (pre-committed) | 0.0245 | **0.0000** | 0.99 |
-| Pinball-at-p10 | 7.97 | 7.14 | 0.92 |
+| Mean quantile score (3-pt) / MAE-equiv | **9.29** | 38.42 | < 0.0001 |
+| twCRPS variant, left-tail at −27.76 (pre-committed) | 0.0377 | **0.0000** | 0.99 |
+| Pinball-at-p10 | 6.90 | 7.38 | **0.24** |
 | Lower-side coverage (target 0.90) | 0.81 | 0.82 | (both under) |
-| Winkler IS (α = 0.20) | 149.7 | 192.6 | (LightGBM lower) |
+| Winkler IS (α = 0.20) | 134.1 | 208.2 | (LightGBM lower) |
 
 ### Aggregate skill: validated, with one honest caveat
 
-LightGBM's mean quantile score is **3.4× lower** than ARF's
+LightGBM's mean quantile score is **4.1× lower** than ARF's
 MAE-as-CRPS-equivalent (Gneiting & Raftery 2007 §4.2 — CRPS reduces to
 absolute error for a point forecast), with Diebold-Mariano significance
 of `p < 0.0001`. Its median forecast is *much* closer to realised, on
@@ -246,94 +249,147 @@ average, than ARF's point forecast. The model is genuinely better at the
 modal task. Criterion (a) hid this because its conditioning slice
 favoured ARF's positioning.
 
-**Caveat we have to flag here, not bury in §9.** LightGBM was trained at
-only 3 quantiles (p10/p50/p90), so the "mean quantile score" reported is
-a 3-point quantile-pinball average, *not* a properly-estimated CRPS. CRPS
-from a finite quantile grid converges as the grid densifies; at 3
-quantiles the estimate is biased and the direction depends on the
-predictive distribution's shape. The DM significance on the 3-point
-score is statistically valid (we're paired-testing the same metric on
-both models) but the "3.4× better" headline shouldn't be quoted as a
-CRPS ratio. A follow-up at 9 or 19 quantiles is queued.
+**Two caveats to flag here, not bury in §9.** First, LightGBM was trained
+at only 3 quantiles (p10/p50/p90), so the "mean quantile score" reported
+is a 3-point quantile-pinball average, *not* a properly-estimated CRPS.
+With independent p10/p50/p90 quantile regressions, a *degenerate*
+quantile prediction (p10 = p50 = p90 = some point) would have MQS equal
+to `0.5 × MAE`, so the LGBM-MQS vs ARF-MAE comparison has a roughly 2×
+structural head start built in for LGBM independent of any real skill.
+The 4.1× we report is partly real median-skill (the apples-to-apples
+LGBM-MAE-on-p50 vs ARF-MAE ratio is 24.3/39.0 ≈ 1.6×) and partly the
+~2× structural asymmetry from the 3-quantile averaging. The DM
+significance on the 3-point score is statistically valid (we're
+paired-testing the same metric on both models with the same averaging
+rule), but the "4.1×" shouldn't be quoted as a CRPS ratio. A follow-up
+at 9 or 19 quantiles is queued.
 
-### Tail metrics: the prediction didn't hold, in two ways
+Second, the Diebold-Mariano test uses Newey-West HAC variance with a
+default lag of `floor(n^(1/3)) ≈ 8`. For paired 72-hour-ahead forecasts
+on hourly data this is too short — DM (1995) recommends `max_horizon − 1`
+(here ≈ 71). The reported test statistic of −12.4 is *probably* still
+significant at proper bandwidth, but the standard error would
+roughly double, suggesting "p < 0.001" is more defensible than the
+"< 0.0001" the script prints. Article reports remain "< 0.0001"
+literally; readers should interpret it as "decisively significant" not
+"machine-precision precise."
 
-ARF wins twCRPS, ARF wins pinball-at-p10. DM p-values of 0.99 and 0.92
-under H1 = "LightGBM wins" are equivalent to ~0.01 and ~0.08 under H1 =
-"ARF wins." The first is statistically significant evidence for ARF; the
-second is modest. Neither matches the literature review's prediction.
+### Tail metrics: the picture moved twice
 
-Two distinct things happened, both worth understanding.
+The first draft of this section reported "ARF wins twCRPS, ARF wins
+pinball-at-p10" and treated this as a falsification of the literature
+review's directional prediction. Two review batteries later, both of
+those tail-metric claims have moved.
 
-**The "clamped at 0" assumption didn't hold on this data.** We checked
-the actual ARF forecast files for the window: on 2026-05-14 the lower
-band averaged 10.52 EUR/MWh, not 0. The clamp at `ml/update.py:365` only
-bites when `point − 1.282·EWM_std` goes negative, which happens less
-often in this window than the prior memory note assumed. The
-"ARF-lower-as-p10" substitution we use here also implicitly assumes
-Gaussian zero-mean residuals (the 1.282 factor is the standard-normal
-10th percentile); the EWM tracking doesn't strictly guarantee this, so
-ARF's "p10" is a miscalibrated p10 surrogate. The comparison is best
-read as "ARF lower band vs LightGBM p10" rather than a clean
-quantile-vs-quantile comparison. On the per-horizon evidence (next), the
-result holds either way.
+**Article-review battery (iteration 3): the twCRPS implementation
+doesn't measure what we wanted it to.** Our `twcrps_left_tail` is the
+per-quantile-decomposition variant: average pinball loss across the
+quantiles whose predicted value falls *below* the threshold. With the
+pre-committed threshold of −27.76 EUR/MWh, ARF's point forecast
+essentially never goes below the threshold — so its weight is always
+zero and its variant scores 0.0000 by abstention. A model that never
+predicts into the extreme tail gets a "perfect" variant score regardless
+of whether realisations actually fell into the tail. This is *not* the
+canonical Gneiting & Ranjan (2011) twCRPS, which integrates the Brier
+score `(F̂(z) − 1{y ≤ z})²` over `z ≤ c` and *does* penalise a CDF that
+stays at 0 below the threshold when realisations fall there. The
+variant we computed answers "of the times you predicted into the tail,
+how accurate were you?" — which a no-extrapolation model wins by
+abstaining. So the twCRPS "ARF wins" conclusion was never a meaningful
+finding about tail skill; it was an implementation issue.
+
+**Code-review battery (iteration 4): the data pairing was wrong.**
+A second review battery — this one focused on `ml/shadow/metrics.py`,
+`scripts/exp012_evaluate.py`, and `scripts/m4_method_run.py` — caught
+something the article-review battery had no way to see: the EXP-012
+join was pairing LGBM `eval_day = D` with ARF archive
+`{D}_1445_forecast.json`, while the production pipeline
+(`ml.shadow.evaluate_shadow.find_arf_archive_for_day`) selects the most
+recent archive whose timestamp precedes eval-day midnight UTC — which
+for `D` is `{D-1}_1445_forecast.json`, the previous day's 14:45 UTC
+cron. Net effect: in the buggy version, ARF was issued ~15 hours
+*after* the LGBM prediction the comparison was supposed to be
+apples-to-apples with. ARF had more recent realised prices to anchor
+on. Pinball-at-p10, MAE, twCRPS — every metric was biased in ARF's
+favour by this freshness gift.
+
+After the fix, the numbers in the table above changed materially:
+
+- LightGBM MQS / ARF MAE ratio: 3.4× → **4.1×** (LightGBM wins by *more*
+  once vintages match).
+- Pinball-at-p10: 7.97 vs 7.14 (ARF wins, p=0.92) →
+  **6.90 vs 7.38 (LightGBM wins, p=0.24)**.
+
+That's a *directional reversal* of the headline tail-metric finding. The
+literature review's original prediction — "LightGBM should win
+pinball-at-p10 because it can actually reach into the negative tail
+where ARF's structural baseline can't" — turned out to be directionally
+correct after all. We had read it as falsified because our join was
+wrong, not because the prediction was wrong.
+
+The per-horizon decomposition also moved. With the corrected vintage and
+the corresponding tighter overlap window (h ≤ 72 only, vs the buggy
+version's spuriously-longer reach):
 
 | Horizon group | LightGBM p10 pinball | ARF lower-band pinball |
 |---|---|---|
-| h ≤ 24 | 1.83 | 2.14 |
-| 24 < h ≤ 48 | 5.85 | 7.03 |
-| 48 < h ≤ 72 | 9.37 | 7.53 |
-| h > 72 | 11.30 | 7.94 |
+| h ≤ 24 | 1.83 | 4.48 |
+| 24 < h ≤ 48 | 5.85 | 7.51 |
+| 48 < h ≤ 72 | 10.18 | 7.86 |
 
-LightGBM wins p10 pinball at h ≤ 48 — the horizons where it has signal.
-It loses at h > 48, where its features thin out and the model is
-essentially guessing. On aggregate, the long-horizon losses dominate.
-This is the Reading-B "ARF's prior is genuinely better at long horizons"
-story showing up in the data, not just a metric artefact.
+LightGBM wins decisively at short and medium horizons; ARF's lower band
+recovers at long horizons. The "ARF's mean-reverting prior may be
+genuinely better at long horizons" reading from Reading B (§4) holds,
+but the cross-over point sits beyond h = 48 — not at h = 24 as the
+buggy data suggested. ARF's lower band remains a real competitor; LGBM
+no longer "loses" the tail metric.
 
-**The twCRPS implementation doesn't measure what we wanted it to.** A
-review battery on this article (data-analyzer + code-reviewer +
-skeptical-EPF reviewer, run after a first draft) caught a third issue.
-Our `twcrps_left_tail` implementation is the per-quantile-decomposition
-variant: average pinball loss across the quantiles whose predicted value
-falls below the threshold. With the pre-committed threshold of −27.76,
-ARF's point forecast essentially never goes below the threshold — so its
-weight is *always zero* and its twCRPS variant scores 0.0000 by
-abstention. A model that never predicts into the extreme tail gets a
-"perfect" twCRPS variant score regardless of whether realisations
-actually fell into the tail.
+### Caveats that remain
 
-This is a different question from the canonical Gneiting & Ranjan (2011)
-twCRPS, which integrates the Brier score `(F̂(z) − 1{y ≤ z})²` over `z
-≤ c` and *does* penalise a CDF that stays at 0 below the threshold when
-realisations fall there. Our variant reduces to "of the times you
-predicted into the tail, how accurate were you?" — which a
-no-extrapolation model wins by abstaining.
+- **The `lightgbm_quantile` module sorts predictions row-wise**
+  (`np.sort(raw, axis=1)`), so the "p10" stored in `calibration_history`
+  is `min(q0.10, q0.50, q0.90)` row-by-row, not the raw 10th-percentile
+  output. When the independent quantile regressions cross (common on
+  quiet hours), the stored "p10" is below the raw value, biasing
+  pinball-at-p10 in LightGBM's favour. Past data can't be retroactively
+  fixed; going forward, `update_shadow.py` will store raw quantiles
+  alongside sorted ones.
+- **The twCRPS variant remains a non-canonical metric**: ARF still
+  scores 0 by abstention; we still don't have a proper threshold-integral
+  twCRPS implementation. Deferred to the next experiment.
+- **ARF's lower band isn't actually clamped at 0** in the M4 window
+  (`ml/update.py:365` only bites when `point − 1.282·EWM_std < 0`,
+  which is rare in this regime). So even with the corrected vintage,
+  the comparison is LGBM-p10 vs ARF-lower-band-not-pinned-to-zero —
+  not the "ARF loses by construction" scenario the literature review
+  originally framed. LGBM still modestly wins this comparison, which is
+  the cleaner finding.
 
-Treat the twCRPS numbers here as descriptive, not as falsification of
-the literature recommendation. A properly-implemented threshold-integral
-twCRPS may well behave differently on this data. We've documented this
-in `ml/shadow/metrics.py` and deferred a canonical implementation to a
-follow-up. The pinball-at-p10 finding is robust to this issue (no
-threshold weighting); the per-horizon table above stands.
+### Where it leaves us, after all four iterations
 
-### Where it leaves us
-
-So the second iteration left us with three things:
-1. Aggregate skill is real — LightGBM's MQS is decisively better (with
-   the 3-quantile bias caveat).
-2. At long horizons (h > 48), ARF's mean-reverting prior may genuinely
-   be the better point estimate — per-horizon pinball-at-p10 supports
-   this.
-3. The twCRPS variant we implemented doesn't honestly measure tail
-   skill — it rewards abstention. A canonical implementation is
-   future work.
+1. **Aggregate skill is real and decisive** — LightGBM's MQS is 4.1×
+   below ARF's MAE-as-CRPS-equivalent (with the 3-quantile structural
+   asymmetry and HAC-bandwidth caveats above). The headline conclusion
+   survived all four iterations; only the magnitudes shifted.
+2. **Tail skill (pinball-at-p10) modestly favours LightGBM** with the
+   corrected vintage — vindicating the literature review's directional
+   prediction. Not statistically conclusive (p = 0.24 in LightGBM's
+   favour) but positive.
+3. **The non-canonical twCRPS variant doesn't honestly measure tail
+   skill** — neither version of the calculation (in-sample or
+   pre-committed threshold) gave a meaningful answer because ARF
+   abstains from the tail in both cases.
+4. **At very long horizons (h > 48), ARF's prior may still be the
+   better point estimate** — per-horizon pinball-at-p10 has the
+   cross-over there.
 
 ## 7. What the framework caught, and what it didn't
 
-Three iterations, three different kinds of error. It's worth being
-honest about which the framework caught and which were caught by
-discretion.
+Four iterations, four different kinds of error. The framework — the
+pre-commit-and-test discipline in the project's hypothesis-log
+structure — caught the first one. The other three were caught by
+discretionary judgement calls that happened to be made; none of them
+were guaranteed by process.
 
 **Iteration 1 — the criterion-design error.** The first failure
 (fixed-threshold MAE on a realised-conditioned slice) was caught by the
@@ -348,41 +404,62 @@ table eventually surfaced would have shown up on the dashboard a week
 after promotion. Park was correct, *for reasons we partly misdiagnosed
 at the time*.
 
-**Iteration 2 — the literature-prediction error.** The second failure
-(the "ARF clamp binds, so it loses pinball-at-p10 by construction"
-prediction) was *not* caught by the framework. It was caught by a
-discretionary decision to apply the new metrics to existing data before
-committing them to a new shadow window. That's not part of the
-hypothesis-log discipline; it was a "let's check first" move that
-could just as easily have been skipped. If we had committed to another
-14-day shadow on the new criterion as written, we'd have come back at
-the end of it with the same surprise the existing data already showed.
+**Iteration 2 — the assumption-import error.** The second iteration
+(applying the literature-recommended metrics to existing data) was a
+discretionary move, not a framework requirement. We chose to test the
+criterion before committing it to a new shadow window. That choice
+caught an *apparent* falsification of the literature review's prediction.
+Without the choice, we would have committed to another 14-day shadow
+on a criterion whose assumptions we hadn't tested.
 
-**Iteration 3 — the implementation error.** The third failure (twCRPS
-variant rewarding abstention) was caught by neither the framework nor
-the EXP-012 first run. It was caught by a review battery — data-analyzer,
-code-reviewer, and a skeptical EPF practitioner reviewer — fired *after*
-the article draft. The framework's pre-committed criteria don't audit
-their own implementation; that's a different kind of check.
+(The apparent-falsification turned out to be wrong itself — see
+iteration 4 — but the value of iteration 2 wasn't in the answer it
+produced. It was in *changing the cost of being wrong* from "another
+14 days of shadow + a misleading promotion" to "an hour of recompute
+on existing data.")
 
-Put together, the lesson is narrower than "the framework caught
-everything." It's:
+**Iteration 3 — the article-implementation error.** The third
+iteration was a review battery fired against the article draft:
+data-analyzer, code-reviewer, and a skeptical EPF practitioner. It
+caught that our `twcrps_left_tail` implementation is non-canonical and
+rewards abstention from the tail. The framework's pre-committed
+criteria don't audit their own implementation; that's a different
+kind of check. The article also had a category error ("MAE on a slice
+isn't a proper scoring rule" — MAE isn't a scoring rule), which the
+battery caught and we rewrote.
+
+**Iteration 4 — the data-pairing error.** The fourth iteration was a
+*second* review battery fired against the code (the metrics module +
+the EXP-012 runner + the M4 method runner). It caught the vintage
+mismatch — `build_paired` joining LGBM `eval_day=D` with the wrong-day
+ARF archive — that the article-review battery had no view of. The fix
+materially changed the headline conclusion of iteration 2: pinball-at-p10
+*reversed* direction, vindicating the literature review's original
+prediction. The discretionary check of iteration 2 had run on bad data
+without anyone noticing for a full session.
+
+The pattern after four iterations:
 
 1. *Pre-commitment to a falsifiable criterion* (the framework) prevents
-   ad-hoc post-hoc redefinition. That's table-stakes and it earned its
-   keep at iteration 1.
+   ad-hoc redefinition. Earned its keep at iteration 1.
 2. *Discretionary "test on existing data before the next window"*
-   (between iterations) catches a class of errors the framework can't —
-   wrong assumptions baked into the criterion itself. This needs to be
-   habit, not heroism.
-3. *Independent review of the implementation* (multi-model review
-   battery) catches a third class — propriety violations and
-   implementation drift that neither the framework nor the developer can
-   reliably self-audit.
+   (a habit, not a framework feature) catches a class of errors the
+   framework can't — wrong assumptions baked into the criterion. Earned
+   its keep by changing the cost-of-being-wrong at iterations 2 and 4.
+3. *Article-level review battery* catches mis-framing and
+   implementation-vs-canonical-form gaps. Earned its keep at iteration 3.
+4. *Code-level review battery* catches data-pipeline bugs that no
+   article-level reading can see. Earned its keep at iteration 4 —
+   and reversed the headline of iteration 2 *post-publication-draft*,
+   which is exactly the kind of error that makes papers retract.
 
-All three matter. The pattern is: pre-commit, test the criterion
-against existing data, review the implementation. *Then* go around
-again on the actual decision.
+All four matter. None of them is redundant. If we had skipped any one,
+we would still be carrying its corresponding mistake. The honest
+generalisation is not "the framework caught the mistakes" — it's "the
+combination of pre-commitment, discretionary checks, and *two
+independent* review batteries (one on the prose, one on the code)
+caught four mistakes that compounded into a publishable but wrong
+draft." The bare framework caught one of them.
 
 ## 8. What we'd do differently
 
@@ -477,20 +554,28 @@ and *different* practices catch *different* errors:
   discipline) catches post-hoc redefinition.
 - "Test the new criterion on existing data before the next window" (a
   habit, not a framework feature) catches assumptions baked into the
-  criterion.
-- Independent review of the implementation (a multi-model review
-  battery here) catches propriety violations and implementation drift.
+  criterion *and* changes the cost-of-being-wrong even when the test
+  itself is buggy.
+- Independent review of the article-level claims catches mis-framing
+  and category errors.
+- Independent review of the *code* catches data-pipeline bugs that
+  no prose-level reading will see.
 
-The first one is the cheapest and the easiest to skip; the third is the
-slowest and the one most likely to be skipped under time pressure. All
-three earned their keep on this arc. The honest summary isn't "the
-framework caught the mistakes." It's "the framework caught the first
-mistake, the second was caught by a discretionary check that wasn't
-part of the framework, and the third was caught by a discretionary
-review battery that wasn't part of the framework either." All three
-mistakes were instructive. Two of them are the kind of thing the
-literature has been warning about for over a decade and we just hadn't
-internalised yet.
+The first is the cheapest and the easiest to skip; the last two are
+the slowest and the ones most likely to be skipped under time pressure.
+All four earned their keep on this arc. The honest summary isn't "the
+framework caught the mistakes" — it's "*one* mistake was caught by the
+framework, and three more were caught by discretionary judgement calls
+that were each separately worth making." Each of the discretionary
+checks was specifically the right one for the corresponding error
+class. Pre-commitment doesn't save you from the wrong implementation;
+implementation review doesn't save you from a wrong-data join;
+data-join review doesn't save you from a wrong premise.
+
+This isn't a hopeful conclusion ("we have a framework that catches
+everything"). It's a humbler one: pre-commit when you can, and assume
+the framework has missed at least one thing. Then fire batteries until
+you've stopped finding things. We're at four. There may be a fifth.
 
 ---
 

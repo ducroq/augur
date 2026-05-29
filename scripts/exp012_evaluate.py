@@ -80,52 +80,84 @@ def load_lgbm_predictions() -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
-def load_arf_forecasts() -> pd.DataFrame:
-    """ARF point + lower + upper, all (issue_date, target_timestamp) pairs."""
+def _load_arf_archive(archive_path: Path) -> pd.DataFrame:
+    """Parse one ARF forecast archive into (timestamp_utc, point, lower, upper) rows."""
+    data = json.loads(archive_path.read_text())
+    f = data.get("forecast", {})
+    fl = data.get("forecast_lower", {})
+    fu = data.get("forecast_upper", {})
     rows = []
-    for path in sorted(ARF_FORECASTS_DIR.glob("*_forecast.json")):
-        # Filename: YYYYMMDD_HHMM_forecast.json — extract issue date.
-        name = path.stem  # YYYYMMDD_HHMM_forecast
-        date_str = name[:8]  # YYYYMMDD
-        try:
-            issue_date = datetime.strptime(date_str, "%Y%m%d").date().isoformat()
-        except ValueError:
+    for ts_iso, point in f.items():
+        if point is None:
             continue
-        if not (WINDOW_START <= issue_date <= WINDOW_END):
-            continue
-        data = json.loads(path.read_text())
-        f = data.get("forecast", {})
-        fl = data.get("forecast_lower", {})
-        fu = data.get("forecast_upper", {})
-        if not isinstance(f, dict):
-            continue
-        for ts_iso, point in f.items():
-            rows.append(
-                {
-                    "issue_date": issue_date,
-                    "timestamp_utc": pd.Timestamp(ts_iso).tz_convert("UTC")
-                    if pd.Timestamp(ts_iso).tzinfo
-                    else pd.Timestamp(ts_iso, tz="UTC"),
-                    "arf_point": float(point) if point is not None else np.nan,
-                    "arf_lower": float(fl.get(ts_iso, np.nan)),
-                    "arf_upper": float(fu.get(ts_iso, np.nan)),
-                }
-            )
+        ts = pd.Timestamp(ts_iso)
+        if ts.tzinfo is None:
+            ts = ts.tz_localize("UTC")
+        else:
+            ts = ts.tz_convert("UTC")
+        rows.append(
+            {
+                "timestamp_utc": ts,
+                "arf_point": float(point),
+                "arf_lower": float(fl[ts_iso]) if ts_iso in fl else np.nan,
+                "arf_upper": float(fu[ts_iso]) if ts_iso in fu else np.nan,
+            }
+        )
     return pd.DataFrame(rows)
 
 
 def build_paired() -> pd.DataFrame:
-    """LGBM and ARF predictions joined on (eval_day = issue_date, target ts)."""
+    """LGBM and ARF predictions joined on (eval_day, target timestamp_utc).
+
+    For each LGBM eval_day D, finds the ARF archive that the production
+    pipeline (`ml.shadow.evaluate_shadow.find_arf_archive_for_day`) would have
+    used — the most recent archive whose run-timestamp precedes eval_day
+    midnight UTC. This is typically the archive named `{D-1}_1445_forecast.json`
+    (the 14:45 UTC run of the previous day).
+
+    An earlier version of this function joined on `issue_date = filename_date`,
+    which paired LGBM `eval_day=D` with `{D}_1445_forecast.json` — an ARF
+    forecast issued ~15h after the LGBM cron's t0. The 2026-05-29 code-review
+    battery flagged this as a vintage mismatch; corrected to match the
+    production pipeline exactly.
+    """
+    # Import here to avoid circular issues if metrics.py is reused stand-alone.
+    from ml.shadow.evaluate_shadow import find_arf_archive_for_day
+
     lgbm = load_lgbm_predictions()
-    arf = load_arf_forecasts()
+    eval_days = sorted(lgbm["eval_day"].unique())
+
+    arf_rows = []
+    archives_used = {}
+    for eval_day in eval_days:
+        archive = find_arf_archive_for_day(ARF_FORECASTS_DIR, eval_day)
+        if archive is None:
+            print(f"  WARN: no ARF archive available for eval_day={eval_day}; skipping")
+            continue
+        archives_used[eval_day] = archive.name
+        arf_df = _load_arf_archive(archive)
+        if arf_df.empty:
+            continue
+        arf_df = arf_df.assign(eval_day=eval_day)
+        arf_rows.append(arf_df)
+
+    if not arf_rows:
+        return pd.DataFrame()
+
+    arf = pd.concat(arf_rows, ignore_index=True)
+
+    # Diagnostic: print archive-to-eval_day mapping so the join is auditable.
+    print("\nARF archive per eval_day (production-pipeline-consistent mapping):")
+    for d, name in archives_used.items():
+        print(f"  eval_day={d}  ->  {name}")
 
     paired = pd.merge(
-        lgbm.rename(columns={"eval_day": "issue_date"}),
+        lgbm,
         arf,
-        on=["issue_date", "timestamp_utc"],
+        on=["eval_day", "timestamp_utc"],
         how="inner",
     )
-    return paired.sort_values(["issue_date", "timestamp_utc"]).reset_index(drop=True)
+    return paired.sort_values(["eval_day", "timestamp_utc"]).reset_index(drop=True)
 
 
 # ---------------------------------------------------------------------------
@@ -193,17 +225,27 @@ def compute_new_metrics(paired: pd.DataFrame, threshold: float) -> NewMetricsRes
     dm_overall = diebold_mariano(lgbm_mqs_per, arf_mae_per)
 
     # --- twCRPS at left-tail threshold ---
-    # LGBM twCRPS: only quantiles below threshold contribute, averaged across all 3 columns.
+    # LGBM twCRPS variant: only quantiles below threshold contribute, averaged
+    # across all 3 columns. See metrics.py docstring — this is NOT canonical
+    # Gneiting-Ranjan twCRPS; it's the per-quantile-decomposition variant.
     lgbm_tw_per = twcrps_left_tail(y, lgbm_q, LGBM_TAUS, threshold)
-    # ARF equivalent: treat ARF as a Dirac-mass predictive distribution and
-    # apply the same left-tail weighting → contribution is |y - point| if
-    # point <= threshold else 0, averaged over the same 3 implicit "quantiles"
-    # (i.e. divided by len(taus) for parity with LGBM averaging).
-    arf_tw_per = (
-        np.where(arf_point <= threshold, np.abs(y - arf_point), 0.0)
-        / len(LGBM_TAUS)
-    )
+    # ARF equivalent: treat ARF as a Dirac-mass predictive distribution
+    # (Gneiting & Raftery 2007 §4.2: CRPS of a point mass = MAE). For the
+    # per-quantile-decomposition variant the parity-correct contribution is
+    # `|y - point| * 1{point <= c}` — no additional `/ K` factor (an earlier
+    # version divided by len(LGBM_TAUS) ad hoc, which the 2026-05-29 code
+    # review flagged as biasing the variant comparison ~3× in ARF's favour).
+    arf_tw_per = np.where(arf_point <= threshold, np.abs(y - arf_point), 0.0)
     dm_tw = diebold_mariano(lgbm_tw_per, arf_tw_per)
+    # Diagnostic: count zero-weight observations (where neither quantile fell
+    # below threshold for LGBM, OR the ARF point didn't). These contribute
+    # nothing to the per-obs score and inflate "lower is better" via abstention.
+    lgbm_tw_zero = int((lgbm_tw_per == 0).sum())
+    arf_tw_zero = int((arf_tw_per == 0).sum())
+    print(
+        f"\n  twCRPS variant zero-weight obs: LGBM {lgbm_tw_zero}/{len(y)}, "
+        f"ARF {arf_tw_zero}/{len(y)}  (high zero count = model abstains from tail)"
+    )
 
     # --- pinball-at-p10 ---
     lgbm_p10_per = pinball_loss(y, lgbm_q[:, 0], 0.10)
@@ -247,7 +289,7 @@ def print_report(paired: pd.DataFrame, old: dict, new: NewMetricsResult) -> str:
     lines.append("=" * 78)
     lines.append(f"EXP-012  re-evaluation on M4 window  ({WINDOW_START}..{WINDOW_END})")
     lines.append(f"  paired observations: {len(paired)}")
-    lines.append(f"  distinct eval days:  {paired['issue_date'].nunique()}")
+    lines.append(f"  distinct eval days:  {paired['eval_day'].nunique()}")
     lines.append("=" * 78)
     lines.append("")
     lines.append("OLD criterion (a) — MAE on hours with realized < 30 EUR/MWh")

@@ -73,14 +73,51 @@ identical.
 DM p-values are one-sided: H1 = "LGBM is more accurate." p < 0.10 means
 LGBM significantly wins; p ≥ 0.50 means LGBM doesn't win (and may lose).
 
+**These are the corrected numbers** after a 2026-05-29 code-review battery
+caught a vintage-mismatch bug in the original `build_paired` join (see §3
+"Bug fixes from the code review"). The previous numbers, preserved at the
+bottom of this section, are *wrong* and shouldn't be quoted.
+
 | Metric | LGBM | ARF | mean diff | DM stat | DM p | Direction |
 |---|---|---|---|---|---|---|
-| Mean quantile score / MAE | **10.22** | 35.13 | -24.91 | -13.14 | <0.0001 | **LGBM wins decisively** |
-| twCRPS variant (left-tail at -27.76, pre-committed) | 0.0245 | 0.0000 | +0.0245 | +2.28 | 0.99 | ARF "wins" by abstention (see §3) |
-| twCRPS variant (left-tail at -4.07, in-sample, draft only) | 0.109 | 0.023 | +0.086 | +1.52 | 0.94 | not pre-committed; preserved for transparency |
-| Pinball-at-p10 | 7.97 | 7.14 | +0.83 | +1.40 | 0.92 | LGBM does not win; modest evidence ARF wins |
-| Lower-side coverage (target 0.90) | 0.809 | 0.824 | | | | Both under-cover |
-| Winkler IS (α=0.20) | 149.7 | 192.6 | | | | LGBM wins (descriptive) |
+| Mean quantile score / MAE | **9.29** | 38.42 | -29.12 | -12.39 | <0.0001 | **LGBM wins decisively** |
+| twCRPS variant (left-tail at -27.76, pre-committed) | 0.0377 | 0.0000 | +0.0377 | +2.33 | 0.99 | ARF "wins" by abstention (see §3) |
+| Pinball-at-p10 | 6.90 | 7.38 | -0.48 | -0.70 | 0.24 | **Modest evidence LGBM wins** |
+| Lower-side coverage (target 0.90) | 0.811 | 0.824 | | | | Both under-cover |
+| Winkler IS (α=0.20) | 134.1 | 208.2 | | | | LGBM wins (descriptive) |
+
+n_paired = 546 (was 842 under the buggy join — the corrected ARF archive
+covers ~40 overlapping hours per eval_day instead of the buggy ~60).
+twCRPS zero-weight diagnostic: LGBM 526/546 (96.3%), ARF 546/546 (100%) —
+ARF abstains entirely from the −27.76 EUR/MWh tail; LGBM occasionally
+extrapolates into it. This is the non-canonical-metric issue, not a model
+fact.
+
+### Previous (buggy-vintage) numbers, preserved for transparency
+
+These were reported in the first draft of this document and the first
+version of the article. They paired LGBM `eval_day=D` with ARF archive
+`{D}_1445_forecast.json` instead of `{D-1}_1445_forecast.json` (production
+pipeline `find_arf_archive_for_day` uses the latter). Net effect: ARF was
+~15 hours fresher in the paired comparison than LGBM, biasing the
+comparison in ARF's favour on every metric.
+
+| Metric | LGBM | ARF | DM p | Direction (buggy) |
+|---|---|---|---|---|
+| Mean quantile score / MAE | 10.22 | 35.13 | <0.0001 | LGBM wins |
+| twCRPS variant (left-tail at -27.76) | 0.0245 | 0.0000 | 0.99 | ARF wins by abstention |
+| twCRPS variant (left-tail at -4.07, draft) | 0.109 | 0.023 | 0.94 | ARF wins (also in-sample threshold) |
+| Pinball-at-p10 | 7.97 | 7.14 | 0.92 | ARF wins |
+| Winkler IS (α=0.20) | 149.7 | 192.6 | (desc.) | LGBM wins |
+
+Headline corrections: the overall-skill conclusion holds (LGBM wins MQS-
+vs-MAE — actually by *more* once the vintage is fixed, 4.1× rather than
+3.4×). The pinball-at-p10 conclusion **reverses**: with the corrected
+vintage, LGBM modestly *wins* pinball-at-p10 (p=0.24 in LGBM's favour),
+vindicating the literature review's original directional prediction
+which had been masked by the bad join. The twCRPS-variant story is
+unchanged — ARF still scores 0 by abstention, which is the non-canonical-
+metric issue, not a real model finding.
 
 ### Per-horizon split (pinball-at-p10, paired)
 
@@ -96,27 +133,70 @@ win on pinball-at-p10 is driven by the long-horizon hours.
 
 ## 3. What this means
 
-### The literature-review prediction failed in a specific way
+### Bug fixes from the code review (3 issues caught)
 
-The review predicted "ARF's clamped-at-zero lower band loses by
-construction" on pinball-at-p10. **It doesn't, because the band isn't
-actually clamped at 0 in the M4 window.** ARF's lower band is computed
-as `point - 1.282·EWM_std` (a Gaussian-residual assumption applied to
-EWM-tracked error stats). On 2026-05-14 the lower band averaged 10.5
-EUR/MWh — well above zero. The clamp at `ml/update.py:365` only bites
-when `point - 1.282·EWM_std < 0`, which happens less often in this
-window than the prior assumption suggested. The ARF-lower-as-p10
-substitution we use here implicitly assumes Gaussian zero-mean residuals,
-which the EWM tracking does not strictly guarantee — so ARF's "p10" is a
-miscalibrated p10 surrogate, and the pinball-at-p10 comparison is best
-read as "ARF lower band vs LGBM p10" rather than a clean quantile
-comparison.
+A code-review battery on 2026-05-29 caught three issues in the
+implementation:
 
-The ARF lower band ends up in a "naturally cautious" zone (positive but
-substantially below the point) that's surprisingly hard to beat on
-pinball-at-p10. LGBM at long horizons over-extrapolates downward (p10
-sometimes very negative) and gets punished by pinball when the realised
-doesn't dip that far.
+1. **Vintage mismatch** (high impact): `build_paired` was joining
+   `eval_day=D` with ARF archive `{D}_1445_forecast.json` instead of the
+   `{D-1}_1445_forecast.json` that `ml.shadow.evaluate_shadow.find_arf_archive_for_day`
+   selects in production. Net effect: ARF was ~15 hours *fresher* than
+   LGBM in the paired comparison. Fixed by refactoring `build_paired` to
+   call `find_arf_archive_for_day` directly, with diagnostic output
+   showing the archive selected per eval_day. The corrected numbers are
+   reported in §2 above; the buggy numbers are preserved at the bottom
+   of §2 for audit.
+
+2. **LGBM "p10" is post-sort**: `lightgbm_quantile.LightGBMQuantileForecaster.predict`
+   returns `np.sort(raw, axis=1)` to enforce `p10 <= p50 <= p90` even when
+   the independent quantile regressions cross. `update_shadow.py` writes
+   these sorted values into `calibration_history.p10/p50/p90`, so the
+   "p10" we score in pinball-at-p10 is actually `min(q0.10, q0.50, q0.90)`
+   row by row, not the true 10th-percentile model output. Effect on the
+   M4 data is hard to bound exactly without re-running with raw
+   quantiles, but it biases pinball-at-p10 *favourably* for LGBM (the
+   sorted-min is at-most-as-large as the raw q0.10). Fixed forward:
+   `update_shadow.py` will store raw quantiles alongside sorted ones for
+   future runs. Past calibration_history cannot be retroactively fixed.
+
+3. **Non-canonical twCRPS double-divide**: the original ARF twCRPS-
+   equivalent in `exp012_evaluate.py` divided `|y - point| * 1{point <= c}`
+   by `len(LGBM_TAUS) = 3` as an ad-hoc "parity" adjustment. There is no
+   statistical justification for this; the canonical CRPS-equivalent for
+   a point forecast (Gneiting & Raftery 2007 §4.2) is just `|y - point|`,
+   and the per-quantile decomposition variant we use for LGBM doesn't
+   have a clean point-forecast analogue. Fixed: removed the `/3`.
+   Effect on numbers: ARF twCRPS-equivalent is now `|y - point| * 1{point <= c}`,
+   but ARF's point essentially never goes below −27.76 EUR/MWh so ARF
+   still scores 0 — the abstention issue is real and isn't a code bug,
+   it's a metric-design issue.
+
+The corrected vintage in (1) is the one that materially changes
+conclusions. (2) and (3) are smaller-magnitude issues that don't reverse
+the overall pattern but tighten our claims.
+
+### The literature-review prediction was directionally right
+
+With the corrected vintage and the smaller-magnitude fixes folded in,
+
+the literature review's directional prediction holds:
+**LGBM modestly wins pinball-at-p10**, mean diff −0.48 EUR/MWh, DM
+p=0.24 in LGBM's favour. Not statistically conclusive at α=0.05 but
+positive and consistent with the literature recipe. The buggy vintage
+join in the first version of EXP-012 made this look like "ARF wins
+pinball-at-p10 with p=0.92" — the opposite direction.
+
+We *also* still have the legitimate observation that ARF's lower band
+isn't actually clamped at 0 on the M4 window (the clamp at
+`ml/update.py:365` only bites when `point − 1.282·EWM_std < 0`, which
+is rare in this regime). So ARF's lower band remains a real
+competitor — it's not just "ARF loses by construction" any more, it's
+"LGBM modestly outperforms a non-trivial ARF baseline." That's a
+narrower and more honest conclusion. The ARF-lower-as-p10 substitution
+still assumes Gaussian zero-mean residuals which the EWM tracking
+doesn't strictly guarantee, so ARF's "p10" is a miscalibrated p10
+surrogate; the comparison is best read as "ARF lower band vs LGBM p10".
 
 ### The twCRPS variant doesn't measure what we wanted
 

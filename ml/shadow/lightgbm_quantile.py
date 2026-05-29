@@ -91,8 +91,20 @@ class LightGBMQuantileForecaster:
             self.models.append(model)
         return self
 
-    def predict(self, X: pd.DataFrame) -> np.ndarray:
-        """Returns shape (n, 3) with sorted [P10, P50, P90] per row."""
+    def predict(self, X: pd.DataFrame, sort: bool = True) -> np.ndarray:
+        """Returns shape (n, 3) with [P10, P50, P90] per row.
+
+        When ``sort=True`` (default, for backwards compatibility) the row is
+        sorted ascending so p10 <= p50 <= p90 is guaranteed even when the
+        independent quantile regressions cross.
+
+        When ``sort=False`` the raw model outputs are returned in the order
+        of ``self.quantiles``. Pass ``sort=False`` if you need to score
+        pinball-at-tau against the actual tau=q prediction (the sort
+        operation makes "p10" the row-minimum, which biases pinball-at-p10
+        downward when independent regressions cross — caught by 2026-05-29
+        code-review battery on EXP-012).
+        """
         if not self.models:
             raise RuntimeError("Model not fit yet — call .fit() first")
         if not isinstance(X, pd.DataFrame):
@@ -103,7 +115,9 @@ class LightGBMQuantileForecaster:
                 raise ValueError(f"Missing features at predict time: {sorted(missing)}")
             X = X[self.feature_names]
         raw = np.column_stack([m.predict(X) for m in self.models])
-        return np.sort(raw, axis=1)
+        if sort:
+            return np.sort(raw, axis=1)
+        return raw
 
     def save(self, path: Path | str) -> None:
         """HMAC-signed save via ``secure_pickle.save_signed_pickle``."""
@@ -247,10 +261,16 @@ class MultiHorizonLightGBMQuantileForecaster:
         self,
         X: pd.DataFrame,
         horizons: Sequence[int] | None = None,
+        sort: bool = True,
     ) -> np.ndarray:
-        """Predict each (row, horizon) pair, returning sorted [P10, P50, P90].
+        """Predict each (row, horizon) pair, returning [P10, P50, P90].
 
         Returns shape ``(len(X), len(horizons), 3)``.
+
+        ``sort=True`` (default) returns sorted quantiles so p10 <= p50 <= p90
+        is guaranteed. ``sort=False`` returns the raw model outputs in the
+        order of ``self.quantiles`` — needed for proper pinball-at-tau
+        scoring (see ``predict`` docstring).
         """
         if not self.feature_names:
             raise RuntimeError("Model not fit yet — call .fit() first")
@@ -279,7 +299,7 @@ class MultiHorizonLightGBMQuantileForecaster:
         for j, h in enumerate(horizons_list):
             g_idx = self._group_index_for(h)
             X_h = X_feat.assign(**{HORIZON_FEATURE: float(h)})
-            preds = self.group_models[g_idx].predict(X_h)  # (n_rows, 3), already sorted
+            preds = self.group_models[g_idx].predict(X_h, sort=sort)
             out[:, j, :] = preds
         return out
 

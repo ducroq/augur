@@ -94,8 +94,11 @@ def run_method(rows: list[dict]) -> dict:
     ]
     mean_peak_ratio = float(np.mean(peak_ratios)) if peak_ratios else None
 
-    # Overall MAE (informational)
-    overall_lgbm = float(np.mean([r["lightgbm_mae"] for r in rows]))
+    # Overall MAE (informational). Both sides filter None to avoid TypeError
+    # from a future row with a missing field (caught by 2026-05-29 code review).
+    overall_lgbm = float(
+        np.mean([r["lightgbm_mae"] for r in rows if r["lightgbm_mae"] is not None])
+    )
     overall_arf = float(np.mean([r["arf_mae"] for r in rows if r["arf_mae"] is not None]))
 
     # Decision
