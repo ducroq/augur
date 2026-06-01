@@ -9,6 +9,15 @@
 
 ---
 
+### First cron after un-parking shadow always trips `[recovered after stale state Nh]` marker (2026-06-01)
+**Problem**: Calendar-scheduled glance at GitHub for the 2026-05-30 daily cron commit. Subject line read `Daily update 2026-05-30 — ARF OK | shadow rc=0/eval rc=0 [recovered after stale state 47h]` — and `daily_update.sh:87` logs `ALARM: shadow_state.json is 47h stale at start of run (>36h). Likely silent failure on prior run(s).` Strongly suggests a real failure mode on a day that should have been the first clean post-promotion run.
+**Root cause**: Benign one-shot from un-parking. `shadow_state.json:last_run_utc` is only updated at `update_shadow.py:527` when the shadow block runs successfully. The 2026-05-29 cron ran in M4-parked mode (`shadow rc=parked/eval rc=parked` in commit `35a922b`), so it never touched the state file. EXP-014 (same date) re-enabled the shadow block in `daily_update.sh:106-128`. The first post-re-enable cron (2026-05-30 14:45 UTC) therefore saw `last_run_utc` from the 2026-05-28 run — ~48h stale — and tripped the >36h heartbeat guard at `daily_update.sh:71-89`. Shadow ran successfully on the same invocation; eval correctly backfilled with `n_overlap_hours: 48` for date `2026-05-28`. 2026-05-31 commit clean, no recurrence.
+**Fix**: None to the runtime — recovery worked exactly as designed. Cleaned up stale comment at `daily_update.sh:161-165` that referenced the retired `"parked"` sentinel (the post-EXP-014 fallback is `"skip"`, not `"parked"`); kept the defensive string equality on the healthchecks ping for future sentinel resilience.
+**Pattern**: Any pre-flight staleness guard on a state file that's only written by the gated-off path will false-fire on the first run after un-gating. Two structural mitigations if this scenario recurs (e.g. another M4-style park): (1) have the park-mode path touch `last_run_utc` to "now" so the heartbeat doesn't fire on un-park, or (2) soften the alarm wording from "Likely silent failure" to "Could be silent failure or intentional park". Neither worth shipping pre-emptively — current wording is informational enough and the `[recovered after stale state Nh]` marker on the commit message makes the recovery legible.
+**Status**: [RESOLVED] — runtime correct; misleading comment fixed; structural mitigations deferred until next planned park (none scheduled).
+
+---
+
 ### scipy 1.17 broke statsmodels.api import (2026-05-29)
 **Problem**: While building `ml/shadow/metrics.py:diebold_mariano`, importing `import statsmodels.api as sm` raised `ImportError: cannot import name '_lazywhere' from 'scipy._lib._util'`. statsmodels.distributions.discrete tries to import a private scipy helper that was removed in scipy 1.17.
 **Root cause**: statsmodels (0.14.4 in the dev env) hasn't caught up with scipy 1.17's removal of `_lazywhere`. Augur doesn't pin either, so the project picked up scipy 1.17 from PyPI and broke a transitively-used statsmodels feature.

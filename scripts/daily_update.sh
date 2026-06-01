@@ -158,8 +158,11 @@ git diff --cached --quiet && echo "No changes to commit" || {
 # endpoint's natural absence-detection alerts on shadow failure (not just
 # script execution). Set HEALTHCHECKS_SHADOW_URL in .env to enable;
 # unset = silently skip (no-op).
-# String equality (not -eq) because SHADOW_UPDATE_RC may be a sentinel like
-# "parked" when the shadow block is disabled (post-M4, 2026-05-29).
+# String equality (not -eq) is defensive — kept from when SHADOW_UPDATE_RC
+# could take non-numeric sentinel values like "parked" during the M4 park
+# (retired 2026-05-29 by EXP-014). Currently the var is always unset or
+# numeric, so `-eq` would also work, but `=` won't error if a future
+# experiment re-introduces a sentinel.
 if [ -n "${HEALTHCHECKS_SHADOW_URL:-}" ] && [ "${SHADOW_UPDATE_RC:-1}" = "0" ]; then
     curl -fsS --retry 3 --max-time 10 "$HEALTHCHECKS_SHADOW_URL" > /dev/null \
         && echo "Healthchecks ping sent." \
