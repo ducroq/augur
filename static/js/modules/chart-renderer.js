@@ -3,20 +3,16 @@
  * @module chart-renderer
  */
 
-import { convertUTCToAmsterdam } from './timezone-utils.js';
-
 /**
- * Get the vertical line shape for the current time in Amsterdam timezone.
- * Automatically handles DST (CET/CEST) to match chart data timezone.
+ * Get the vertical line shape for the current time.
+ * Chart data is real UTC; Plotly renders UTC strings in the browser's local
+ * timezone, so this line lands on the same axis as the data without any
+ * pre-shift mutation. (Pre-2026-06-03 this used convertUTCToAmsterdam which
+ * silently mutated the Date's UTC fields — root cause of augur#16.)
  * @returns {Array} Plotly shapes array
  */
 export function getCurrentTimeLineShape() {
-    const now = new Date();
-    // Convert to Amsterdam timezone (handles DST automatically)
-    // Chart data is in Amsterdam time, so "now" line must match
-    // Use same conversion pattern as data-processor.js for consistency
-    const amsterdamNow = convertUTCToAmsterdam(now);
-    const currentTimeISO = amsterdamNow.toISOString();
+    const currentTimeISO = new Date().toISOString();
 
     // Simple white line like the horizontal axis
     return [{

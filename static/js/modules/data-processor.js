@@ -4,7 +4,6 @@
  */
 
 import { CONSTANTS, DATA_SOURCES } from './constants.js';
-import { convertUTCToAmsterdam } from './timezone-utils.js';
 import { addNoise } from './noise.js';
 
 /**
@@ -46,11 +45,13 @@ export function processEnergyZeroData(rawData, options = {}) {
 
     rawData.Prices.forEach(pricePoint => {
         const utcTimestamp = new Date(pricePoint.readingDate);
-        const localTimestamp = convertUTCToAmsterdam(utcTimestamp);
 
-        // Filter by time range if specified
+        // Filter by time range if specified. Both sides are real UTC instants —
+        // startDateTime/endDateTime are Dates constructed from browser-local
+        // wall-clock components, but stored as real UTC. utcTimestamp is also
+        // real UTC. Comparison is frame-consistent.
         if (startDateTime && endDateTime) {
-            if (localTimestamp < startDateTime || localTimestamp > endDateTime) {
+            if (utcTimestamp < startDateTime || utcTimestamp > endDateTime) {
                 return; // Skip this price point
             }
         }
@@ -58,8 +59,8 @@ export function processEnergyZeroData(rawData, options = {}) {
         const priceEurMwh = pricePoint.price * CONSTANTS.EUR_KWH_TO_MWH_MULTIPLIER;
 
         const hourData = {
-            timestamp: localTimestamp.toISOString(),
-            hour: localTimestamp.getHours(),
+            timestamp: utcTimestamp.toISOString(),
+            hour: utcTimestamp.getUTCHours(),
             price_eur_kwh: pricePoint.price,
             price_eur_mwh: priceEurMwh,
             reading_date: pricePoint.readingDate
@@ -67,14 +68,14 @@ export function processEnergyZeroData(rawData, options = {}) {
 
         // Add optional fields for historical data
         if (isHistorical) {
-            hourData.date = localTimestamp.toISOString().split('T')[0];
+            hourData.date = utcTimestamp.toISOString().split('T')[0];
             hourData.utc_timestamp = utcTimestamp.toISOString();
         }
 
         processedData.today_prices.push(hourData);
 
         // Detect current price if enabled
-        if (detectCurrentPrice && localTimestamp.getTime() === currentHour.getTime()) {
+        if (detectCurrentPrice && utcTimestamp.getTime() === currentHour.getTime()) {
             processedData.current_price = hourData;
         }
     });

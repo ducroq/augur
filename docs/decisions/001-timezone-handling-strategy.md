@@ -1,7 +1,7 @@
 # ADR-001: Amsterdam Timezone Handling with convertUTCToAmsterdam Pattern
 
+**Status**: Superseded by ADR-008 (2026-06-03) — the `convertUTCToAmsterdam` + `.toISOString()` pattern silently mutated Date UTC fields, causing EnergyZero traces to render ~2h ahead of the Augur forecast (augur#16). Plotly already rendered raw UTC ISO strings correctly in browser-local time for the Augur forecast trace; ADR-008 unifies all chart data on that convention.
 **Date**: 2025-11-15
-**Status**: Accepted
 **Deciders**: User + Claude Code
 **Tags**: frontend, data-processing, timezone, chart-rendering
 
