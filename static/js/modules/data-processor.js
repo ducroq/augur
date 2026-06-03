@@ -276,7 +276,7 @@ export function processEnergyDataForChart(energyData, energyZeroData, cutoffTime
                 const ts = futureTs[i];
                 if (lower[ts] != null) {
                     bandX.push(ts);
-                    bandY.push(Math.max(addNoise(lower[ts]), 0));
+                    bandY.push(addNoise(lower[ts]));
                 }
             }
 
@@ -334,6 +334,9 @@ export function processEnergyDataForChart(energyData, energyZeroData, cutoffTime
                 const ts = futureTs[i];
                 if (cLower[ts] != null) {
                     cBandX.push(ts);
+                    // Consumer floor at 0: wholesale × VAT + ~110 EUR/MWh surcharge
+                    // makes negative consumer prices physically anomalous under the
+                    // current Dutch retail structure. Wholesale band is not clamped.
                     cBandY.push(Math.max(addNoise(cLower[ts]), 0));
                 }
             }
