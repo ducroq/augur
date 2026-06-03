@@ -19,13 +19,13 @@
 <!-- verify: cd /c/local_dev/augur && grep -q "ml.shadow.update_shadow" scripts/daily_update.sh && grep -q "augur_forecast_shadow.json" static/js/dashboard.js && echo PASS || echo FAIL -->
 - **LightGBM promotion**: EXP-014 (2026-05-29), redesigned criterion (skill DM p<0.10, calibration not >0.02 worse than ARF). LGBM MAE 28.9 vs ARF MAE 38.4 (25% better, DM p=0.029). One-line revert path: change `static/js/dashboard.js:loadAugurForecast` back to `augur_forecast.json`.
 - **ARF retained as backup signal**: cron continues; produces `augur_forecast.json`, the surcharge cache in `ml/models/state.json` (consumed by LightGBM's consumer-pricing step), and the timestamped archives in `ml/forecasts/` used by `evaluate_shadow.py`. Retiring ARF infrastructure deferred until ≥1 rolling-window cycle (~56 days) of clean LightGBM operation.
-- **Known weakness in production**: lower-side coverage ~0.81 vs nominal 0.90 target. Same as ARF era; swap doesn't worsen. Next experiment: horizon-conditioned CQR or ACI (Gibbs & Candès 2021).
+- **Known weakness in production**: lower-side coverage ~0.85 over the full eval log (1728 realised hours through 2026-06-02) vs nominal 0.90 target. Same as ARF era (0.82); swap doesn't worsen. Day-to-day coverage is bimodal — trailing-14 mean 0.76, worst day 0.33 — mean masks the worst days. Tracked formally as **augur#19**; soft dependency on augur#12 (fix exogenous freshness first).
 - ENTSO-E collector recovered ~2026-04-18 after 2026-03-26 outage; guard in `parse_price_file()` remains.
 - Test suite: 177 tests passing (SecureDataHandler, OnlineFeatureBuilder, LightGBM forecaster + multi-horizon + secure_pickle + conformal + backtest + update_shadow + evaluate_shadow + slice MAE + archive path + new metrics module).
 <!-- verify: cd /c/local_dev/augur && python -m pytest tests/ --collect-only -q 2>&1 | grep -qE "17[5-9] tests" && echo PASS || echo FAIL -->
 - Experiment registry: EXP-001..EXP-014 in `experiments/registry.jsonl`. EXP-014 is the production-promotion entry.
 <!-- verify: cd /c/local_dev/augur && [ "$(wc -l < experiments/registry.jsonl)" -ge 14 ] && echo PASS || echo FAIL -->
-- Docs structure: CLAUDE.md + docs/RUNBOOK.md + docs/decisions/ (ADR-001..007, gap at 005) + docs/articles/ (M4 metric-redesign case study) + docs/river-arf-retrospective.md + docs/lightgbm-quantile-shadow-plan.md + docs/lightgbm-shadow-postmortem.md + docs/exp-012-results.md + docs/metric-redesign-literature-review.md + docs/literature.md + docs/hypothesis-log.md + docs/model-progress-log.md + memory/.
+- Docs structure: CLAUDE.md + docs/RUNBOOK.md + docs/decisions/ (ADR-001..008, gap at 005; ADR-001 superseded by ADR-008 on 2026-06-03) + docs/articles/ (M4 metric-redesign case study) + docs/river-arf-retrospective.md + docs/lightgbm-quantile-shadow-plan.md + docs/lightgbm-shadow-postmortem.md + docs/exp-012-results.md + docs/metric-redesign-literature-review.md + docs/literature.md + docs/hypothesis-log.md + docs/model-progress-log.md + memory/.
 - agent-ready-projects: v1.9.0 (hypothesis-log + literature-index patterns inform v1.10+ framework candidates).
 
 ## Recently Promoted
@@ -43,7 +43,7 @@
 
 - **ADR-006**: LightGBM-Quantile + CQR is the production forecasting architecture (2026-05-29). Multi-horizon stacking, 56-day rolling window, retrain-from-scratch nightly.
 - **ADR-007**: Promotion method — single skill criterion + one-sided calibration guardrail, pre-committed in hypothesis-log, with article-level + code-level review batteries before action.
-- ADR-001: Timezone handling — use `Intl.DateTimeFormat` with Europe/Amsterdam.
+- **ADR-008** (2026-06-03): Chart data carries real UTC ISO strings; Plotly renders in browser-local time. Supersedes ADR-001 (the `convertUTCToAmsterdam` mutation pattern caused EZ↔Augur misalignment, augur#16). CLAUDE.md hard constraint still stands: use `Intl.DateTimeFormat` for any wall-clock display; never bake offsets into stored timestamps.
 - ADR-003: Netlify cache `--force` flag — ensures fresh data on webhook builds.
 - ADR-004 superseded by ADR-006 (ARF replaced as model, kept as backup pipeline).
 - Target: ENTSO-E NL wholesale day-ahead price + derived consumer forecast (wholesale × VAT + cached ARF surcharge).
@@ -53,16 +53,26 @@
 ## Open Issues
 
 - **augur#12**: migrate sadalsuud orchestration cron → systemd + run augur *after* EDH collector. Currently augur runs at 14:45 UTC, EDH collects at ~15:20 UTC, so parquet always trails 24h. Live LightGBM MAE is 84% above backtest h+1 partly because of this freshness skew. Highest-priority infrastructure ticket.
-- **Lower-side coverage** ~0.81 vs 0.90 target. Next experiment after augur#12: horizon-conditioned CQR (separate calibration windows per horizon group) or Adaptive Conformal Inference.
+- **augur#19** (filed 2026-06-03): lower-side calibration follow-up — umbrella tracker for EXP-015..017 (horizon-conditioned CQR / ACI / 9-quantile training). Coverage ~0.85 vs 0.90 target. Soft dependency on augur#12 so calibration experiments don't conflate two effects.
+- **augur#18** (filed 2026-06-03): verify EnergyZero endpoint really returns all-in consumer pricing as the constants.js comment claims; clarify wholesale vs consumer comparator labelling on the dashboard.
+- **augur#15** (filed 2026-06-03): foundation-model spike — Chronos / TabPFN-TS as offline baselines or ensemble members. Won't fix the calibration gap.
+- **augur#14**: gap-detection + automated backfill for missed daily runs (defensive infra, low priority).
 - **Model-tab metric parity**: `update_shadow.py` doesn't yet emit ARF-equivalent metadata (`metrics_history`, `error_history`, `n_training_samples`), so `static/js/modules/model-viz.js` still reads `augur_forecast.json` (ARF backup). Future work to extend the LightGBM metadata schema and update model-viz.js.
 - **Publishability backlog** (`docs/hypothesis-log.md` entry, review-by 2026-12-31): ADR-006 + the M4 → EXP-014 arc is publishable with ~2-3 weeks of empirical follow-up (naive baseline, PIT, multi-window robustness, canonical CRPS at 9-19 quantiles, canonical twCRPS integral). Or ~3-4 days of polish for a blog post.
-- #2-4: New ML features (NED production, gas/carbon prices, cross-border flows) — deferred indefinitely post-EXP-014 (model class is good, features aren't the bottleneck).
-- #5: Backtesting framework from archived forecasts — partly absorbed into `ml/shadow/backtest.py` + `scripts/exp012_evaluate.py`.
-- #6-7: Model variants (peak/off-peak, larger ensemble) — see ADR-006 alternatives.
-- #8-10: Product expansion (SaaS API, ensemble forecasting, multi-country).
+- **Deferred ML features**: augur#2 (NED production), #3 (gas/carbon prices — partly parsed on `feat/new-features-ttf-genmix`), #4 (cross-border flows). Deferred indefinitely post-EXP-014 — model class is the lever, not features.
+- **Product expansion**: augur#8 (SaaS API), #9 (ensemble forecasting — overlaps with #15), #10 (multi-country). Strategic / long-horizon.
 - **agent-ready-projects#12** (framework-level, not augur): calendar-bridge skill candidate — plant `Review by:` dates from hypothesis logs into Google Calendar.
 
-## Resolved this session (2026-05-29)
+## Closed 2026-06-03
+
+- ✅ augur#16 — dashboard timezone-mutation bug (ADR-001 superseded by ADR-008; convertUTCToAmsterdam removed). Commit `5ae82b4`.
+- ✅ augur#17 — dashboard wholesale lower-band clamp at 0 (hid LGBM's negative-price predictions; same pattern as deprecated ARF clamp). Commit `07fb9a4`.
+- ✅ augur#5 — backtesting framework substantially completed in a different shape during EXP-009..014.
+- ✅ augur#6 — peak/off-peak model variants speculative + obsolete (LGBM already does horizon stacking).
+- ✅ augur#7 — ARF ensemble / Prophet baseline stale (ARF retired; Prophet overlaps with #15).
+- ✅ augur#11 — cron→systemd standalone superseded by broader augur#12.
+
+## Resolved 2026-05-29
 
 - ✅ EXP-011: M4 verdict (PROMOTE=False initially, Path B park).
 - ✅ EXP-012: metric-redesign validation on existing data — surprise findings.

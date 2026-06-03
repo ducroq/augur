@@ -9,6 +9,24 @@
 
 ---
 
+### ADR mandating a code pattern is worthless if the pattern can be silently bypassed (2026-06-03)
+**Problem**: ADR-001 (2025-11-15) mandated the `convertUTCToAmsterdam(date).toISOString()` pattern for all chart timestamps. Worked when ADR-001 was written. By 2026-06-03 the Augur ML forecast trace (added later) wrote real-UTC ISO strings to `augur_forecast_shadow.json` and the dashboard rendered those directly without conversion — bypassing the ADR entirely. EnergyZero traces (which followed the ADR) and Augur forecast traces (which didn't) ended up on different x-grids; by construction they could never align. User noticed visually after months of running. Filed as augur#16.
+**Root cause**: ADR-001 documented a convention but no mechanism enforced it. New code paths added between 2025-11 and 2026-06 didn't have a reason to know the convention existed. The ADR text + the function naming (`convertUTCToAmsterdam` suggests a sensible utility, not "mandatory invariant for every chart input") gave the impression of a helper, not a rule.
+**Fix**: ADR-008 supersedes ADR-001. New convention: data layer carries real UTC; Plotly renders in browser-local. The Augur forecast trace had been doing this all along — ADR-008 just unifies EZ and the now-line onto the same convention. `convertUTCToAmsterdam` deleted entirely (zero remaining callers ≠ "the pattern is fine if applied uniformly", which was ADR-001's hope).
+**Pattern**: An ADR that mandates a code pattern needs either (a) an enforceable check (lint rule, test, type signature) or (b) a *narrow API surface* that's hard to bypass accidentally. ADR-001 had neither — it relied on every new chart trace remembering to call `convertUTCToAmsterdam`, and that fails open. Prefer ADRs that change a data shape or remove an unsafe API over ADRs that document a calling convention.
+**Status**: [RESOLVED] — ADR-008 supersedes ADR-001; bug fixed in commit `5ae82b4`.
+
+---
+
+### `Closes augur#NN` in commit message doesn't auto-close — must be bare `#NN` for same-repo (2026-06-03)
+**Problem**: Commit `07fb9a4` had trailer `Closes augur#17.` (treating the cross-repo-style prefix as documentation). Pushed to main. Issue did NOT auto-close. Had to close manually with `gh issue close 17 --comment`. Next commit used `Closes #16` (bare) — issue auto-closed correctly.
+**Root cause**: GitHub's closing-keyword parser interprets `augur#17` as a cross-repo reference to a repo literally named `augur` in the same org as the commit's repo (which would resolve to `ducroq/augur` — the same repo, but it doesn't reliably trigger). The bare `#NN` form is what the parser auto-fires on. The cross-repo form sometimes works for org-prefix resolution but the org-bare form ("just the repo name") is unreliable.
+**Fix**: For same-repo issue references in commit messages, use `Closes #NN` (or `Fixes`, `Resolves`). For cross-repo, use the full `Closes ducroq/repo#NN`. Never the bare `repo#NN`.
+**Pattern**: Two valid forms. Three things to avoid: bare repo name (`augur#NN`), wrong-org form (`other-org/repo#NN` when you mean same-org), and trailer typos (`Close` without trailing `s`).
+**Status**: [RESOLVED] — discipline noted; both today's commits' issues are closed.
+
+---
+
 ### First cron after un-parking shadow always trips `[recovered after stale state Nh]` marker (2026-06-01)
 **Problem**: Calendar-scheduled glance at GitHub for the 2026-05-30 daily cron commit. Subject line read `Daily update 2026-05-30 — ARF OK | shadow rc=0/eval rc=0 [recovered after stale state 47h]` — and `daily_update.sh:87` logs `ALARM: shadow_state.json is 47h stale at start of run (>36h). Likely silent failure on prior run(s).` Strongly suggests a real failure mode on a day that should have been the first clean post-promotion run.
 **Root cause**: Benign one-shot from un-parking. `shadow_state.json:last_run_utc` is only updated at `update_shadow.py:527` when the shadow block runs successfully. The 2026-05-29 cron ran in M4-parked mode (`shadow rc=parked/eval rc=parked` in commit `35a922b`), so it never touched the state file. EXP-014 (same date) re-enabled the shadow block in `daily_update.sh:106-128`. The first post-re-enable cron (2026-05-30 14:45 UTC) therefore saw `last_run_utc` from the 2026-05-28 run — ~48h stale — and tripped the >36h heartbeat guard at `daily_update.sh:71-89`. Shadow ran successfully on the same invocation; eval correctly backfilled with `n_overlap_hours: 48` for date `2026-05-28`. 2026-05-31 commit clean, no recurrence.

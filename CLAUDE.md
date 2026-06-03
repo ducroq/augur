@@ -75,7 +75,7 @@ Client browser (https://energy.jeroenveen.nl):
 ### ML Pipeline (live)
 - **Status (2026-05-29 — post EXP-014 promotion)**: LightGBM-Quantile drives the dashboard via `static/data/augur_forecast_shadow.json` (loaded by `static/js/dashboard.js:loadAugurForecast`). ARF cron continues as a backup signal — `static/data/augur_forecast.json` still updates daily and is read by `static/js/modules/model-viz.js` for the Model-tab metric widgets. The shadow now generates consumer-pricing fields too (`update_shadow.py:read_arf_surcharge` reads the cached surcharge from ARF's state.json and applies the same VAT+surcharge transform). To revert: change the path in `dashboard.js:loadAugurForecast` back to `augur_forecast.json`.
 - **Why the swap**: five iterations of criterion redesign converged on a single-criterion-plus-guardrail design (skill: paired DM on |y−p50_LGBM| vs |y−point_ARF|, HAC bandwidth 71, p<0.10; calibration: LGBM not >0.02 worse than ARF on either side). Applied to the M4 paired data: LGBM MAE 28.9 vs ARF MAE 38.4 (25% better, DM p=0.029); LGBM lower-side coverage 0.811 vs ARF 0.824 (within tolerance); LGBM upper-side 0.870 vs ARF 0.621 (LGBM materially better). PROMOTE = True. See `docs/articles/m4-metric-redesign-story.md` for the full arc, `docs/hypothesis-log.md` for the pre-committed criteria, `experiments/registry.jsonl` EXP-008..EXP-014.
-- **Known weakness inherited from the swap**: lower-side coverage 0.81 is below the 0.90 nominal target. Same problem ARF had; not made worse by the swap, but worth a follow-up (CQR retune at horizon-conditioned calibration, or ACI). Tracked as the next experiment after augur#12.
+- **Known weakness inherited from the swap**: lower-side coverage 0.854 over the full eval log (1728 realised hours through 2026-06-02) is below the 0.90 nominal target. Same problem ARF had (0.82); not made worse by the swap, but unresolved. Day-to-day coverage is bimodal — trailing-14-day mean 0.76 with worst day at 0.33 — so the mean masks the worst days. Tracked as **augur#19** (umbrella tracker for the calibration follow-up: horizon-conditioned CQR / ACI / 9-quantile training as candidate EXP-015..017). Soft dependency on augur#12 (fixing exogenous freshness first so the calibration experiments don't conflate two effects).
 
 **ARF (backup signal, retired-as-model 2026-04-28, kept-running 2026-05-29 — see ADR-006 / ADR-004 superseded)**:
 - Model: River ARFRegressor (10 trees), continuous online learning
@@ -96,8 +96,7 @@ Client browser (https://energy.jeroenveen.nl):
 - Promotion criterion (now resolved): see `docs/hypothesis-log.md` iteration-5 entry and `scripts/exp014_evaluate_promotion.py`
 - Pickle integrity: HMAC-SHA256 sidecar via `ml/shadow/secure_pickle.py`; verify-before-load
 - Calibration_history schema: `p10/p50/p90` are sorted-CQR-widened; `p10_raw/p50_raw/p90_raw` are the raw tau-quantile model outputs (added 2026-05-29 after EXP-013 code review caught sort-then-pinball bias).
-- Pickle integrity: HMAC-SHA256 sidecar via `ml/shadow/secure_pickle.py`; verify-before-load
-- Open: augur#12 (cron→systemd + run-after-EDH for fresh data)
+- Open: augur#12 (cron→systemd + run-after-EDH for fresh data), augur#19 (lower-side calibration follow-up)
 
 ## Key Paths
 
