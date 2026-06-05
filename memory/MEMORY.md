@@ -53,13 +53,13 @@
 ## Open Issues
 
 - **augur#12**: migrate sadalsuud orchestration cron → systemd + run augur *after* EDH collector. Currently augur runs at 14:45 UTC, EDH collects at ~15:20 UTC, so parquet always trails 24h. Live LightGBM MAE is 84% above backtest h+1 partly because of this freshness skew. Highest-priority infrastructure ticket.
-- **augur#19** (filed 2026-06-03): lower-side calibration follow-up — umbrella tracker for EXP-015..017 (horizon-conditioned CQR / ACI / 9-quantile training). Coverage ~0.85 vs 0.90 target. Soft dependency on augur#12 so calibration experiments don't conflate two effects.
+- **augur#19** (filed 2026-06-03): lower-side calibration follow-up — umbrella tracker for EXP-015..017 (horizon-conditioned CQR / ACI / 9-quantile training). Coverage ~0.85 vs 0.90 target. Soft dependency on augur#12 so calibration experiments don't conflate two effects. **2026-06-05 comment** adds a forward pointer for Phase-1-for-LGBM (TTF + genmix features) as EXP-018 candidate behind EXP-015..017 (data precondition verified met: 71 daily genmix files in HAN).
 - **augur#18** (filed 2026-06-03): verify EnergyZero endpoint really returns all-in consumer pricing as the constants.js comment claims; clarify wholesale vs consumer comparator labelling on the dashboard.
 - **augur#15** (filed 2026-06-03): foundation-model spike — Chronos / TabPFN-TS as offline baselines or ensemble members. Won't fix the calibration gap.
 - **augur#14**: gap-detection + automated backfill for missed daily runs (defensive infra, low priority).
 - **Model-tab metric parity**: `update_shadow.py` doesn't yet emit ARF-equivalent metadata (`metrics_history`, `error_history`, `n_training_samples`), so `static/js/modules/model-viz.js` still reads `augur_forecast.json` (ARF backup). Future work to extend the LightGBM metadata schema and update model-viz.js.
 - **Publishability backlog** (`docs/hypothesis-log.md` entry, review-by 2026-12-31): ADR-006 + the M4 → EXP-014 arc is publishable with ~2-3 weeks of empirical follow-up (naive baseline, PIT, multi-window robustness, canonical CRPS at 9-19 quantiles, canonical twCRPS integral). Or ~3-4 days of polish for a blog post.
-- **Deferred ML features**: augur#2 (NED production), #3 (gas/carbon prices — partly parsed on `feat/new-features-ttf-genmix`), #4 (cross-border flows). Deferred indefinitely post-EXP-014 — model class is the lever, not features.
+- **Deferred ML features**: augur#2 (NED production), #3 (gas/carbon prices — parsers banked on `feat/new-features-ttf-genmix`, data precondition verified met 2026-06-05), #4 (cross-border flows). Re-scoped 2026-06-05: Phase-1-for-LGBM (TTF + NL genmix) is queued behind augur#19 EXP-015..017 — calibration first to avoid conflating effects. ARF-era `warmup_p1`/`backtest_p1` tooling is stale; new work would port parsers into `ml/shadow/features_pandas.py`.
 - **Product expansion**: augur#8 (SaaS API), #9 (ensemble forecasting — overlaps with #15), #10 (multi-country). Strategic / long-horizon.
 - **agent-ready-projects#12** (framework-level, not augur): calendar-bridge skill candidate — plant `Review by:` dates from hypothesis logs into Google Calendar.
 
