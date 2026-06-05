@@ -346,16 +346,25 @@ class EnergyDashboard {
             this.renderPlotlyChart('solarChart', processSolar(files, solarSelect.value));
         }
 
-        // Weather (two charts, one dropdown controls both)
+        // Weather (two charts, two dropdowns kept in sync — both control both charts)
         const weatherLocs = getWeatherLocations(files);
         const weatherSelect = document.getElementById('weather-location');
+        const weatherSelectCloud = document.getElementById('weather-location-cloud');
         this.populateSelect(weatherSelect, weatherLocs, loc => loc.includes('NL'));
+        this.populateSelect(weatherSelectCloud, weatherLocs, loc => loc.includes('NL'));
         const renderWeather = () => {
             const loc = weatherSelect.value;
             this.renderPlotlyChart('weatherTempChart', processWeatherTemp(files, loc));
             this.renderPlotlyChart('weatherCloudChart', processWeatherCloud(files, loc));
         };
-        weatherSelect.addEventListener('change', renderWeather);
+        weatherSelect.addEventListener('change', () => {
+            weatherSelectCloud.value = weatherSelect.value;
+            renderWeather();
+        });
+        weatherSelectCloud.addEventListener('change', () => {
+            weatherSelect.value = weatherSelectCloud.value;
+            renderWeather();
+        });
         if (weatherLocs.length > 0) renderWeather();
     }
 
