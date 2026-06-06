@@ -6,6 +6,44 @@
 |-------|------------|------|
 | EWM variance formula wrong | Fixed in `ml/update.py` — now uses signed `ewm_mean` | 2026-03-28 |
 | Double push of exchange prices | Fixed in `ml/update.py` — only push ML predictions | 2026-03-28 |
+| Silent-failure factory: external-API collector orchestration needs workflow-level quality gate (`jq` on `overall_status: critical`) — defensive at the workflow exit-code, not just per-collector | `energydatahub/.github/workflows/collect-data.yml` — `Assert data quality (no silent failures)` step | 2026-06-06 |
+
+---
+
+### Plotly datetime axis renders in UTC by default (2026-06-06)
+**Problem**: Augur forecast file was emitting real UTC ISO strings since the ADR-008 fix (`5ae82b4`), but the chart's vertical "now" line showed 06:00 when user's local wall-clock was 08:00 CEST. User observed during morning session 2026-06-06.
+**Root cause**: ADR-008's claim "Plotly renders UTC strings in the browser's local timezone" was wrong. Plotly's default datetime axis renders ISO strings with parseable offsets at their UTC clock positions (NOT browser-local). The fix in `5ae82b4` removed the inconsistent per-trace mutation but left the chart axis labeled in UTC. Inter-trace alignment was correct (all in UTC), but the user reads axis labels in their local timezone.
+**Fix**: New utility `utcToLocalNaiveISO(input)` in `static/js/modules/chart-renderer.js` (commit `fc24676`). Parses any ISO/Date to the absolute moment, then emits a *naive* ISO ("YYYY-MM-DDTHH:mm:ss.SSS", no offset) in browser-local. Plotly treats naive strings as local time without further conversion. Applied at the single rendering boundary: `renderChart()` maps it across every trace's `x` array via `localizeTraces()`, `getCurrentTimeLineShape()` routes the now-line through it, and `getChartLayout()` routes the explicit axis range bounds through it. Data-processor code unchanged — keeps using `new Date(ts)` for sorting/filtering which correctly handles absolute moments.
+**Pattern**: Two patterns this session: (1) An ADR's claim about library behavior needs an actual runtime check before being baked into the design — `5ae82b4`'s ADR text was wrong about Plotly defaults. (2) When you need cross-library timezone behavior, normalise to a known format at a single boundary (here: naive local at the rendering layer) rather than relying on each library handling timezone-aware strings "correctly".
+**Status**: [RESOLVED] — `fc24676` deployed; user verified now-line at wall-clock after hard-refresh. Residual inter-source 1-2h shifts (mostly between EZ, EPEX, ENTSO-E on price-decrease phase) are now visibly smaller but still present — believed genuine (different publication cadences + 15-min vs hourly granularity) and tracked at augur#23 for future verification.
+
+---
+
+### Browser cache on non-fingerprinted JS asset surfaces dropdown as "empty" (2026-06-06)
+**Problem**: After pushing `656e917` (added Cloud Cover dropdown), user reported the new dropdown showed no items. Inspecting live HTML and JS via curl confirmed both deployed correctly with both `populateSelect` calls. So why did the user see one empty dropdown?
+**Root cause**: `/js/dashboard.js` is served by Netlify with `Cache-Control: public,max-age=86400,must-revalidate` and a fixed URL (not fingerprinted). User's browser was running the OLD pre-`656e917` dashboard.js (cached) against the NEW HTML that has both `<select>` elements. Old JS only called `populateSelect` for `#weather-location`, so `#weather-location-cloud` rendered as an empty `<select>`.
+**Fix (immediate)**: Hard-refresh in browser (`Ctrl+Shift+R`) — invalidates the JS cache, fetches the new version, both dropdowns populate. The user-interaction reviewer's Finding #3 predicted exactly this scenario (file: 2nd review battery 2026-06-05).
+**Fix (long-term, deferred)**: Hugo's fingerprint pipeline (`{{ $js := resources.Get "js/dashboard.js" | resources.Fingerprint }}`) would emit `/js/dashboard.abc123.js`-style URLs that cache-bust automatically on every deploy. Not landed this session.
+**Pattern**: For any browser-cached asset (JS, CSS) served at a fixed URL with long max-age, every code change has a stale-cache transition window. Symptom: user reports "still seeing old behavior" or "feature missing" right after a deploy. Tell user to hard-refresh first as the diagnostic. If the pattern recurs across multiple sessions, land the Hugo fingerprint fix.
+**Status**: [RESOLVED] for this session via hard-refresh; long-term fingerprinting deferred.
+
+---
+
+### Rapid commits trigger GH Pages "in progress" deployment errors (2026-06-06)
+**Problem**: Three commits pushed to energydatahub within ~5 minutes (`cabf0ae` → `1f68f9f` → `f0ad743`) triggered three GitHub Pages workflow runs. The first succeeded; the second and third failed with `HttpError: Deployment request failed for <SHA> due to in progress deployment. Please cancel <prev SHA> first or wait for it to complete.`
+**Root cause**: GitHub Pages allows only one deployment in flight per repo. When a new deployment is requested while a prior one is still in "in progress" status (even if its workflow run otherwise looks complete), the API rejects it with 400. Particularly likely with the `actions/deploy-pages@v5` action; the prior deployment's slot can stay reserved for a minute or two after the workflow shows complete.
+**Fix**: Re-run the latest failed pages-build workflow once enough time has passed for the prior deployment slot to clear. `gh run rerun <run-id>` works. The intermediate failed runs can be left as-is — their artifacts are superseded by the latest successful one.
+**Pattern**: Avoid rapid-fire commit sequences to public repos with GH Pages enabled. If unavoidable, batch them into one commit or accept that pages-build retries will be needed. Not a code bug; an artifact of GH Pages' deployment model.
+**Status**: [RESOLVED] — re-ran latest pages-build (`27032470846`); current commit is properly published.
+
+---
+
+### Silent-failure factory recognised across a different collector (2026-06-06)
+**Problem**: `GoogleWeatherCollector` in the energyDataHub repo had been returning `API_KEY_INVALID` for ~7 months after Google Weather went GA in Nov 2025. The dashboard's Weather tab charts ("Temperature & Wind 10-day", "Cloud Cover & Humidity") showed "no data available" the entire time. The `data_quality_report.json` correctly flagged `overall_status: critical`, but the workflow exited 0 because the per-collector error was swallowed into an empty location dict at `googleweather.py:522-527`.
+**Root cause**: Same structural pattern as the May 2026 shadow-cron incident (gotcha 2026-05-08 "Shadow cron failed silently for 7 nights"). Layers conspired: (a) per-collector exception caught and stored as `{name, error, data: None}`, (b) orchestrator iterates location dicts and treats empty as "skip", (c) workflow exit code only reflects orchestrator success, not quality-report status. Three layers each defensible alone; together a "silent failure factory" across a different code path.
+**Fix**: Two-part. (1) Replace GoogleWeatherCollector entirely with `OpenMeteoWeatherCollector` (already in the repo for demand-side data, just at different locations). Output to the same `weather_forecast_multi_location.json` filename so augur's downstream consumer needs no change. Commits `df1bdb8` → `6e9433e`. (2) Add a defensive workflow step in `.github/workflows/collect-data.yml` that `jq`-checks `data_quality_report.json:overall_status` and exits 1 on `critical`. Placed before the docs-copy + commit + Netlify-trigger steps so degraded data doesn't propagate. This is the same shape as the May 2026 fix but applied at the workflow level rather than the collector level.
+**Pattern**: Recurrence of the silent-failure-factory pattern with a DIFFERENT collector after the previous mitigations all addressed only the shadow-cron specifically. Promote: "Any external-API collector orchestration needs a workflow-level quality gate that exits non-zero when the per-collector error count crosses a threshold, regardless of which collector failed." Promoted to the gotcha-log Promoted table.
+**Status**: [RESOLVED] — `9f4f1d1` adds the defensive gate; pattern promoted; energydatahub workflow now exits 1 when overall_status is critical. Side-effect: Drive API key rotation closed out (separate concern surfaced during the investigation).
 
 ---
 
