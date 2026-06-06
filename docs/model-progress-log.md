@@ -4,6 +4,40 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
+## 2026-06-06 — `pending_predictions` dedup landed (closes 2026-05-08 gotcha)
+
+**Trigger**: End-of-session `/curate` flagged the 2026-05-08 gotcha (`update_shadow.py` appends `pending_predictions` without dedup) as a 29-day-old lingering [OPEN code] item. The operational mitigation (state reset on sadalsuud) closed the original incident, but the code-side defence had been deferred. Decision today: land the small fix rather than carry it indefinitely.
+
+**Changes** (`ml/shadow/update_shadow.py`, one block at the `pending_predictions` write):
+
+Before — appended new predictions without uniqueness guarantee:
+```python
+state["pending_predictions"] = trim_to_recent_days(
+    list(state["pending_predictions"]) + new_pending, MAX_HISTORY_DAYS
+)
+```
+
+After — dedups by `(timestamp_utc, eval_day)` tuple, most-recent run wins:
+```python
+merged = list(state["pending_predictions"]) + new_pending
+deduped = {(r["timestamp_utc"], r["eval_day"]): r for r in merged}
+state["pending_predictions"] = trim_to_recent_days(
+    list(deduped.values()), MAX_HISTORY_DAYS
+)
+```
+
+The comment block above the new code explicitly cites the 2026-05-08 incident (silent-failure recovery; three runs in one day against a stalled parquet; 144 then 216 stacked predictions for the same `eval_day`; polluted the M4 promotion metrics). Future engineers who see "why are we deduping here?" land on the answer in-file.
+
+**Rationale**: Dict-comprehension dedup is idempotent — re-running gives the same output state. New entries (`new_pending`) append AFTER existing state in `merged`, so they win in the dict comprehension. Trims by recency happen after dedup so the `MAX_HISTORY_DAYS` cap still applies. No behaviour change in the normal (parquet-advancing) case; only kicks in when a duplicate `(timestamp_utc, eval_day)` key already exists.
+
+**Tests**: All 20 `test_update_shadow.py` tests pass. Full 177-test augur suite green. No new tests added — the smoke test (`test_first_run_produces_artifacts`) confirms the non-duplicate path; the duplicate-input regression test would require substantial fixture setup and the existing operational mitigation (state-reset script on sadalsuud) handles the rare case where this would matter in practice.
+
+**What was NOT changed**: ARF model, LightGBM model, feature builder, CQR logic, training window, output JSON schema, dashboard rendering. The change is purely defensive on the `pending_predictions` list-merge step.
+
+**Status**: Gotcha 2026-05-08 marked [RESOLVED]. The code-side defence pattern (dedup at write time on append-only state) is now applied; this matches the pattern in the gotcha entry's recommendation.
+
+---
+
 ## 2026-05-18 — M4 mid-window preview: CQR healthy, low-price failure is structural, methodology ambiguity surfaces
 
 **Trigger**: Calendar-scheduled mid-window sanity-check on M4 collection. 9 contiguous eval rows accumulated (2026-05-08 → 2026-05-16), 5 short of the 14-row formal Method run (review-by 2026-05-22 / buffer 2026-05-29 per `docs/hypothesis-log.md`).

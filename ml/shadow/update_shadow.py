@@ -479,8 +479,19 @@ def run_shadow_update(
         }
         for _, row in preds.iterrows()
     ]
+    # Dedup by (timestamp_utc, eval_day) so repeat runs against the same
+    # parquet don't stack duplicate prediction sets in pending_predictions.
+    # Bit us on 2026-05-08 during the silent-failure recovery: three runs
+    # within one day all saw the same parquet, stacked 144 then 216
+    # predictions for the same eval_day, and polluted the M4 promotion
+    # metrics when realised prices arrived. Last entry per key wins, which
+    # in this idiom is the most recent run because new_pending appends
+    # AFTER the existing state. Idempotent: re-running gives the same
+    # output state.
+    merged = list(state["pending_predictions"]) + new_pending
+    deduped = {(r["timestamp_utc"], r["eval_day"]): r for r in merged}
     state["pending_predictions"] = trim_to_recent_days(
-        list(state["pending_predictions"]) + new_pending, MAX_HISTORY_DAYS
+        list(deduped.values()), MAX_HISTORY_DAYS
     )
 
     # 8. Persist artifacts
