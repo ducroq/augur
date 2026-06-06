@@ -350,6 +350,13 @@ class EnergyDashboard {
         const weatherLocs = getWeatherLocations(files);
         const weatherSelect = document.getElementById('weather-location');
         const weatherSelectCloud = document.getElementById('weather-location-cloud');
+        // Defensive null guards — protects against the cache-transition window
+        // where a browser may load new dashboard.js against an old cached
+        // index.html (or vice-versa) and one of the selects is absent.
+        if (!weatherSelect || !weatherSelectCloud) {
+            console.warn('Weather location selects missing; expected #weather-location and #weather-location-cloud');
+            return;
+        }
         this.populateSelect(weatherSelect, weatherLocs, loc => loc.includes('NL'));
         this.populateSelect(weatherSelectCloud, weatherLocs, loc => loc.includes('NL'));
         const renderWeather = () => {
