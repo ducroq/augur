@@ -4,15 +4,60 @@
  */
 
 /**
- * Get the vertical line shape for the current time.
- * Chart data is real UTC; Plotly renders UTC strings in the browser's local
- * timezone, so this line lands on the same axis as the data without any
- * pre-shift mutation. (Pre-2026-06-03 this used convertUTCToAmsterdam which
- * silently mutated the Date's UTC fields — root cause of augur#16.)
+ * Convert any ISO datetime string or Date into a NAIVE (no timezone-suffix)
+ * ISO string representing the same absolute moment expressed in the BROWSER'S
+ * local timezone. Plotly interprets naive ISO strings as local time, so by
+ * stripping the timezone after converting to the local wall-clock, all chart
+ * elements render at the user's actual clock-time regardless of the source
+ * convention (UTC, CEST, or anything else with a parseable offset).
+ *
+ * This is the single conversion point — applied once at the rendering boundary
+ * inside this module (now-line, axis range, and trace x-values via
+ * `localizeTraces`). Data-processing code keeps using `new Date(ts)` for
+ * sorting/filtering, which correctly handles absolute moments.
+ *
+ * Idempotent for naive input within the same locale: a string already in
+ * local-naive form parses to the same Date and emits the same value.
+ *
+ * Reference: augur#16 supersession / ADR-008. This is the centralised version
+ * of the convention "data carries real UTC; rendering surfaces browser-local".
+ *
+ * @param {string|Date} input - ISO datetime string or Date object
+ * @returns {string} Naive ISO string ("YYYY-MM-DDTHH:mm:ss.SSS") in local time
+ */
+export function utcToLocalNaiveISO(input) {
+    const d = input instanceof Date ? input : new Date(input);
+    if (isNaN(d.getTime())) return String(input);  // pass invalid through unchanged
+    const pad = (n, w = 2) => String(n).padStart(w, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T` +
+           `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.` +
+           `${pad(d.getMilliseconds(), 3)}`;
+}
+
+/**
+ * Map every trace's x array through `utcToLocalNaiveISO` so Plotly receives
+ * a uniform local-naive x dimension across all sources. Non-array x values
+ * (scalars, missing) pass through untouched.
+ *
+ * @param {Array} traces - Plotly traces
+ * @returns {Array} Shallow-copied traces with localized x arrays
+ */
+export function localizeTraces(traces) {
+    if (!Array.isArray(traces)) return traces;
+    return traces.map(t => {
+        if (!t || !Array.isArray(t.x)) return t;
+        return { ...t, x: t.x.map(utcToLocalNaiveISO) };
+    });
+}
+
+/**
+ * Get the vertical line shape for the current time. Rendered in browser-local
+ * via `utcToLocalNaiveISO` so it lands on the user's wall-clock position on
+ * the now-localised axis.
  * @returns {Array} Plotly shapes array
  */
 export function getCurrentTimeLineShape() {
-    const currentTimeISO = new Date().toISOString();
+    const currentTimeISO = utcToLocalNaiveISO(new Date());
 
     // Simple white line like the horizontal axis
     return [{
@@ -46,9 +91,11 @@ export function getChartLayout(startDateTime, endDateTime, lastUpdateTime) {
         tickcolor: 'white'
     };
 
-    // Set explicit x-axis range if start and end times are provided
+    // Set explicit x-axis range if start and end times are provided.
+    // Convert through utcToLocalNaiveISO so the axis is in browser-local time,
+    // matching the localized trace data and the now-line.
     if (startDateTime && endDateTime) {
-        xaxis.range = [startDateTime.toISOString(), endDateTime.toISOString()];
+        xaxis.range = [utcToLocalNaiveISO(startDateTime), utcToLocalNaiveISO(endDateTime)];
     }
 
     // Format title with last update time
@@ -110,13 +157,20 @@ export function renderChart(elementId, traces, chartInitialized, startDateTime, 
     const layout = getChartLayout(startDateTime, endDateTime, lastUpdateTime);
     const config = getChartConfig();
 
+    // Normalise all trace x-values to browser-local naive ISO so they render
+    // at the user's wall-clock positions. Source data may be UTC, CEST, or
+    // anything else with a parseable offset — this is the single conversion
+    // boundary, kept in the rendering layer so processing code stays
+    // timezone-agnostic.
+    const localizedTraces = localizeTraces(traces);
+
     const element = document.getElementById(elementId);
 
     // Use Plotly.react() for efficient updates after initial render
     if (chartInitialized) {
-        Plotly.react(elementId, traces, layout, config);
+        Plotly.react(elementId, localizedTraces, layout, config);
     } else {
-        Plotly.newPlot(elementId, traces, layout, config);
+        Plotly.newPlot(elementId, localizedTraces, layout, config);
         chartInitialized = true;
 
         // Mark chart container as initialized (for progressive enhancement)
