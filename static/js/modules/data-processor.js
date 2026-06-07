@@ -113,11 +113,14 @@ export function processEnergyDataForChart(energyData, energyZeroData, cutoffTime
     const dataSources = DATA_SOURCES.forecast;
     let allTimestamps = [];
 
+    // EDH v2.2+ wraps per-source feeds under {metadata, data: {entsoe: ...}}; pre-v2.2 was flat.
+    const sources = energyData.data ?? energyData;
+
     // Process forecast data sources
     dataSources.forEach(source => {
-        if (energyData[source.key] && energyData[source.key].data) {
-            const sourceData = energyData[source.key].data;
-            const metadata = energyData[source.key].metadata;
+        if (sources[source.key] && sources[source.key].data) {
+            const sourceData = sources[source.key].data;
+            const metadata = sources[source.key].metadata;
 
             let multiplier = 1;
             if (metadata && metadata.units) {

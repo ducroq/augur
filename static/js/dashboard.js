@@ -261,7 +261,7 @@ class EnergyDashboard {
         );
 
         // Get last update time from energy data
-        const lastUpdate = this.energyData?.entsoe?.metadata?.start_time || new Date().toISOString();
+        const lastUpdate = (this.energyData?.data?.entsoe ?? this.energyData?.entsoe)?.metadata?.start_time || new Date().toISOString();
 
         this.allTimestamps = result.allTimestamps;
         this.chartInitialized = renderChart(

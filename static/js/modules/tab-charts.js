@@ -63,8 +63,11 @@ function resolveNumericValue(val) {
  */
 export function getWindLocations(files) {
     const wind = files['wind_forecast.json'];
-    if (!wind || !wind['offshore_wind'] || !wind['offshore_wind'].data) return [];
-    return Object.keys(wind['offshore_wind'].data);
+    if (!wind) return [];
+    // EDH v2.2+ wraps wind_forecast under {metadata, data: {offshore_wind: ...}}.
+    const root = wind.data ?? wind;
+    if (!root['offshore_wind'] || !root['offshore_wind'].data) return [];
+    return Object.keys(root['offshore_wind'].data);
 }
 
 /**
@@ -75,7 +78,8 @@ export function processWind(files, location) {
     const wind = files['wind_forecast.json'];
     if (!wind) return { traces, layout: {} };
 
-    const offshore = wind['offshore_wind'];
+    const root = wind.data ?? wind;
+    const offshore = root['offshore_wind'];
     if (offshore && offshore.data && offshore.data[location]) {
         const locData = offshore.data[location];
         const fields = [
