@@ -1,0 +1,17 @@
+[Unit]
+Description=Trigger Augur daily update after EDH publishes (16:30 UTC start, polls)
+
+[Timer]
+# Start the wait-for-EDH window at 16:30 UTC — just after EDH's nominal
+# 16:00 UTC GH Actions trigger. ExecStartPre will then poll until EDH
+# publishes today's data_quality_report.json (typically 17:00-19:00 UTC).
+OnCalendar=*-*-* 16:30:00 UTC
+
+# Run a missed job at next boot (covers reboots during the daily window).
+Persistent=true
+
+# Small jitter so a server-time spike doesn't fire at the exact second.
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

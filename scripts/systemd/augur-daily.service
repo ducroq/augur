@@ -1,0 +1,33 @@
+[Unit]
+Description=Augur daily model update (LGBM shadow + ARF + dashboard push)
+Documentation=https://github.com/ducroq/augur/issues/12
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/jeroen/local_dev/augur
+
+# Wait for EDH to publish today's data_quality_report.json before running.
+# Polls every 2 minutes for up to 4 hours; proceeds anyway on timeout so the
+# nightly run never fails-closed. Sentinel: top-level "timestamp" field must
+# be from the current UTC date.
+ExecStartPre=/home/jeroen/local_dev/augur/scripts/wait_for_edh.sh
+
+# Main job: the existing script, untouched. Appends to its existing logfile
+# AND lands in the journal (systemd captures stdout/stderr by default).
+ExecStart=/home/jeroen/local_dev/augur/scripts/daily_update.sh
+
+StandardOutput=append:/home/jeroen/local_dev/augur/logs/daily_update.log
+StandardError=append:/home/jeroen/local_dev/augur/logs/daily_update.log
+
+# Match the umask the script itself sets at the top.
+UMask=0027
+
+# Allow up to 90 min for the whole pull/train/eval cycle (incl. up to 4h
+# wait — TimeoutStartSec includes ExecStartPre per systemd semantics; bumped
+# accordingly to 5h30m).
+TimeoutStartSec=19800
+
+[Install]
+WantedBy=default.target
