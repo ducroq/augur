@@ -1,7 +1,7 @@
 {
   "metadata": {
     "model": "ARFRegressor",
-    "last_updated": "2026-06-08T14:45:08.012237+00:00",
+    "last_updated": "2026-06-08T16:31:48.986520+00:00",
     "n_training_samples": 10983,
     "metrics": {
       "mae": 21.62,
