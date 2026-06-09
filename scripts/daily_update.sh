@@ -17,7 +17,9 @@
 #
 # Steps 4-5 still run with `set +e` so a shadow failure does NOT abort the
 # ARF backup commit. A persistent shadow failure now degrades the dashboard
-# forecast — re-engage Healthchecks.io if you want sub-day alerting.
+# forecast — the in-script pre-flight ALARM (SHADOW_PRE_AGE_H >36h) surfaces
+# it in the next day's commit message; watching for missing daily commits on
+# origin/main is the external alive signal.
 
 set -e
 
@@ -153,20 +155,5 @@ git diff --cached --quiet && echo "No changes to commit" || {
     git commit -m "Daily update $(date -u '+%Y-%m-%d') — ARF OK | ${SHADOW_STATUS}${STALE_MARKER}"
     git push
 }
-
-# Healthchecks.io heartbeat — ping ONLY on shadow success, so the HC
-# endpoint's natural absence-detection alerts on shadow failure (not just
-# script execution). Set HEALTHCHECKS_SHADOW_URL in .env to enable;
-# unset = silently skip (no-op).
-# String equality (not -eq) is defensive — kept from when SHADOW_UPDATE_RC
-# could take non-numeric sentinel values like "parked" during the M4 park
-# (retired 2026-05-29 by EXP-014). Currently the var is always unset or
-# numeric, so `-eq` would also work, but `=` won't error if a future
-# experiment re-introduces a sentinel.
-if [ -n "${HEALTHCHECKS_SHADOW_URL:-}" ] && [ "${SHADOW_UPDATE_RC:-1}" = "0" ]; then
-    curl -fsS --retry 3 --max-time 10 "$HEALTHCHECKS_SHADOW_URL" > /dev/null \
-        && echo "Healthchecks ping sent." \
-        || echo "WARN: Healthchecks ping failed (non-fatal)."
-fi
 
 echo "Done!"

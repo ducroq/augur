@@ -12,10 +12,11 @@
 # (ISO 8601 UTC). We read it from `origin/main` via `git show` so we never
 # pollute the local working tree before daily_update.sh's own `git pull`.
 #
-# On timeout: exit 0 anyway. Philosophy is "let the run happen, let the
-# absent healthchecks ping be the alarm" — matches the failure-detection
-# model the rest of daily_update.sh already uses. Failing here would skip
-# the run entirely and leave the dashboard frozen.
+# On timeout: exit 0 anyway. Let the run proceed with possibly-stale data;
+# daily_update.sh's pre-flight ALARM (SHADOW_PRE_AGE_H >36h) will surface
+# the resulting staleness in the next day's commit message. Failing here
+# would skip the run entirely and leave the dashboard frozen with no
+# visible signal of the failure.
 
 set -u
 DATAHUB_DIR="$HOME/local_dev/energydatahub"
@@ -41,7 +42,7 @@ while : ; do
     NOW_TS=$(date +%s)
     ELAPSED=$(( NOW_TS - START_TS ))
     if [ $ELAPSED -ge $MAX_WAIT_SEC ]; then
-        echo "[wait_for_edh] TIMEOUT after ${ELAPSED}s waiting for EDH ${TODAY_UTC}. Latest upstream=${UPSTREAM_TS:-<unreadable>}. Proceeding with possibly stale data — healthchecks gate will detect."
+        echo "[wait_for_edh] TIMEOUT after ${ELAPSED}s waiting for EDH ${TODAY_UTC}. Latest upstream=${UPSTREAM_TS:-<unreadable>}. Proceeding with possibly stale data — next-day pre-flight ALARM will surface it."
         exit 0
     fi
     echo "[wait_for_edh] EDH upstream still ${UPSTREAM_DATE:-<empty>} (want ${TODAY_UTC}); elapsed ${ELAPSED}s; sleeping ${POLL_SEC}s"

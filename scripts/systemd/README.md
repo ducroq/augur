@@ -26,8 +26,9 @@ MAE was ~84% above the backtest h+1.
 
 The systemd unit fires at 16:30 UTC, then `wait_for_edh.sh` polls EDH's
 `data_quality_report.json:timestamp` until today's date appears (max wait
-4h, proceeds anyway on timeout — the absent healthchecks ping is the
-absence-detection alarm).
+4h, proceeds anyway on timeout — `daily_update.sh`'s next-day pre-flight
+ALARM surfaces stale-state failures, and a missing daily commit on
+origin/main is the external alive signal).
 
 ## Rollback
 
