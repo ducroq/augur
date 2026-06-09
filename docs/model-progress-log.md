@@ -4,6 +4,30 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
+## 2026-06-09 — augur#12 closed: cron → system-level systemd with EDH-freshness gate; Healthchecks.io removed
+
+**Trigger**: Calendar event for Phase 2 verification (`Augur #12 — verify systemd timer's first fire`, 09:00 CEST). Phase 1 (user-level systemd unit + `wait_for_edh.sh` ExecStartPre + healthchecks ping kept) had deployed 2026-06-08. First fire that evening was clean — `status=0/SUCCESS` at Mon 2026-06-08 18:31:44 CEST, EDH-timestamp detected at 2026-06-08T09:04:05Z, commit `98ce3b8` landed 16:32 UTC, **107 minutes after** the cron's 14:45 UTC commit `09f7c15`. Both runs ran the same day during the observation overlap.
+
+**Changes today (three commits)**:
+
+1. `5149d17` — **Remove Healthchecks.io integration entirely.** During Phase 2 verification we tried to confirm the healthchecks dashboard was green, discovered the owning account is unknown (the project's busara.eu@proton.me account does not own UUID `e7771ae1-…1cc58bab0992`). Decision: cut the dependency rather than chase the account. Removed the curl ping block from `scripts/daily_update.sh`, the `HEALTHCHECKS_SHADOW_URL` line from sadalsuud's `.env`, and reworded the "absent ping is the alarm" comments in `scripts/wait_for_edh.sh` + `scripts/systemd/README.md`. New alarm path: pre-flight `SHADOW_PRE_AGE_H >36h` ALARM in `daily_update.sh` surfaces stale state in the *next day's* commit message, and a missing daily commit on origin/main is the external alive signal.
+
+2. `719e5e6` — **Migrate systemd from user-level to system-level.** Phase 1's user-level setup required `loginctl enable-linger jeroen` (pending), or the timer would only fire while jeroen has an active session. Migrated to `/etc/systemd/system/augur-daily.{service,timer}` with `User=jeroen` + `Group=jeroen` on the service so SSH keys / venv / `.env` access stays unchanged. Eliminates the linger dependency; the timer is now owned by PID 1 and survives logouts and reboots. `WantedBy=default.target` → `WantedBy=multi-user.target`. Timer file unchanged. README rewritten for the new deployment pattern.
+
+3. (Crontab edit, not a commit since `.env` and crontab are gitignored.) **Cron line commented** in sadalsuud's crontab with marker `# Migrated to systemd augur-daily.timer 2026-06-08 (augur#12). Restore if broken.`, backup at `/tmp/crontab.backup`. **User-level systemd symlinks removed** from `~/.config/systemd/user/`. System-level units deployed with `sudo cp` + `sudo systemctl enable --now augur-daily.timer`. Verified next fire scheduled for Tue 2026-06-09 18:30 CEST (= 16:30 UTC).
+
+**Rationale**: Both the schedule and the orchestration model needed to change. The pre-augur#12 `45 16 * * *` cron ran at 14:45 UTC — empirically that's 75 min to 4+ hours **before** EDH's GitHub Actions collector publishes (observed window 16:23-20:13 UTC, 14-day sample). Consequence (documented in ADR-006 under Consequences): training parquet always trailed 24h, live overall MAE ran 84% above the backtest h+1 figure. The systemd unit fires at 16:30 UTC then polls EDH's `data_quality_report.json:timestamp` until today's date appears (max wait 4h, then proceeds with stale data so the run never fails closed). System-level (rather than user-level) eliminates the linger dependency entirely, matching the rest of the box's timers.
+
+**What was NOT changed**: ARF model, LightGBM model, feature builder, CQR logic, training window, evaluation logic, dashboard rendering, output JSON schema. The change is purely orchestration — same `daily_update.sh` runs, same artefacts written, same eval log appended to. The behavioural difference is the *input* the pipeline sees: post-augur#12 the exogenous columns (wind/solar/load) in `training_history.parquet` are current-day, not 24h-stale.
+
+**Observation plan**: 1-week observation window 2026-06-09 → 2026-06-15. Daily quick-glance for a `Daily update YYYY-MM-DD` commit landing on origin/main around 16:32 UTC = 18:32 CEST. If 7 consecutive clean fires, delete the commented cron line entirely (otherwise rollback to cron). The cleaner-data MAE comparison (live MAE under fresh exogenous data vs the 84%-above-backtest era) will be measurable from `ml/shadow/eval_log.jsonl` after the window closes; expect a meaningful drop in live MAE if the freshness-skew hypothesis is right.
+
+**Open** (post-augur#12): augur#19 (lower-side calibration follow-up — soft-blocked on augur#12 specifically to avoid conflating freshness-fix and calibration-fix effects; now unblocked for EXP-015..017). Also two unrelated *side observations* surfaced during this work: (a) sadalsuud has two other user-level timers (`dca-fear-alert.timer`, `momentum-paper.timer`) that have the same linger fragility — not augur scope but worth flagging. (b) the orphaned healthchecks UUID will eventually start firing "down" alerts to whichever account owns it; nothing actionable here.
+
+**Status**: augur#12 [RESOLVED, observation in progress]. ADR-006's "Freshness skew is unfixed" consequence has a 2026-06-09 resolution marker added; eval-log evidence of the live-MAE improvement to be added after the observation window closes 2026-06-15.
+
+---
+
 ## 2026-06-06 — `pending_predictions` dedup landed (closes 2026-05-08 gotcha)
 
 **Trigger**: End-of-session `/curate` flagged the 2026-05-08 gotcha (`update_shadow.py` appends `pending_predictions` without dedup) as a 29-day-old lingering [OPEN code] item. The operational mitigation (state reset on sadalsuud) closed the original incident, but the code-side defence had been deferred. Decision today: land the small fix rather than carry it indefinitely.

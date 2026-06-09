@@ -48,16 +48,19 @@ energyDataHub (separate repo, 18+ API collectors)
     │ daily 16:00 UTC, encrypted JSON → GitHub Pages
     │
     ▼
-sadalsuud (daily cron 16:45 CEST = 14:45 UTC)
-    ├── git pull energyDataHub
+sadalsuud (systemd timer: 16:30 UTC start + wait_for_edh.sh gate, fires after EDH publishes)
+    ├── git pull energyDataHub + Augur
     ├── python -m ml.update              → ARF: learn + generate forecast (backup signal)
     ├── python -m ml.data.consolidate    → rebuild parquet for LGBM training
     ├── python -m ml.shadow.update_shadow → LGBM: retrain on 56-day window, predict 72h (production)
     ├── python -m ml.shadow.evaluate_shadow → eval log row vs ARF (continued)
     ├── git push augur                   → triggers Netlify rebuild
     │
-    │ Note: augur#12 — orchestration is misordered (augur runs before EDH collector at ~15:20 UTC),
-    │       so parquet always trails 24h. Pending fix: systemd migration with After=edh.service.
+    │ Schedule: system-level systemd unit at /etc/systemd/system/augur-daily.timer fires at
+    │           16:30 UTC. ExecStartPre=scripts/wait_for_edh.sh polls EDH's
+    │           data_quality_report.json:timestamp until today's date appears (max wait 4h),
+    │           so the run always sees fresh exogenous data. Migrated from `45 16 * * *` cron
+    │           on 2026-06-08/09 (augur#12).
     │
     ▼
 Augur Netlify build
@@ -96,7 +99,7 @@ Client browser (https://energy.jeroenveen.nl):
 - Promotion criterion (now resolved): see `docs/hypothesis-log.md` iteration-5 entry and `scripts/exp014_evaluate_promotion.py`
 - Pickle integrity: HMAC-SHA256 sidecar via `ml/shadow/secure_pickle.py`; verify-before-load
 - Calibration_history schema: `p10/p50/p90` are sorted-CQR-widened; `p10_raw/p50_raw/p90_raw` are the raw tau-quantile model outputs (added 2026-05-29 after EXP-013 code review caught sort-then-pinball bias).
-- Open: augur#12 (cron→systemd + run-after-EDH for fresh data), augur#19 (lower-side calibration follow-up)
+- Open: augur#19 (lower-side calibration follow-up). augur#12 (cron→systemd + run-after-EDH) **resolved 2026-06-09** — system-level timer firing, cron commented in observation window through 2026-06-15.
 
 ## Key Paths
 
@@ -140,7 +143,9 @@ Client browser (https://energy.jeroenveen.nl):
 | `decrypt_data_cached.py` | Production decryption with caching + `--force` (ADR-003) |
 | `utils/secure_data_handler.py` | AES-CBC-256 + HMAC-SHA256 |
 | `scripts/netlify_build.sh` | Shared Netlify build script |
-| `scripts/daily_update.sh` | Sadalsuud cron — ARF backup + parquet consolidate + LGBM retrain + shadow eval + commit + push |
+| `scripts/daily_update.sh` | Sadalsuud daily job — ARF backup + parquet consolidate + LGBM retrain + shadow eval + commit + push. Triggered by `scripts/systemd/augur-daily.timer` (deployed to `/etc/systemd/system/`), gated by `scripts/wait_for_edh.sh` polling EDH freshness. |
+| `scripts/wait_for_edh.sh` | systemd `ExecStartPre` gate — polls EDH `data_quality_report.json:timestamp` for today's date (max wait 4h, then proceeds with stale data so the run isn't fail-closed). |
+| `scripts/systemd/{augur-daily.service,augur-daily.timer,README.md}` | Canonical systemd unit files; deploy via `sudo cp` to `/etc/systemd/system/`. |
 | `netlify.toml` | Build pipeline: decrypt → hugo |
 
 **Process + experiments**:

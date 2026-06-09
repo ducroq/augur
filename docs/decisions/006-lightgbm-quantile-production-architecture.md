@@ -19,7 +19,7 @@ This decision supersedes ADR-004 (River ARF online learning). ARF cron continues
 - **Hyperparameters**: `n_estimators=300, learning_rate=0.05, num_leaves=31, min_child_samples=20`.
 - **Calibration** (`ml/shadow/conformal.py`): split-conformal quantile regression (Romano, Patterson & Candès 2019). Trailing 7-day calibration window, target 0.80 coverage. Per-day `q` adjusts band width; production stores both sorted-CQR-widened `p10/p50/p90` and raw model outputs `p10_raw/p50_raw/p90_raw` so pinball scoring can use true tau-quantile values.
 - **Consumer pricing** (`ml/shadow/update_shadow.py:read_arf_surcharge`): `consumer = wholesale × VAT_RATE (1.21) + surcharge`, where `surcharge` is read from ARF's cached `state.json:consumer_surcharge.value_eur_mwh` (derived nightly by ARF from Energy Zero × ENTSO-E overlap). Falls back to `DEFAULT_SURCHARGE_EUR_MWH = 95.0` if ARF state absent. Consumer lower band floored at 0.
-- **Daily cycle** (`scripts/daily_update.sh`, cron 16:45 CEST on sadalsuud): pull energyDataHub + Augur, run ARF (backup), regenerate parquet, retrain LightGBM, predict 72h, CQR-widen, write `static/data/augur_forecast_shadow.json`, evaluate vs ARF, commit + push, Netlify rebuilds dashboard.
+- **Daily cycle** (`scripts/daily_update.sh`, system-level systemd timer fires 16:30 UTC on sadalsuud with `wait_for_edh.sh` ExecStartPre gate): pull energyDataHub + Augur, run ARF (backup), regenerate parquet, retrain LightGBM, predict 72h, CQR-widen, write `static/data/augur_forecast_shadow.json`, evaluate vs ARF, commit + push, Netlify rebuilds dashboard. [Updated 2026-06-09: schedule was `45 16 * * *` cron (14:45 UTC) at decision time; migrated to systemd by augur#12 to resolve the freshness skew documented under Consequences.]
 
 ## Rationale
 
@@ -36,7 +36,7 @@ This decision supersedes ADR-004 (River ARF online learning). ARF cron continues
 - **Model-tab metrics still come from ARF.** LightGBM's metadata schema (cqr_q, n_train_samples, horizon_groups) differs from ARF's (metrics_history, error_history, n_training_samples). Until `update_shadow.py` is extended to emit ARF-equivalent fields and `model-viz.js` updated, the Model tab continues to display ARF's training history and MAE-over-time charts. The user-visible price forecast comes from LightGBM regardless.
 - **Lower-side coverage 0.81 is below the 0.90 nominal target.** Inherited from the ARF era; the swap does not worsen it. Next experiment: horizon-conditioned CQR (separate calibration windows per horizon group) or adaptive conformal inference (Gibbs & Candès 2021) to restore the nominal target.
 - **Long-horizon (h>48) skill is weaker than ARF's.** LightGBM's features thin out at long horizons; ARF's mean-reverting prior accidentally wins pinball-at-p10 on those hours. Accepted limitation — the dashboard prioritises near-term decisions.
-- **Freshness skew is unfixed.** The daily cron runs at 16:45 CEST before energyDataHub's exogenous collector, so the training parquet sees 24h-stale wind/solar/load forecasts. Live overall MAE is 84% above the backtest h+1 figure. Tracked as augur#12 (cron → systemd with `After=edh.service` dependency).
+- **Freshness skew is unfixed.** The daily cron runs at 16:45 CEST before energyDataHub's exogenous collector, so the training parquet sees 24h-stale wind/solar/load forecasts. Live overall MAE is 84% above the backtest h+1 figure. Tracked as augur#12 (cron → systemd with `After=edh.service` dependency). **[Resolved 2026-06-09 by augur#12: system-level systemd timer + `wait_for_edh.sh` ExecStartPre gate polls EDH's `data_quality_report.json:timestamp` until today's date appears before the LightGBM retrain runs. Live MAE under fresh-data regime to be remeasured during the 1-week observation window ending 2026-06-15.]**
 - **Calibration_history schema extended.** `pending_predictions` and `calibration_history` now include both sorted (`p10/p50/p90`) and raw (`p10_raw/p50_raw/p90_raw`) quantile values. Past calibration_history entries written before 2026-05-29 lack the `_raw` fields; pinball scoring on historical data is biased (the sorted "p10" is `min(q0.10, q0.50, q0.90)`).
 - **One-line revert.** `static/js/dashboard.js:loadAugurForecast` is the swap point. Changing the fetched path from `augur_forecast_shadow.json` back to `augur_forecast.json` reverts to ARF without any other rollback. ARF cron and artefacts remain intact.
 
@@ -73,7 +73,7 @@ Notes on the comparison:
 - Replaces / supersedes: ADR-004 (River Online Learning Architecture)
 - Promotion process: ADR-007 (Model promotion method)
 - Implementation: `ml/shadow/lightgbm_quantile.py`, `ml/shadow/conformal.py`, `ml/shadow/update_shadow.py`, `ml/shadow/features_pandas.py`
-- Daily cron: `scripts/daily_update.sh`
+- Daily job: `scripts/daily_update.sh` (triggered by `scripts/systemd/augur-daily.timer`, gated by `scripts/wait_for_edh.sh`)
 - Promotion record: `experiments/registry.jsonl` EXP-014, `docs/hypothesis-log.md` iteration-5 entry
 - Narrative: `docs/articles/m4-metric-redesign-story.md` (five-iteration arc from M4 park to EXP-014 promotion)
 - Retirement context: `docs/river-arf-retrospective.md` (closing addendum)
