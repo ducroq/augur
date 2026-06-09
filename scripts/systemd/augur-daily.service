@@ -6,6 +6,8 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
+User=jeroen
+Group=jeroen
 WorkingDirectory=/home/jeroen/local_dev/augur
 
 # Wait for EDH to publish today's data_quality_report.json before running.
@@ -30,4 +32,4 @@ UMask=0027
 TimeoutStartSec=19800
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target

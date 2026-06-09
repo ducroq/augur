@@ -1,19 +1,24 @@
 # systemd units for sadalsuud
 
-Canonical source for the augur daily-update timer + service. Deployed via symlink:
+Canonical source for the augur daily-update timer + service. Deployed as
+**system-level units** (not user-level) so they run regardless of login
+state — no `loginctl enable-linger` needed. The service runs as
+`User=jeroen` so it still has access to `/home/jeroen/.ssh/`, the augur
+venv, the `.env` file, etc.
 
 ```bash
 # On sadalsuud, after a fresh repo clone:
-ln -sf ~/local_dev/augur/scripts/systemd/augur-daily.service ~/.config/systemd/user/augur-daily.service
-ln -sf ~/local_dev/augur/scripts/systemd/augur-daily.timer   ~/.config/systemd/user/augur-daily.timer
-systemctl --user daemon-reload
-systemctl --user enable --now augur-daily.timer
+sudo cp ~/local_dev/augur/scripts/systemd/augur-daily.service /etc/systemd/system/
+sudo cp ~/local_dev/augur/scripts/systemd/augur-daily.timer   /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now augur-daily.timer
 ```
 
-Linger must be on for the user-timer to fire while logged out:
+Verify:
 
 ```bash
-sudo loginctl enable-linger jeroen
+systemctl status augur-daily.timer
+systemctl list-timers augur-daily.timer
 ```
 
 ## Why this exists (augur#12)
@@ -33,7 +38,7 @@ origin/main is the external alive signal).
 ## Rollback
 
 ```bash
-systemctl --user disable --now augur-daily.timer
+sudo systemctl disable --now augur-daily.timer
 # Then uncomment the cron line that was migrated:
 crontab -e
 ```
