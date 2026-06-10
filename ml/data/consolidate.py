@@ -78,6 +78,14 @@ def resolve_weather_value(val):
     return None
 
 
+def _unwrap_v22_envelope(data: dict) -> dict:
+    # EDH v2.2 (commit 3dfc7fb, 2026-06-07) wraps per-source feeds under
+    # {metadata, data: {<source>: ...}}; pre-v2.2 was flat. Mirrors the JS
+    # unwrap in static/js/modules/data-processor.js (commit 4a557c8).
+    inner = data.get("data")
+    return inner if isinstance(inner, dict) else data
+
+
 def parse_price_file(path: Path) -> pd.Series:
     """Extract ENTSO-E NL hourly prices from an energy_price_forecast file.
 
@@ -85,7 +93,7 @@ def parse_price_file(path: Path) -> pd.Series:
     warning — Energy Zero consumer prices are NOT used as a substitute
     because they include VAT/surcharges and would corrupt the training target.
     """
-    data = load_json_file(path)
+    data = _unwrap_v22_envelope(load_json_file(path))
 
     entsoe_source = data.get("entsoe")
     has_entsoe = (
@@ -128,7 +136,7 @@ def parse_price_file(path: Path) -> pd.Series:
 
 def _parse_single_source(path: Path, source_key: str, name: str) -> pd.Series:
     """Extract a single price source from an energy_price_forecast file."""
-    data = load_json_file(path)
+    data = _unwrap_v22_envelope(load_json_file(path))
     source = data.get(source_key)
     if not source or not isinstance(source, dict) or "data" not in source:
         return pd.Series(dtype=float, name=name)
@@ -164,7 +172,7 @@ def parse_entsoe_wholesale(path: Path) -> pd.Series:
 
 def parse_wind_file(path: Path) -> pd.Series:
     """Extract NL offshore wind speed (80m) from a wind_forecast file."""
-    data = load_json_file(path)
+    data = _unwrap_v22_envelope(load_json_file(path))
 
     offshore = data.get("offshore_wind", {})
     if not isinstance(offshore, dict) or "data" not in offshore:
