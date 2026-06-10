@@ -4,6 +4,36 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
+## 2026-06-10 — EDH v2.2 envelope parser fix + pipeline hardening (parser tests, dep probe, venv untrack)
+
+**Trigger**: User reported the dashboard's 72h forecast showing only a 24h stub. Initial diagnosis chained Augur log lines `WARNING ENTSO-E data missing in 260609_083716_energy_price_forecast.json — skipping Energy Zero to avoid contamination` to "EDH ENTSO-E NL collector outage" (echoing the 2026-03-26 precedent in memory). The EDH-side memo corrected the attribution: ENTSO-E NL was healthy; the actual cause was EDH's schema v2.2 envelope wrap (commit `3dfc7fb`, 2026-06-07 12:43 CEST) that Augur's Python parsers had never been updated for.
+
+**Changes today (six commits)**:
+
+1. `e11487b` — **v2.2 envelope unwrap in `ml/data/consolidate.py`.** New `_unwrap_v22_envelope(data)` helper applied at three call sites (`parse_price_file`, `_parse_single_source` used by `parse_entsoe_wholesale` + `parse_energy_zero_consumer`, `parse_wind_file`). Mirrors the dashboard JS pattern from commit `4a557c8` (2026-06-07). The 4a557c8 commit message had asserted "Python ML pipeline migrated transparently via `_migrate_2_1_to_2_2`" — unverified and wrong: `load_json_file` in consolidate.py (line 67) never invokes `schema_registry`. The Python parsers had been silently returning empty Series for every v2.2 file since 2026-06-07, pinning `training_history.parquet` at 2026-06-07 21:00Z. ARF (`ml/update.py`) was equally broken — it imports the same parsers. Architectural alternative (importing EDH's `migrate_to_current`) rejected: Augur's parquet history only reaches v2.1+ (starts 2025-09-28), so version-walk advantage is theoretical; cross-repo Python import would add sys.path glue + test mock complexity.
+
+2. `d20992a` + `967b653` — **`.venv/` untracked from git on sadalsuud.** No prior `.gitignore` entry for `.venv/`, so 7921 venv files had been tracked. Today's `pip install --force-reinstall lightgbm` (item 4 below) would have leaked into the next nightly commit as a ~20k-line diff. `d20992a` adds `.venv/` + `venv/` to `.gitignore`; `967b653` runs `git rm -r --cached .venv/` on sadalsuud (disk preserved). Verified clean on the next daily commit `576a65c` (only 6 data/state files, no venv noise).
+
+3. `576a65c` (manual `systemctl start augur-daily.service`) + `044585e` (scheduled 18:30 CEST fire) — **two successful daily-cycle runs on the patched code today.** Parquet advanced 2026-06-07 21:00Z → 2026-06-11 21:00Z. Eval log backfilled for 2026-06-07 (LGBM MAE 30.6 vs ARF MAE 39.5, LGBM wins) and 2026-06-09 (LGBM 19.9; ARF empty that day, no compare). 2026-06-08 has a permanent eval-log gap — no LGBM prediction set targeting that day was ever made during the outage, so no eval row can be reconstructed.
+
+4. `c29671e` — **Hardening followups from the code-review battery + lightgbm-corruption mitigation.** Four pieces in one commit:
+   - **`tests/test_consolidate.py` (NEW, 18 tests).** Closes the biggest gap from the code-reviewer agent: zero parser tests existed in `tests/`. Parametrized coverage for v2.1 flat shape, v2.2 envelope, `_unwrap_v22_envelope` direct unit tests, the "envelope present but no known source keys" graceful-empty case, kWh→MWh unit multiplier, Elspot `+00:18` timezone normalisation, ENTSO-E-wins-over-Elspot merge precedence, and isinstance guards on solar/weather/load. Test against plain dicts via monkeypatched `load_json_file` — no encryption keys required. Suite grew 177 → 195.
+   - **isinstance guards on `parse_solar_file`, `parse_weather_file`, `parse_load_file`.** All three have identical structural exposure: `xxx_data = data.get("data", {})` followed by code that assumes `xxx_data` is a dict. Future schema where `data` is a list would crash (for load) or silently return empty (for solar/weather). Now uniformly fail-soft to empty Series. Code-reviewer flagged `parse_solar_file` specifically; extended to the other two for consistency.
+   - **`logger.debug` in `_unwrap_v22_envelope`.** v2.2-unwrap events are now observable in the daily log.
+   - **Pre-flight dep probe in `scripts/daily_update.sh`.** Runs `python -c "from lightgbm import LGBMRegressor; import river; import pandas; import lightgbm"` after the existing `SHADOW_PRE_AGE_H >36h` check. On failure: `DEP_PROBE_OK=0` gates the shadow block off (parquet consolidate + ARF still run), and a `[ALARM: dep probe failed — shadow skipped]` marker appears in the daily commit subject — visible on origin/main without log inspection. Motivated by today's lightgbm install corruption (root cause unexplained; the venv's `lightgbm/` directory was reduced to `lib/` + `__pycache__/` only, no `__init__.py` or source files, mtime 2026-06-10 15:50 UTC). Second lightgbm install incident (first was 2026-04-30 "lightgbm not installed"); two occurrences in 6 weeks justifies the alarm-cost.
+
+**Rationale**: The v2.2 fix was unblocking — without it, training parquet stays frozen and the dashboard's 72h forecast degrades to a 24h stub as published day-ahead prices age past it. The hardening cluster addresses what the incident revealed: zero parser test coverage (made the original v2.2 break invisible to CI), structural ambiguity in the other three parsers (would bite on the next schema shape change), and lightgbm install fragility (would bite the next time the venv drifts).
+
+**What was NOT changed**: ARF model, LightGBM model, feature builder, CQR logic, training window, eval logic, dashboard rendering, output JSON schemas, augur#19 calibration trajectory. The v2.2 fix is purely at the EDH-consumer parser layer; the hardening additions are tests + defensive guards + observability. No model behaviour change; expect no shift in eval-log MAE or coverage trajectory.
+
+**Observation plan**: Tomorrow's 18:30 CEST fire (Thu 2026-06-11) will exercise the dep probe in production for the first time. If both ALARM markers stay absent through the 2026-06-15 augur#12 observation window close, hardening is validated and the unexplained lightgbm corruption is in the "watched but tolerable" bucket.
+
+**Open** (post-2026-06-10): augur#19 calibration follow-up (EXP-015..017) unblocked; augur#22 HDD/CDD; Phase-1-for-LGBM (TTF + genmix); publishability backlog (`docs/hypothesis-log.md`, review-by 2026-12-31). No new open items from today.
+
+**Status**: v2.2 fix [RESOLVED, deployed `e11487b`, dashboard healthy]. Hardening [DEPLOYED `c29671e`, awaiting first production exercise of dep probe in tomorrow's nightly]. lightgbm uninstall root cause [UNRESOLVED — mitigated by item 4 pre-flight probe; documented in gotcha log as unexplained].
+
+---
+
 ## 2026-06-09 — augur#12 closed: cron → system-level systemd with EDH-freshness gate; Healthchecks.io removed
 
 **Trigger**: Calendar event for Phase 2 verification (`Augur #12 — verify systemd timer's first fire`, 09:00 CEST). Phase 1 (user-level systemd unit + `wait_for_edh.sh` ExecStartPre + healthchecks ping kept) had deployed 2026-06-08. First fire that evening was clean — `status=0/SUCCESS` at Mon 2026-06-08 18:31:44 CEST, EDH-timestamp detected at 2026-06-08T09:04:05Z, commit `98ce3b8` landed 16:32 UTC, **107 minutes after** the cron's 14:45 UTC commit `09f7c15`. Both runs ran the same day during the observation overlap.

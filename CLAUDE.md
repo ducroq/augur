@@ -143,7 +143,7 @@ Client browser (https://energy.jeroenveen.nl):
 | `decrypt_data_cached.py` | Production decryption with caching + `--force` (ADR-003) |
 | `utils/secure_data_handler.py` | AES-CBC-256 + HMAC-SHA256 |
 | `scripts/netlify_build.sh` | Shared Netlify build script |
-| `scripts/daily_update.sh` | Sadalsuud daily job — ARF backup + parquet consolidate + LGBM retrain + shadow eval + commit + push. Triggered by `scripts/systemd/augur-daily.timer` (deployed to `/etc/systemd/system/`), gated by `scripts/wait_for_edh.sh` polling EDH freshness. |
+| `scripts/daily_update.sh` | Sadalsuud daily job — ARF backup + parquet consolidate + LGBM retrain + shadow eval + commit + push. Triggered by `scripts/systemd/augur-daily.timer` (deployed to `/etc/systemd/system/`), gated by `scripts/wait_for_edh.sh` polling EDH freshness. Two pre-flight alarms: `SHADOW_PRE_AGE_H >36h` (stale state) and `DEP_PROBE_OK=0` (lightgbm/river import broken in venv); either surfaces in the daily commit subject. |
 | `scripts/wait_for_edh.sh` | systemd `ExecStartPre` gate — polls EDH `data_quality_report.json:timestamp` for today's date (max wait 4h, then proceeds with stale data so the run isn't fail-closed). |
 | `scripts/systemd/{augur-daily.service,augur-daily.timer,README.md}` | Canonical systemd unit files; deploy via `sudo cp` to `/etc/systemd/system/`. |
 | `netlify.toml` | Build pipeline: decrypt → hugo |
@@ -164,7 +164,7 @@ Client browser (https://energy.jeroenveen.nl):
 | `docs/lightgbm-quantile-shadow-plan.md` | Original shadow plan (historical) |
 | `docs/river-arf-retrospective.md` | ARF retirement narrative + closing addendum on the EXP-014 promotion |
 | `docs/model-progress-log.md` | Dated narrative log of ML pipeline changes |
-| `tests/` | pytest suite — 177 tests (SecureDataHandler, OnlineFeatureBuilder, LGBM forecaster + multi-horizon + secure_pickle + conformal + backtest + update_shadow + evaluate_shadow + slice MAE + archive path + metrics module) |
+| `tests/` | pytest suite — 195 tests (SecureDataHandler, OnlineFeatureBuilder, LGBM forecaster + multi-horizon + secure_pickle + conformal + backtest + update_shadow + evaluate_shadow + slice MAE + archive path + metrics module + **consolidate parsers (test_consolidate.py, 18 tests, 2026-06-10)**) |
 | `scripts/m4_method_run.py` | M4 verdict runner (historical — pre-EXP-014) |
 | `scripts/exp012_evaluate.py` | EXP-012/013 paired-data evaluation (vintage-corrected) |
 | `scripts/exp014_evaluate_promotion.py` | EXP-014 promotion-criterion runner |
