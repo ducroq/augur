@@ -83,7 +83,10 @@ def _unwrap_v22_envelope(data: dict) -> dict:
     # {metadata, data: {<source>: ...}}; pre-v2.2 was flat. Mirrors the JS
     # unwrap in static/js/modules/data-processor.js (commit 4a557c8).
     inner = data.get("data")
-    return inner if isinstance(inner, dict) else data
+    if isinstance(inner, dict):
+        logger.debug("EDH v2.2 envelope detected — unwrapping 'data' layer")
+        return inner
+    return data
 
 
 def parse_price_file(path: Path) -> pd.Series:
@@ -199,6 +202,8 @@ def parse_solar_file(path: Path) -> pd.Series:
     data = load_json_file(path)
 
     solar_data = data.get("data", {})
+    if not isinstance(solar_data, dict):
+        return pd.Series(dtype=float, name="solar_ghi")
     nl_key = next((k for k in solar_data if "NL" in k), None)
     if not nl_key:
         return pd.Series(dtype=float, name="solar_ghi")
@@ -219,6 +224,8 @@ def parse_weather_file(path: Path) -> pd.Series:
     data = load_json_file(path)
 
     weather_data = data.get("data", {})
+    if not isinstance(weather_data, dict):
+        return pd.Series(dtype=float, name="temperature")
     nl_key = next((k for k in weather_data if "NL" in k), None)
     if not nl_key:
         return pd.Series(dtype=float, name="temperature")
@@ -241,7 +248,11 @@ def parse_load_file(path: Path) -> pd.Series:
     data = load_json_file(path)
 
     load_data = data.get("data", {})
+    if not isinstance(load_data, dict):
+        return pd.Series(dtype=float, name="load_forecast")
     nl_data = load_data.get("NL", {})
+    if not isinstance(nl_data, dict):
+        return pd.Series(dtype=float, name="load_forecast")
 
     series = {}
     for ts_str, fields in nl_data.items():

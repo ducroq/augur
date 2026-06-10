@@ -90,6 +90,19 @@ if [ "${SHADOW_PRE_AGE_H:-0}" -gt 36 ]; then
     SHADOW_WAS_STALE=1
 fi
 
+# Pre-flight dependency probe: catch silently corrupted venv before shadow steps run.
+# Why this exists: 2026-06-10 the venv's lightgbm install became an empty husk
+# (only lib/ + __pycache__/, no __init__.py) between yesterday's clean cron and
+# the same-day manual smoketest; root cause unexplained. The shadow step
+# import-fails at runtime, which only surfaces in the log file, not the
+# commit subject. This probe alarms in the commit message so the failure is
+# visible on origin/main without log inspection. Doesn't block ARF.
+DEP_PROBE_OK=1
+python3 -c "from lightgbm import LGBMRegressor; import river; import pandas; import lightgbm" 2>/dev/null || {
+    echo "ALARM: dep probe failed — lightgbm/river/pandas import broken in venv. Shadow steps will be skipped."
+    DEP_PROBE_OK=0
+}
+
 # Run ARF model update (production — must succeed)
 echo "Running ARF model update..."
 python -m ml.update --data-dir $DATAHUB_DIR/data --augur-dir $AUGUR_DIR
@@ -108,7 +121,9 @@ SHADOW_CONSOLIDATE_RC=$?
 # LGBM shadow steps RE-ENABLED 2026-05-29 with EXP-014 promotion. The
 # shadow now produces consumer_forecast fields too (via read_arf_surcharge
 # in update_shadow.py), so its output drives the dashboard's price charts.
-if [ $SHADOW_CONSOLIDATE_RC -eq 0 ]; then
+# Dep probe (above) gates this — a broken venv would import-fail the same
+# way every minute, no value in running it just to fail.
+if [ $SHADOW_CONSOLIDATE_RC -eq 0 ] && [ $DEP_PROBE_OK -eq 1 ]; then
     echo "Running shadow update (LightGBM-Quantile, EXP-014 production)..."
     python -m ml.shadow.update_shadow
     SHADOW_UPDATE_RC=$?
@@ -125,6 +140,8 @@ if [ $SHADOW_CONSOLIDATE_RC -eq 0 ]; then
     else
         echo "WARN: shadow update failed (rc=$SHADOW_UPDATE_RC) — dashboard forecast will be stale"
     fi
+elif [ $DEP_PROBE_OK -eq 0 ]; then
+    echo "WARN: skipping shadow steps because dep probe failed (see ALARM above)"
 else
     echo "WARN: parquet re-consolidation failed (rc=$SHADOW_CONSOLIDATE_RC) — skipping shadow"
 fi
@@ -150,9 +167,11 @@ git add ml/models/river_model.pkl ml/models/state.json static/data/augur_forecas
 SHADOW_STATUS="shadow rc=${SHADOW_UPDATE_RC:-skip}/eval rc=${SHADOW_EVAL_RC:-skip}"
 STALE_MARKER=""
 [ "$SHADOW_WAS_STALE" = "1" ] && STALE_MARKER=" [recovered after stale state ${SHADOW_PRE_AGE_H}h]"
+DEP_MARKER=""
+[ "$DEP_PROBE_OK" = "0" ] && DEP_MARKER=" [ALARM: dep probe failed — shadow skipped]"
 
 git diff --cached --quiet && echo "No changes to commit" || {
-    git commit -m "Daily update $(date -u '+%Y-%m-%d') — ARF OK | ${SHADOW_STATUS}${STALE_MARKER}"
+    git commit -m "Daily update $(date -u '+%Y-%m-%d') — ARF OK | ${SHADOW_STATUS}${STALE_MARKER}${DEP_MARKER}"
     git push
 }
 
