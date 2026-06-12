@@ -20,7 +20,82 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 
 ## Open
 
-### [2026-06-12] EXP-015: two-sided (per-side) CQR fixes the lower-side coverage gap
+### [2026-06-12] EXP-016: per-side ACI closes the regime-shift coverage gap that static per-side CQR (EXP-015) could not
+
+**Position (provisional):** EXP-015 showed per-side conformal scores fix the *side* asymmetry (+0.048 lower-side at +2.5% Winkler) but a static trailing-7-day calibration window cannot adapt to regime shifts — vintages 06-02/06-03 stayed at 0.375/0.708 lower-side and dragged the pool to 0.826, below the 0.86 bar. Adaptive Conformal Inference (Gibbs & Candès 2021) closes the loop: after a day of misses the target level rises, widening the next vintage's band. Since the bad days cluster in streaks (06-01 was also bad — incumbent 0.542), the day-after reaction should recover most of the deficit. Treatment = ACI layered on EXP-015's per-side scores.
+
+**Method (pre-committed 2026-06-12, before running the treatment replay):**
+
+*Treatment definition (every parameter fixed here):*
+- Per-side adaptive state `α_lo`, `α_hi`, both initialised at 0.10 (the static case).
+- One batched update per vintage day V, processing raw-bearing vintages chronologically (including warm-up vintages 05-30..06-01, which get bands but are excluded from evaluation): over the not-yet-consumed hours with `ts < V-day midnight UTC` (each hour consumed once, scored against the band assigned when its own vintage was predicted), per-side error rate `err = mean(missed)`; update `α ← clip(α + γ·(0.10 − err), 0.005, 0.5)`. No new hours → no update.
+- Band for vintage V: `q_side` = finite-sample quantile of trailing-7-day (min 3 distinct days, cutoff V-day midnight — identical to production/EXP-015) per-side scores `E_lo = q10_sorted − y`, `E_hi = y − q90_sorted`, at level `1 − α_side`. Sparse calibration → q = 0 (raw bands), α still updates. No flooring of q at zero.
+- Step size **γ = 0.10** (primary). γ ∈ {0.05, 0.20} reported descriptively, never gated. Rationale: a 0.5-error day moves α by 0.04 — a one-day reaction big enough to matter, small enough not to oscillate on noise.
+
+*Stage 1 — offline replay* (`scripts/exp016_replay_aci.py`) on the **same evaluable rows as EXP-015** (8 vintages / 528 rows as of the 2026-06-12 state; precondition ≥4 evaluable vintages). Comparator: stored production bands on the same rows (lower 0.778, upper 0.903, Winkler 146.4). IMPLEMENT iff all four hold — **identical criteria to EXP-015**; the bar is the product requirement, not tuned to the method:
+1. treatment lower-side ≥ incumbent lower-side + 0.03
+2. treatment lower-side ≥ 0.86
+3. treatment upper-side ∈ [0.85, 0.97]
+4. treatment mean Winkler ≤ 1.05 × incumbent
+
+*Stage 2 — live confirmation* (pre-committed now, evaluated after 14 evaluable post-deploy vintages in `calibration_history`, not `eval_log.jsonl`): (1) pooled lower ∈ [0.87, 0.95] and upper ∈ [0.85, 0.95]; (2) ≤2 of 14 vintages with per-vintage lower < 0.70; (3) mean Winkler ≤ 1.05 × pre-deploy trailing-14-vintage baseline. PASS → registry `kept`, update ADR-006 + CLAUDE.md, close the augur#19 calibration arc. FAIL with improvement → keep, escalate to EXP-017. FAIL with degradation → revert, EXP-017 primary.
+
+**Alternatives (failure mode signals):**
+
+1. **ACI rescues the day-after but not the first shift day; pooled lands in [0.84, 0.86).** The residual is irreducible single-day surprise that no calibration-layer fix reaches. Do NOT implement on a near-miss; escalate to EXP-017 (9-quantile training — better raw quantiles need less correction) and record the per-vintage tail to inform whether 0.90 is reachable by calibration alone.
+2. **Oscillation at γ = 0.10**: α overshoots after good streaks, narrows, then misses. Signal: alternating per-vintage coverage with negative lag-1 autocorrelation of per-vintage err (reported descriptively). If γ = 0.05 (descriptive variant) is smooth where 0.10 oscillates, open a *new* entry with γ = 0.05 as primary — a new pre-commit, not a loosening.
+3. **Winkler guardrail trips**: ACI buys coverage with chronically wide bands → the gap lives in the raw quantiles → EXP-017 moves up.
+4. **Upper side degrades** (criterion 3 fails): per-side ACI narrowing the healthy side too aggressively — inspect the α_hi trace before any redesign.
+
+**Revisit trigger:** Stage 1 — immediately (replay runnable today, same state file as EXP-015 → directly comparable). Stage 2 — 14 evaluable post-deploy vintages. Surface in `/curate`.
+
+**Review by:** 2026-07-11.
+
+**Domain:** EXP-016, augur#19 calibration follow-up, ACI
+**Status:** open — Stage 1 pre-committed, replay pending
+
+---
+
+### [2026-05-29] The Augur method + the M4 arc are publishable if we invest ~2-3 weeks of empirical follow-up
+
+**Position (provisional):** Augur's production stack (ADR-006: LightGBM-Quantile multi-horizon + CQR + horizon-as-feature stacking + 56-day rolling window on NL day-ahead) is *not* novel as a method — every component is in Lago, Marcjasz, De Schutter & Weron (2021) or Nowotarski & Weron (2018). On its own it's a competent application, not a paper. But combined with the five-iteration M4 → EXP-014 narrative arc (`docs/articles/m4-metric-redesign-story.md`) and the promotion method (ADR-007), plus ~2-3 weeks of standard EPF empirical follow-up, the package becomes publishable as an applied methodology paper at *International Journal of Forecasting* practitioner section, IEEE PES workshops, or similar applied-ML venues.
+
+**Alternatives (failure modes):**
+
+1. **Novelty bar still not met** even after the empirical follow-up. LGBM+CQR on NL is well-trod ground; the arc's contribution might be too case-study-y for a methodology venue. **Signal:** a peer skim says "interesting but not a methodology contribution." Fallback: publish the arc as a long-form blog post (Towards Data Science, Medium) instead. ~4-6 hours of light polish, no empirical follow-up needed.
+2. **Interest drift before the work is done.** 2-3 weeks of empirical work is non-trivial; we may not have the bandwidth or motivation when the time comes. **Signal:** the review-by date passes without the work being prioritised. Fallback: same as (1) — blog only.
+3. **A better venue exists we haven't surveyed.** EPF has its own conference culture (EEM, ENERGYCON), and an applied-ML practitioner audience might find the arc more useful than a methodology audience. **Signal:** finding a better-fit venue during the polish pass. Adjust target accordingly.
+
+**Method (what gets the package to paper-ready, in order):**
+
+When motivated to publish:
+
+1. **Naive baseline + persistence** (rMAE per Lago 2021 — table-stakes for EPF). Add to `scripts/exp012_evaluate.py` or a sibling script.
+2. **PIT histograms + reliability diagram** for LightGBM's 80% interval (table-stakes per Nowotarski & Weron 2018).
+3. **Multi-window robustness** — re-run the EXP-014 criterion at 7/14/21/30-day windows from the same eval_log; confirm conclusions stable.
+4. **Per-feature ablation** — drop each feature group (lags, calendar, wind, solar, load) and measure MAE/CRPS regression; cheap because LGBM trains fast.
+5. **Hyperparameter sensitivity** — small grid around `n_estimators × num_leaves × learning_rate`; cheap.
+6. **Optional: epftoolbox comparison** — if an NL dataset exists in `epftoolbox`, run LEAR/DNN as the benchmark. If not, skip.
+7. **Canonical CRPS** — retrain at 9-19 quantiles, compute proper CRPS, re-run paired DM. Resolves the "3-point mean quantile score" caveat.
+8. **Canonical threshold-weighted CRPS** — implement the Gneiting-Ranjan integral form, re-run on the same data. Resolves the "abstention-rewards" issue in the per-quantile-decomposition variant we have.
+9. **Rewrite ADR-006 + arc article + ADR-007 into a single methodology paper** with these as the empirical contribution.
+
+Items 1-5 are ~1 week. Items 6-8 are ~1 week. Item 9 is the polishing pass, ~3-5 days. Total ~2-3 weeks of focused work.
+
+**Cheap shortcut (only the blog post):** items 1-3 sharpen the arc article enough for a TDS / Medium long-form, with no method-paper claims. ~3-4 days total. The current draft is already 80% there.
+
+**Revisit trigger:** when we have a 2-3 week window we want to spend on publishing AND we still find the topic interesting. Surfaced by `/curate` at session-end. Independent of the production system — Augur runs whether or not we publish.
+
+**Review by:** 2026-12-31 (loose — there's no external deadline; this becomes stale, not blocking).
+
+**Domain:** Augur publication strategy, methodology dissemination
+**Status:** open — backlog entry, no immediate action
+
+---
+
+## Resolved
+
+### [2026-06-12 → resolved 2026-06-12] EXP-015: two-sided (per-side) CQR fixes the lower-side coverage gap
 
 **Position (provisional):** LightGBM's lower-side coverage deficit (augur#19) is caused by the *symmetric* CQR correction, not by horizon effects. Baseline from `calibration_history` (30 vintages, 2112 realised hours, 2026-05-10 → 2026-06-11, computed 2026-06-12 *before* any treatment was run):
 
@@ -73,45 +148,6 @@ PASS → registry entry `kept`, update ADR-006 calibration section + CLAUDE.md k
 The position is refuted *in part*: symmetric widening explains ~5 points of the gap (fixed by the per-side split), but the residual is concentrated in the regime-shift vintages 06-02/06-03 (treatment 0.375/0.708; every later vintage ≥ 0.847, mostly ≥ 0.90). That is **Alternative 1 firing in the offline data already** — static trailing-window calibration cannot adapt to regime shifts, which is ACI's (Gibbs & Candès 2021) design target. The result lands below the [0.84, 0.86) straddle band, so the wait-for-more-vintages path (Alternative 2) does not apply; per the pre-committed alternative-1 path, **EXP-016 = ACI with per-side scores** is the next experiment. Descriptive companion confirmed the design redirect: horizon-grouped calibration makes short horizons *worse* (h1-6 lower-side 0.646 vs pooled 0.625 — both bad, and small per-group calibration sets add variance), closing the door on the original horizon-conditioned sketch in augur#19. Logged as EXP-015 (`parked`) in `experiments/registry.jsonl`; per-side scores carry into EXP-016's design.
 
 ---
-
-### [2026-05-29] The Augur method + the M4 arc are publishable if we invest ~2-3 weeks of empirical follow-up
-
-**Position (provisional):** Augur's production stack (ADR-006: LightGBM-Quantile multi-horizon + CQR + horizon-as-feature stacking + 56-day rolling window on NL day-ahead) is *not* novel as a method — every component is in Lago, Marcjasz, De Schutter & Weron (2021) or Nowotarski & Weron (2018). On its own it's a competent application, not a paper. But combined with the five-iteration M4 → EXP-014 narrative arc (`docs/articles/m4-metric-redesign-story.md`) and the promotion method (ADR-007), plus ~2-3 weeks of standard EPF empirical follow-up, the package becomes publishable as an applied methodology paper at *International Journal of Forecasting* practitioner section, IEEE PES workshops, or similar applied-ML venues.
-
-**Alternatives (failure modes):**
-
-1. **Novelty bar still not met** even after the empirical follow-up. LGBM+CQR on NL is well-trod ground; the arc's contribution might be too case-study-y for a methodology venue. **Signal:** a peer skim says "interesting but not a methodology contribution." Fallback: publish the arc as a long-form blog post (Towards Data Science, Medium) instead. ~4-6 hours of light polish, no empirical follow-up needed.
-2. **Interest drift before the work is done.** 2-3 weeks of empirical work is non-trivial; we may not have the bandwidth or motivation when the time comes. **Signal:** the review-by date passes without the work being prioritised. Fallback: same as (1) — blog only.
-3. **A better venue exists we haven't surveyed.** EPF has its own conference culture (EEM, ENERGYCON), and an applied-ML practitioner audience might find the arc more useful than a methodology audience. **Signal:** finding a better-fit venue during the polish pass. Adjust target accordingly.
-
-**Method (what gets the package to paper-ready, in order):**
-
-When motivated to publish:
-
-1. **Naive baseline + persistence** (rMAE per Lago 2021 — table-stakes for EPF). Add to `scripts/exp012_evaluate.py` or a sibling script.
-2. **PIT histograms + reliability diagram** for LightGBM's 80% interval (table-stakes per Nowotarski & Weron 2018).
-3. **Multi-window robustness** — re-run the EXP-014 criterion at 7/14/21/30-day windows from the same eval_log; confirm conclusions stable.
-4. **Per-feature ablation** — drop each feature group (lags, calendar, wind, solar, load) and measure MAE/CRPS regression; cheap because LGBM trains fast.
-5. **Hyperparameter sensitivity** — small grid around `n_estimators × num_leaves × learning_rate`; cheap.
-6. **Optional: epftoolbox comparison** — if an NL dataset exists in `epftoolbox`, run LEAR/DNN as the benchmark. If not, skip.
-7. **Canonical CRPS** — retrain at 9-19 quantiles, compute proper CRPS, re-run paired DM. Resolves the "3-point mean quantile score" caveat.
-8. **Canonical threshold-weighted CRPS** — implement the Gneiting-Ranjan integral form, re-run on the same data. Resolves the "abstention-rewards" issue in the per-quantile-decomposition variant we have.
-9. **Rewrite ADR-006 + arc article + ADR-007 into a single methodology paper** with these as the empirical contribution.
-
-Items 1-5 are ~1 week. Items 6-8 are ~1 week. Item 9 is the polishing pass, ~3-5 days. Total ~2-3 weeks of focused work.
-
-**Cheap shortcut (only the blog post):** items 1-3 sharpen the arc article enough for a TDS / Medium long-form, with no method-paper claims. ~3-4 days total. The current draft is already 80% there.
-
-**Revisit trigger:** when we have a 2-3 week window we want to spend on publishing AND we still find the topic interesting. Surfaced by `/curate` at session-end. Independent of the production system — Augur runs whether or not we publish.
-
-**Review by:** 2026-12-31 (loose — there's no external deadline; this becomes stale, not blocking).
-
-**Domain:** Augur publication strategy, methodology dissemination
-**Status:** open — backlog entry, no immediate action
-
----
-
-## Resolved
 
 ### [2026-05-29 → resolved 2026-05-29] LightGBM-Quantile passes the redesigned promotion criterion on the M4 window data
 
