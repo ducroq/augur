@@ -4,6 +4,24 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
+## 2026-06-12 — v2.2 blast-radius forensics, output-quality guards, and the EXP-015/016 calibration-layer arc
+
+**Trigger**: Session-start review noticed eval-log rows for 2026-06-08 and 2026-06-10 missing and `arf_mae: null` on 06-09, despite "ARF OK | eval rc=0" commit subjects on all three days.
+
+**Forensics (morning)**: The EDH v2.2 break's blast radius was larger than the 2026-06-10 entry recorded. (a) ARF published **empty forecasts** on 06-08/06-09 (zero-hour archives; live `augur_forecast.json` empty) while exit codes stayed 0. (b) Eval `eval_day` is a forecast *vintage* keyed to the parquet's last realised price (t0); the stale parquet froze t0, so vintages **2026-06-08 and 2026-06-10 were never created — permanently unevaluable** (zero rows in `calibration_history`). (c) `find_arf_archive_for_day` picked the empty 06-08 archive with no fallback → the 06-09 null. Documented on augur#14. Separate live regression found in the same pass: **ARF forecasts truncated 72h → 48h since the fix**, because post-v2.2 `load_forecast`/`energy_price_forecast` files only span today+tomorrow (~48h @ 15-min) vs ~8 days before — filed as **augur#26** (EDH-side window restore preferred; LGBM unaffected since the parquet never carried future exogenous).
+
+**Guards shipped** (`1c33daa`): two non-blocking post-run checks in `daily_update.sh`, surfacing in the commit subject — `[ALARM: ARF forecast Nh]` (<24h) and `[ALARM: eval stale Nd]` (>2 days without an eval row). Third recurrence of the silent-failure factory; pattern promoted in the gotcha log as "rc=0 is not output quality".
+
+**EXP-015 — per-side CQR** (pre-commit `bcc3e78`, resolved `b40db95`, `parked`): the baseline (30 vintages / 2112 hours, from `calibration_history` — not `eval_log.jsonl`, whose rows mix 24/48/72h vintages) refuted the horizon-conditioning sketch in augur#19 (lower-side deficit flat across horizon groups: 0.828/0.837/0.833) and showed the real asymmetry is across *sides* (lower 0.834 vs upper 0.886 under symmetric widening). Treatment: per-side split-conformal on raw sorted quantiles at 0.90/side. Replay (`scripts/exp015_replay_cqr.py`, 8 evaluable vintages / 528 rows): lower 0.778 → 0.826 (+0.048, criterion 1 PASS) at +2.5% Winkler (guardrail PASS), but below the pre-committed 0.86 bar — the regime-shift vintages 06-02/06-03 (0.375/0.708) drag the pool; every later vintage ≥ 0.847. Bonus finding: production `compute_cqr_q` conformalizes the already-widened bands (feedback loop), not the raw quantiles.
+
+**EXP-016 — per-side ACI** (pre-commit `440b0b6`, resolved `d21b179`, `parked`): Gibbs-Candès adaptive α per side (γ=0.10, daily batched updates), same rows and criteria. Lower 0.852 (best yet) but in the pre-committed near-miss zone AND Winkler tripped at +12% (α_lo pegged at the 0.005 clip, q_lo ≈ 55–61 EUR/MWh, median width +30%). Decisive evidence: γ ∈ {0.05, 0.10, 0.20} all converge to ≈0.85 — a **γ-independent ceiling** from the first-shift-day misses that no day-granularity calibration layer can reach (ACI fixed every post-shift vintage to ≥ 0.903).
+
+**Arc conclusion**: the coverage gap lives in the raw quantiles — q10_raw is biased high entering regime shifts. **EXP-017 (9-quantile training) carries augur#19 next**: a model-training change requiring a walk-forward backtest over a window including 06-01..06-03 (no stored 9-tau history to replay) and a fresh ADR-007 pre-commit. Both parked layers (per-side scores, adaptive α) are candidates to re-add on top of improved raws.
+
+**Process note**: both experiments ran the full ADR-007 loop in one session — pre-commit → replay-on-existing-data → same-day resolution — with criteria identical across the two so results compare directly. Verdicts respected as written (no loosening); the redirects came from the pre-registered Alternatives, not post-hoc reinterpretation.
+
+---
+
 ## 2026-06-10 — EDH v2.2 envelope parser fix + pipeline hardening (parser tests, dep probe, venv untrack)
 
 **Trigger**: User reported the dashboard's 72h forecast showing only a 24h stub. Initial diagnosis chained Augur log lines `WARNING ENTSO-E data missing in 260609_083716_energy_price_forecast.json — skipping Energy Zero to avoid contamination` to "EDH ENTSO-E NL collector outage" (echoing the 2026-03-26 precedent in memory). The EDH-side memo corrected the attribution: ENTSO-E NL was healthy; the actual cause was EDH's schema v2.2 envelope wrap (commit `3dfc7fb`, 2026-06-07 12:43 CEST) that Augur's Python parsers had never been updated for.

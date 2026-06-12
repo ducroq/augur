@@ -78,7 +78,7 @@ Client browser (https://energy.jeroenveen.nl):
 ### ML Pipeline (live)
 - **Status (2026-05-29 — post EXP-014 promotion)**: LightGBM-Quantile drives the dashboard via `static/data/augur_forecast_shadow.json` (loaded by `static/js/dashboard.js:loadAugurForecast`). ARF cron continues as a backup signal — `static/data/augur_forecast.json` still updates daily and is read by `static/js/modules/model-viz.js` for the Model-tab metric widgets. The shadow now generates consumer-pricing fields too (`update_shadow.py:read_arf_surcharge` reads the cached surcharge from ARF's state.json and applies the same VAT+surcharge transform). To revert: change the path in `dashboard.js:loadAugurForecast` back to `augur_forecast.json`.
 - **Why the swap**: five iterations of criterion redesign converged on a single-criterion-plus-guardrail design (skill: paired DM on |y−p50_LGBM| vs |y−point_ARF|, HAC bandwidth 71, p<0.10; calibration: LGBM not >0.02 worse than ARF on either side). Applied to the M4 paired data: LGBM MAE 28.9 vs ARF MAE 38.4 (25% better, DM p=0.029); LGBM lower-side coverage 0.811 vs ARF 0.824 (within tolerance); LGBM upper-side 0.870 vs ARF 0.621 (LGBM materially better). PROMOTE = True. See `docs/articles/m4-metric-redesign-story.md` for the full arc, `docs/hypothesis-log.md` for the pre-committed criteria, `experiments/registry.jsonl` EXP-008..EXP-014.
-- **Known weakness inherited from the swap**: lower-side coverage 0.854 over the full eval log (1728 realised hours through 2026-06-02) is below the 0.90 nominal target. Same problem ARF had (0.82); not made worse by the swap, but unresolved. Day-to-day coverage is bimodal — trailing-14-day mean 0.76 with worst day at 0.33 — so the mean masks the worst days. Tracked as **augur#19** (umbrella tracker for the calibration follow-up: horizon-conditioned CQR / ACI / 9-quantile training as candidate EXP-015..017). Soft dependency on augur#12 (fixing exogenous freshness first so the calibration experiments don't conflate two effects).
+- **Known weakness inherited from the swap**: lower-side coverage 0.834 over 30 vintages / 2112 realised hours through 2026-06-11, below the 0.90 nominal target (measure from `shadow_state.json:calibration_history`, NOT `eval_log.jsonl` — eval rows mix 24/48/72h vintages and have permanent holes at 2026-06-08/06-10 from the EDH v2.2 break). Tracked as **augur#19**. **Calibration-layer arc resolved 2026-06-12**: EXP-015 (per-side CQR, `parked`) fixes the side asymmetry; EXP-016 (per-side ACI, `parked`) fixes post-shift days but hits a γ-independent ~0.85 ceiling from first-shift-day misses and trips the Winkler guardrail. Conclusion: the gap lives in the raw quantiles → **EXP-017 (9-quantile training) is next**, needing a walk-forward backtest + fresh ADR-007 pre-commit. See `docs/hypothesis-log.md` (both entries resolved same-day) and `experiments/registry.jsonl` EXP-015/016.
 
 **ARF (backup signal, retired-as-model 2026-04-28, kept-running 2026-05-29 — see ADR-006 / ADR-004 superseded)**:
 - Model: River ARFRegressor (10 trees), continuous online learning
@@ -99,7 +99,7 @@ Client browser (https://energy.jeroenveen.nl):
 - Promotion criterion (now resolved): see `docs/hypothesis-log.md` iteration-5 entry and `scripts/exp014_evaluate_promotion.py`
 - Pickle integrity: HMAC-SHA256 sidecar via `ml/shadow/secure_pickle.py`; verify-before-load
 - Calibration_history schema: `p10/p50/p90` are sorted-CQR-widened; `p10_raw/p50_raw/p90_raw` are the raw tau-quantile model outputs (added 2026-05-29 after EXP-013 code review caught sort-then-pinball bias).
-- Open: augur#19 (lower-side calibration follow-up). augur#12 (cron→systemd + run-after-EDH) **resolved 2026-06-09** — system-level timer firing, cron commented in observation window through 2026-06-15.
+- Open: augur#19 (calibration — EXP-017 9-quantile training next, after EXP-015/016 parked 2026-06-12), augur#26 (ARF forecast truncated to 48h since EDH v2.2 — load/price files only span today+tomorrow). augur#12 (cron→systemd + run-after-EDH) **resolved 2026-06-09** — system-level timer firing, observation window through 2026-06-15.
 
 ## Key Paths
 
@@ -151,7 +151,7 @@ Client browser (https://energy.jeroenveen.nl):
 **Process + experiments**:
 | Path | What it is |
 |------|-----------|
-| `experiments/registry.jsonl` | Append-only experiment log (EXP-001..EXP-014); schema in `experiments/README.md` |
+| `experiments/registry.jsonl` | Append-only experiment log (EXP-001..EXP-016); schema in `experiments/README.md` |
 | `docs/decisions/006-lightgbm-quantile-production-architecture.md` | ADR-006 — what the production system does |
 | `docs/decisions/007-model-promotion-method.md` | ADR-007 — how we decide what to change |
 | `docs/decisions/004-river-online-learning-architecture.md` | ADR-004 — superseded by ADR-006 |
@@ -168,6 +168,8 @@ Client browser (https://energy.jeroenveen.nl):
 | `scripts/m4_method_run.py` | M4 verdict runner (historical — pre-EXP-014) |
 | `scripts/exp012_evaluate.py` | EXP-012/013 paired-data evaluation (vintage-corrected) |
 | `scripts/exp014_evaluate_promotion.py` | EXP-014 promotion-criterion runner |
+| `scripts/exp015_replay_cqr.py` | EXP-015 offline replay — per-side CQR vs production bands on `calibration_history` raws |
+| `scripts/exp016_replay_aci.py` | EXP-016 offline replay — per-side ACI (Gibbs-Candès) with α trace + γ sensitivity |
 
 ## How to Work Here
 
