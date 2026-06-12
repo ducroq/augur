@@ -99,7 +99,7 @@ Client browser (https://energy.jeroenveen.nl):
 - Promotion criterion (now resolved): see `docs/hypothesis-log.md` iteration-5 entry and `scripts/exp014_evaluate_promotion.py`
 - Pickle integrity: HMAC-SHA256 sidecar via `ml/shadow/secure_pickle.py`; verify-before-load
 - Calibration_history schema: `p10/p50/p90` are sorted-CQR-widened; `p10_raw/p50_raw/p90_raw` are the raw tau-quantile model outputs (added 2026-05-29 after EXP-013 code review caught sort-then-pinball bias).
-- Open: augur#19 (calibration — EXP-017 9-quantile training next, after EXP-015/016 parked 2026-06-12), augur#26 (ARF forecast truncated to 48h since EDH v2.2 — load/price files only span today+tomorrow). augur#12 (cron→systemd + run-after-EDH) **resolved 2026-06-09** — system-level timer firing, observation window through 2026-06-15.
+- Open: augur#19 (calibration — EXP-017 9-quantile training next, after EXP-015/016 parked 2026-06-12), augur#26 (ARF 48h truncation — root-caused to the 15-min price buffer eviction, fixed `f49a1c8` maxlen 200→800; open pending ≥72h forecast confirmation on the 06-13/06-14 runs; EDH window narrowing secondary, filed energydatahub#33). augur#12 (cron→systemd + run-after-EDH) **resolved 2026-06-09** — system-level timer firing, observation window through 2026-06-15.
 
 ## Key Paths
 
