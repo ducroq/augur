@@ -20,42 +20,6 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 
 ## Open
 
-### [2026-06-12] EXP-016: per-side ACI closes the regime-shift coverage gap that static per-side CQR (EXP-015) could not
-
-**Position (provisional):** EXP-015 showed per-side conformal scores fix the *side* asymmetry (+0.048 lower-side at +2.5% Winkler) but a static trailing-7-day calibration window cannot adapt to regime shifts — vintages 06-02/06-03 stayed at 0.375/0.708 lower-side and dragged the pool to 0.826, below the 0.86 bar. Adaptive Conformal Inference (Gibbs & Candès 2021) closes the loop: after a day of misses the target level rises, widening the next vintage's band. Since the bad days cluster in streaks (06-01 was also bad — incumbent 0.542), the day-after reaction should recover most of the deficit. Treatment = ACI layered on EXP-015's per-side scores.
-
-**Method (pre-committed 2026-06-12, before running the treatment replay):**
-
-*Treatment definition (every parameter fixed here):*
-- Per-side adaptive state `α_lo`, `α_hi`, both initialised at 0.10 (the static case).
-- One batched update per vintage day V, processing raw-bearing vintages chronologically (including warm-up vintages 05-30..06-01, which get bands but are excluded from evaluation): over the not-yet-consumed hours with `ts < V-day midnight UTC` (each hour consumed once, scored against the band assigned when its own vintage was predicted), per-side error rate `err = mean(missed)`; update `α ← clip(α + γ·(0.10 − err), 0.005, 0.5)`. No new hours → no update.
-- Band for vintage V: `q_side` = finite-sample quantile of trailing-7-day (min 3 distinct days, cutoff V-day midnight — identical to production/EXP-015) per-side scores `E_lo = q10_sorted − y`, `E_hi = y − q90_sorted`, at level `1 − α_side`. Sparse calibration → q = 0 (raw bands), α still updates. No flooring of q at zero.
-- Step size **γ = 0.10** (primary). γ ∈ {0.05, 0.20} reported descriptively, never gated. Rationale: a 0.5-error day moves α by 0.04 — a one-day reaction big enough to matter, small enough not to oscillate on noise.
-
-*Stage 1 — offline replay* (`scripts/exp016_replay_aci.py`) on the **same evaluable rows as EXP-015** (8 vintages / 528 rows as of the 2026-06-12 state; precondition ≥4 evaluable vintages). Comparator: stored production bands on the same rows (lower 0.778, upper 0.903, Winkler 146.4). IMPLEMENT iff all four hold — **identical criteria to EXP-015**; the bar is the product requirement, not tuned to the method:
-1. treatment lower-side ≥ incumbent lower-side + 0.03
-2. treatment lower-side ≥ 0.86
-3. treatment upper-side ∈ [0.85, 0.97]
-4. treatment mean Winkler ≤ 1.05 × incumbent
-
-*Stage 2 — live confirmation* (pre-committed now, evaluated after 14 evaluable post-deploy vintages in `calibration_history`, not `eval_log.jsonl`): (1) pooled lower ∈ [0.87, 0.95] and upper ∈ [0.85, 0.95]; (2) ≤2 of 14 vintages with per-vintage lower < 0.70; (3) mean Winkler ≤ 1.05 × pre-deploy trailing-14-vintage baseline. PASS → registry `kept`, update ADR-006 + CLAUDE.md, close the augur#19 calibration arc. FAIL with improvement → keep, escalate to EXP-017. FAIL with degradation → revert, EXP-017 primary.
-
-**Alternatives (failure mode signals):**
-
-1. **ACI rescues the day-after but not the first shift day; pooled lands in [0.84, 0.86).** The residual is irreducible single-day surprise that no calibration-layer fix reaches. Do NOT implement on a near-miss; escalate to EXP-017 (9-quantile training — better raw quantiles need less correction) and record the per-vintage tail to inform whether 0.90 is reachable by calibration alone.
-2. **Oscillation at γ = 0.10**: α overshoots after good streaks, narrows, then misses. Signal: alternating per-vintage coverage with negative lag-1 autocorrelation of per-vintage err (reported descriptively). If γ = 0.05 (descriptive variant) is smooth where 0.10 oscillates, open a *new* entry with γ = 0.05 as primary — a new pre-commit, not a loosening.
-3. **Winkler guardrail trips**: ACI buys coverage with chronically wide bands → the gap lives in the raw quantiles → EXP-017 moves up.
-4. **Upper side degrades** (criterion 3 fails): per-side ACI narrowing the healthy side too aggressively — inspect the α_hi trace before any redesign.
-
-**Revisit trigger:** Stage 1 — immediately (replay runnable today, same state file as EXP-015 → directly comparable). Stage 2 — 14 evaluable post-deploy vintages. Surface in `/curate`.
-
-**Review by:** 2026-07-11.
-
-**Domain:** EXP-016, augur#19 calibration follow-up, ACI
-**Status:** open — Stage 1 pre-committed, replay pending
-
----
-
 ### [2026-05-29] The Augur method + the M4 arc are publishable if we invest ~2-3 weeks of empirical follow-up
 
 **Position (provisional):** Augur's production stack (ADR-006: LightGBM-Quantile multi-horizon + CQR + horizon-as-feature stacking + 56-day rolling window on NL day-ahead) is *not* novel as a method — every component is in Lago, Marcjasz, De Schutter & Weron (2021) or Nowotarski & Weron (2018). On its own it's a competent application, not a paper. But combined with the five-iteration M4 → EXP-014 narrative arc (`docs/articles/m4-metric-redesign-story.md`) and the promotion method (ADR-007), plus ~2-3 weeks of standard EPF empirical follow-up, the package becomes publishable as an applied methodology paper at *International Journal of Forecasting* practitioner section, IEEE PES workshops, or similar applied-ML venues.
@@ -94,6 +58,48 @@ Items 1-5 are ~1 week. Items 6-8 are ~1 week. Item 9 is the polishing pass, ~3-5
 ---
 
 ## Resolved
+
+### [2026-06-12 → resolved 2026-06-12] EXP-016: per-side ACI closes the regime-shift coverage gap that static per-side CQR (EXP-015) could not
+
+**Position (provisional):** EXP-015 showed per-side conformal scores fix the *side* asymmetry (+0.048 lower-side at +2.5% Winkler) but a static trailing-7-day calibration window cannot adapt to regime shifts — vintages 06-02/06-03 stayed at 0.375/0.708 lower-side and dragged the pool to 0.826, below the 0.86 bar. Adaptive Conformal Inference (Gibbs & Candès 2021) closes the loop: after a day of misses the target level rises, widening the next vintage's band. Since the bad days cluster in streaks (06-01 was also bad — incumbent 0.542), the day-after reaction should recover most of the deficit. Treatment = ACI layered on EXP-015's per-side scores.
+
+**Method (pre-committed 2026-06-12, before running the treatment replay):**
+
+*Treatment definition (every parameter fixed here):*
+- Per-side adaptive state `α_lo`, `α_hi`, both initialised at 0.10 (the static case).
+- One batched update per vintage day V, processing raw-bearing vintages chronologically (including warm-up vintages 05-30..06-01, which get bands but are excluded from evaluation): over the not-yet-consumed hours with `ts < V-day midnight UTC` (each hour consumed once, scored against the band assigned when its own vintage was predicted), per-side error rate `err = mean(missed)`; update `α ← clip(α + γ·(0.10 − err), 0.005, 0.5)`. No new hours → no update.
+- Band for vintage V: `q_side` = finite-sample quantile of trailing-7-day (min 3 distinct days, cutoff V-day midnight — identical to production/EXP-015) per-side scores `E_lo = q10_sorted − y`, `E_hi = y − q90_sorted`, at level `1 − α_side`. Sparse calibration → q = 0 (raw bands), α still updates. No flooring of q at zero.
+- Step size **γ = 0.10** (primary). γ ∈ {0.05, 0.20} reported descriptively, never gated. Rationale: a 0.5-error day moves α by 0.04 — a one-day reaction big enough to matter, small enough not to oscillate on noise.
+
+*Stage 1 — offline replay* (`scripts/exp016_replay_aci.py`) on the **same evaluable rows as EXP-015** (8 vintages / 528 rows as of the 2026-06-12 state; precondition ≥4 evaluable vintages). Comparator: stored production bands on the same rows (lower 0.778, upper 0.903, Winkler 146.4). IMPLEMENT iff all four hold — **identical criteria to EXP-015**; the bar is the product requirement, not tuned to the method:
+1. treatment lower-side ≥ incumbent lower-side + 0.03
+2. treatment lower-side ≥ 0.86
+3. treatment upper-side ∈ [0.85, 0.97]
+4. treatment mean Winkler ≤ 1.05 × incumbent
+
+*Stage 2 — live confirmation* (pre-committed now, evaluated after 14 evaluable post-deploy vintages in `calibration_history`, not `eval_log.jsonl`): (1) pooled lower ∈ [0.87, 0.95] and upper ∈ [0.85, 0.95]; (2) ≤2 of 14 vintages with per-vintage lower < 0.70; (3) mean Winkler ≤ 1.05 × pre-deploy trailing-14-vintage baseline. PASS → registry `kept`, update ADR-006 + CLAUDE.md, close the augur#19 calibration arc. FAIL with improvement → keep, escalate to EXP-017. FAIL with degradation → revert, EXP-017 primary.
+
+**Alternatives (failure mode signals):**
+
+1. **ACI rescues the day-after but not the first shift day; pooled lands in [0.84, 0.86).** The residual is irreducible single-day surprise that no calibration-layer fix reaches. Do NOT implement on a near-miss; escalate to EXP-017 (9-quantile training — better raw quantiles need less correction) and record the per-vintage tail to inform whether 0.90 is reachable by calibration alone.
+2. **Oscillation at γ = 0.10**: α overshoots after good streaks, narrows, then misses. Signal: alternating per-vintage coverage with negative lag-1 autocorrelation of per-vintage err (reported descriptively). If γ = 0.05 (descriptive variant) is smooth where 0.10 oscillates, open a *new* entry with γ = 0.05 as primary — a new pre-commit, not a loosening.
+3. **Winkler guardrail trips**: ACI buys coverage with chronically wide bands → the gap lives in the raw quantiles → EXP-017 moves up.
+4. **Upper side degrades** (criterion 3 fails): per-side ACI narrowing the healthy side too aggressively — inspect the α_hi trace before any redesign.
+
+**Revisit trigger:** Stage 1 — immediately (replay runnable today, same state file as EXP-015 → directly comparable). Stage 2 — 14 evaluable post-deploy vintages. Surface in `/curate`.
+
+**Review by:** 2026-07-11.
+
+**Domain:** EXP-016, augur#19 calibration follow-up, ACI
+**Status:** resolved (refuted in part) — see Resolution below.
+
+**Resolution (2026-06-12, same day):** Stage-1 replay run immediately after the pre-commit landed (commit `440b0b6`), same 8 evaluable vintages / 528 rows as EXP-015. Verdict **IMPLEMENT = False** — criteria 1/3 PASS, criterion 2 **FAIL** (lower 0.852 < 0.86, the pre-committed Alternative-1 near-miss zone [0.84, 0.86)), criterion 4 **FAIL** (Winkler 163.9 vs cap 153.7, +12% — Alternative 3).
+
+What the replay showed: ACI does what ACI promises — every vintage from 06-04 onward is ≥ 0.903 lower-side — but it cannot rescue the *first* shift days (06-02 at 0.375, 06-03 at 0.667; α_lo was still ≈0.126 on 06-02 because the calm warm-up had drifted it *narrower*). The γ-sensitivity panel is the decisive evidence: γ ∈ {0.05, 0.10, 0.20} all converge to lower ≈ 0.85 — a γ-independent ceiling. The 69 hours missed on 06-02/06-03 alone cap any day-granularity calibration method at ≈0.87 on this window, and approaching that ceiling pegged α_lo at the 0.005 clip with q_lo ≈ 55-61 EUR/MWh (median width +30%, hence the Winkler trip). No oscillation (lag-1 err autocorr +0.96, persistent not alternating), so Alternative 2 (γ retune) does not apply.
+
+Per the pre-committed Alternative-1 AND Alternative-3 paths, which agree: **the residual gap lives in the raw quantiles** (q10_raw biased high entering regime shifts), and **EXP-017 — 9-quantile training — is the next experiment**. The per-side score decomposition (EXP-015) and an adaptive layer (EXP-016) may both return on top of better raw quantiles. Logged as EXP-016 (`parked`) in `experiments/registry.jsonl`.
+
+---
 
 ### [2026-06-12 → resolved 2026-06-12] EXP-015: two-sided (per-side) CQR fixes the lower-side coverage gap
 
