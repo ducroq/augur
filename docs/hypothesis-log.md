@@ -20,6 +20,53 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 
 ## Open
 
+### [2026-06-12] EXP-015: two-sided (per-side) CQR fixes the lower-side coverage gap
+
+**Position (provisional):** LightGBM's lower-side coverage deficit (augur#19) is caused by the *symmetric* CQR correction, not by horizon effects. Baseline from `calibration_history` (30 vintages, 2112 realised hours, 2026-05-10 → 2026-06-11, computed 2026-06-12 *before* any treatment was run):
+
+- Lower-side coverage by horizon group: h1-6 = 0.828, h7-24 = 0.837, h25-72 = 0.833 — **flat across horizons**, refuting the horizon-conditioning hypothesis sketched in augur#19 as the primary mechanism.
+- Per-side asymmetry under symmetric widening: lower 0.834 vs upper 0.886 (target 0.90 each side). The single `q = quantile(max(p10−y, y−p90))` splits the error budget wherever the score distribution happens to put it.
+- Discovered while designing this experiment: production `compute_cqr_q` measures nonconformity against the **already-CQR-widened** stored bands (calibration_history's p10/p90), not the raw model quantiles — a feedback loop, not textbook split-conformal (Romano et al. 2019 calibrate the raw fitted quantiles). Raw quantiles (`p10_raw`/`p90_raw`) are stored since 2026-05-29 and make the clean version possible.
+
+Treatment: **per-side CQR on raw sorted quantiles** — `q_lo` = finite-sample 0.90-quantile of `E_lo = q10_sorted − y`, `q_hi` = 0.90-quantile of `E_hi = y − q90_sorted`, each over the same trailing 7-day / min-3-distinct-days calibration window production uses; bands = `[q10_sorted − q_lo, q90_sorted + q_hi]`. No flooring at zero (negative q legitimately narrows an over-wide side; report how often it fires).
+
+**Method (pre-committed 2026-06-12, before running the treatment replay):**
+
+*Stage 1 — offline replay on existing data* (`scripts/exp015_replay_cqr.py`), per ADR-007 layer 2. Evaluable rows: calibration_history rows with raw quantiles (vintages 2026-05-30+) belonging to vintages with ≥3 distinct prior raw-bearing calibration days in the trailing 7; calibration cutoff = vintage-day midnight UTC (mirrors production `apply_cqr`). Precondition: ≥4 evaluable vintages (≥288 realised hours), else wait for more vintages — each day adds one.
+
+Comparator: the stored production bands (p10/p90) on the **same** evaluated rows.
+
+IMPLEMENT in production iff all four hold:
+1. treatment lower-side ≥ incumbent lower-side + 0.03 (on same rows)
+2. treatment lower-side ≥ 0.86
+3. treatment upper-side ∈ [0.85, 0.97]
+4. guardrail: treatment mean Winkler (α=0.20, `ml/shadow/metrics.py:winkler_interval_score`) ≤ 1.05 × incumbent mean Winkler — a coverage fix that only works by paying >5% interval-score cost means the problem is quantile-regression bias, not conformal correction, and EXP-017 (9-quantile training) moves up.
+
+Descriptive companions, never gated: horizon-grouped per-side variant (3 groups × 2 sides), per-group coverage, median width change, share of negative q_lo/q_hi.
+
+*Stage 2 — live confirmation* (pre-committed now, evaluated after 14 evaluable post-deploy vintages in `calibration_history` — **not** `eval_log.jsonl`, whose rows mix 24/48/72-hour vintages and have permanent holes at 2026-06-08/06-10 from the EDH v2.2 break):
+1. pooled lower-side ∈ [0.87, 0.95] and upper-side ∈ [0.85, 0.95]
+2. bimodality guard: ≤2 of the 14 vintages with per-vintage lower-side < 0.70 (baseline: 12 of 30 vintages < 0.80, worst 0.431)
+3. mean Winkler ≤ 1.05 × the pre-deploy trailing-14-vintage baseline
+
+PASS → registry entry `kept`, update ADR-006 calibration section + CLAUDE.md known-weakness note, close augur#19 stage. FAIL with coverage improved but short → keep the change, open EXP-016 (ACI) on top. FAIL with coverage degraded vs baseline → revert commit, EXP-016 becomes primary.
+
+**Alternatives (failure mode signals):**
+
+1. **Per-side fix passes offline but live bimodality persists** (guard 2 trips while pooled passes): the deficit is regime-shift-driven, exactly ACI's (Gibbs & Candès 2021) target — static trailing-window calibration can't adapt fast enough. Path: EXP-016, keeping per-side scores inside the ACI update.
+2. **Offline result straddles a threshold** (e.g. lower lands in [0.84, 0.86)): do NOT loosen. Wait for more raw vintages (precondition scales at +1/day, +72 rows/day) and re-run the same pre-committed replay at ≥8 evaluable vintages.
+3. **Winkler guardrail trips**: coverage gap is in the raw quantiles themselves (q10 biased high), not the correction. EXP-017 (9-quantile training) moves ahead of ACI.
+4. **Upper side over-covers (>0.97)** after per-side split: per-side targets were already met on that side and splitting double-widens. Signal that negative-q narrowing must be allowed (it is) and is firing too rarely — inspect score distributions before any redesign.
+
+**Revisit trigger:** Stage 1 — immediately (replay is runnable today). Stage 2 — 14 evaluable post-deploy vintages, ≈ 2026-06-27 if deployed 2026-06-13. Surface in `/curate`.
+
+**Review by:** 2026-07-04.
+
+**Domain:** EXP-015, augur#19 calibration follow-up, CQR
+**Status:** open — Stage 1 pre-committed, replay pending
+
+---
+
 ### [2026-05-29] The Augur method + the M4 arc are publishable if we invest ~2-3 weeks of empirical follow-up
 
 **Position (provisional):** Augur's production stack (ADR-006: LightGBM-Quantile multi-horizon + CQR + horizon-as-feature stacking + 56-day rolling window on NL day-ahead) is *not* novel as a method — every component is in Lago, Marcjasz, De Schutter & Weron (2021) or Nowotarski & Weron (2018). On its own it's a competent application, not a paper. But combined with the five-iteration M4 → EXP-014 narrative arc (`docs/articles/m4-metric-redesign-story.md`) and the promotion method (ADR-007), plus ~2-3 weeks of standard EPF empirical follow-up, the package becomes publishable as an applied methodology paper at *International Journal of Forecasting* practitioner section, IEEE PES workshops, or similar applied-ML venues.
