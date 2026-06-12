@@ -143,7 +143,7 @@ Client browser (https://energy.jeroenveen.nl):
 | `decrypt_data_cached.py` | Production decryption with caching + `--force` (ADR-003) |
 | `utils/secure_data_handler.py` | AES-CBC-256 + HMAC-SHA256 |
 | `scripts/netlify_build.sh` | Shared Netlify build script |
-| `scripts/daily_update.sh` | Sadalsuud daily job — ARF backup + parquet consolidate + LGBM retrain + shadow eval + commit + push. Triggered by `scripts/systemd/augur-daily.timer` (deployed to `/etc/systemd/system/`), gated by `scripts/wait_for_edh.sh` polling EDH freshness. Two pre-flight alarms: `SHADOW_PRE_AGE_H >36h` (stale state) and `DEP_PROBE_OK=0` (lightgbm/river import broken in venv); either surfaces in the daily commit subject. |
+| `scripts/daily_update.sh` | Sadalsuud daily job — ARF backup + parquet consolidate + LGBM retrain + shadow eval + commit + push. Triggered by `scripts/systemd/augur-daily.timer` (deployed to `/etc/systemd/system/`), gated by `scripts/wait_for_edh.sh` polling EDH freshness. Two pre-flight alarms: `SHADOW_PRE_AGE_H >36h` (stale state) and `DEP_PROBE_OK=0` (lightgbm/river import broken in venv), plus two post-run output guards (added 2026-06-12 after the EDH v2.2 silent-empty incident, augur#14): ARF forecast <24h and no new eval row >2 days. All surface in the daily commit subject. |
 | `scripts/wait_for_edh.sh` | systemd `ExecStartPre` gate — polls EDH `data_quality_report.json:timestamp` for today's date (max wait 4h, then proceeds with stale data so the run isn't fail-closed). |
 | `scripts/systemd/{augur-daily.service,augur-daily.timer,README.md}` | Canonical systemd unit files; deploy via `sudo cp` to `/etc/systemd/system/`. |
 | `netlify.toml` | Build pipeline: decrypt → hugo |

@@ -20,6 +20,12 @@
 # forecast — the in-script pre-flight ALARM (SHADOW_PRE_AGE_H >36h) surfaces
 # it in the next day's commit message; watching for missing daily commits on
 # origin/main is the external alive signal.
+#
+# Alarms in the commit subject (all non-blocking):
+#   pre-flight:  SHADOW_PRE_AGE_H >36h (stale shadow state), DEP_PROBE_OK=0
+#                (broken venv imports)
+#   post-run:    ARF forecast <24h (empty output despite rc=0), no new eval
+#                row for >2 days (skipped vintages despite rc=0) — augur#14
 
 set -e
 
@@ -149,6 +155,56 @@ fi
 set -e
 # --- end shadow block ----------------------------------------------------
 
+# Post-run output-quality guards: rc=0 does not mean good output.
+# Why these exist: during the EDH v2.2 schema break (2026-06-08..10) three
+# daily commits said "ARF OK | shadow rc=0/eval rc=0" while ARF published
+# EMPTY forecasts and evaluate_shadow logged no rows — eval vintages
+# 2026-06-08 and 2026-06-10 are permanently unevaluable. See augur#14
+# (comment 2026-06-12) and memory/gotcha-log.md. Both checks are
+# non-blocking and surface in the commit subject like the pre-flight alarms.
+ARF_FC_HOURS=$(python3 -c "
+import json
+try:
+    with open('$AUGUR_DIR/static/data/augur_forecast.json') as f:
+        print(len(json.load(f).get('forecast', {})))
+except Exception:
+    print(-1)
+" 2>/dev/null || echo -1)
+ARF_EMPTY_MARKER=""
+if [ "${ARF_FC_HOURS:--1}" -lt 24 ]; then
+    echo "ALARM: ARF forecast spans only ${ARF_FC_HOURS}h (<24h) — empty/broken output despite rc=0."
+    ARF_EMPTY_MARKER=" [ALARM: ARF forecast ${ARF_FC_HOURS}h]"
+else
+    # 72h nominal; 48h expected while the EDH v2.2 window truncation is open (augur#26)
+    echo "ARF forecast spans ${ARF_FC_HOURS}h."
+fi
+
+EVAL_LAG_DAYS=$(python3 -c "
+import json
+from datetime import date
+try:
+    dates = []
+    with open('$AUGUR_DIR/ml/shadow/eval_log.jsonl') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                d = json.loads(line).get('date')
+            except Exception:
+                continue
+            if d:
+                dates.append(d)
+    print((date.today() - date.fromisoformat(max(dates))).days)
+except Exception:
+    print(999)
+" 2>/dev/null || echo 999)
+EVAL_STALE_MARKER=""
+if [ "${EVAL_LAG_DAYS:-999}" -gt 2 ]; then
+    echo "ALARM: no new eval row for ${EVAL_LAG_DAYS} day(s) — eval vintages are being skipped despite eval rc=0."
+    EVAL_STALE_MARKER=" [ALARM: eval stale ${EVAL_LAG_DAYS}d]"
+fi
+
 # Commit and push
 echo "Committing and pushing..."
 cd $AUGUR_DIR
@@ -171,7 +227,7 @@ DEP_MARKER=""
 [ "$DEP_PROBE_OK" = "0" ] && DEP_MARKER=" [ALARM: dep probe failed — shadow skipped]"
 
 git diff --cached --quiet && echo "No changes to commit" || {
-    git commit -m "Daily update $(date -u '+%Y-%m-%d') — ARF OK | ${SHADOW_STATUS}${STALE_MARKER}${DEP_MARKER}"
+    git commit -m "Daily update $(date -u '+%Y-%m-%d') — ARF OK | ${SHADOW_STATUS}${STALE_MARKER}${DEP_MARKER}${ARF_EMPTY_MARKER}${EVAL_STALE_MARKER}"
     git push
 }
 
