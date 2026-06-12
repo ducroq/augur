@@ -1316,7 +1316,7 @@
   ],
   "consumer_surcharge": {
     "value_eur_mwh": 110.85,
-    "last_updated": "2026-06-11T18:45:19.943166+00:00"
+    "last_updated": "2026-06-12T16:30:40.958772+00:00"
   },
   "error_hours": [
     17,
@@ -2433,7 +2433,7 @@
       "mae": 18.17,
       "last_week_mae": 11.22,
       "n_samples": 11176,
-      "mae_vs_exchange": 4.97,
+      "mae_vs_exchange": 5.95,
       "mae_at_low_price": 34.9,
       "mae_at_low_price_n": 81
     }
