@@ -112,5 +112,5 @@ class TestPriceBuffer:
         assert len(fb2.price_history) == len(fb.price_history)
 
     def test_maxlen_enforced(self):
-        fb, _ = _make_fb(300)
-        assert len(fb.price_history) == 200  # maxlen
+        fb, _ = _make_fb(900)
+        assert len(fb.price_history) == 800  # maxlen (~8 days at 15-min, augur#26)

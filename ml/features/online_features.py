@@ -42,7 +42,13 @@ class OnlineFeatureBuilder:
             price_buffer: Optional list of (timestamp_iso, price) tuples
                           to restore state from state.json.
         """
-        self.price_history = deque(maxlen=200)  # ~8 days of hourly data
+        # ~8 days of price history. Sized at 800 because EDH v2.2 (2026-06-07)
+        # switched ENTSO-E prices to 15-min resolution — at the original
+        # maxlen=200 ("8 days of hourly") the buffer held only ~50h, and the
+        # ~100 future quarter-hour prices pushed by generate_forecast evicted
+        # the rest, breaking the required 24h lag for the first ~21 forecast
+        # hours and truncating the 72h forecast to 48h (augur#26).
+        self.price_history = deque(maxlen=800)
         if price_buffer:
             for ts, price in price_buffer:
                 self.price_history.append((ts, price))
