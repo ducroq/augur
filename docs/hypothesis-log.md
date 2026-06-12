@@ -63,7 +63,14 @@ PASS → registry entry `kept`, update ADR-006 calibration section + CLAUDE.md k
 **Review by:** 2026-07-04.
 
 **Domain:** EXP-015, augur#19 calibration follow-up, CQR
-**Status:** open — Stage 1 pre-committed, replay pending
+**Status:** resolved (refuted in part) — see Resolution below.
+
+**Resolution (2026-06-12, same day):** Stage-1 replay run on 8 evaluable vintages (528 rows, 2026-06-02 → 2026-06-11) immediately after the pre-commit landed (commit `bcc3e78`). Verdict **IMPLEMENT = False**:
+- Criterion 1 PASS: treatment lower-side 0.826 vs incumbent 0.778 on same rows (+0.048, > +0.03 required).
+- Criterion 2 **FAIL**: 0.826 < 0.86.
+- Criterion 3 PASS: upper-side 0.862. Criterion 4 PASS: Winkler 150.0 ≤ 153.7 (+2.5%).
+
+The position is refuted *in part*: symmetric widening explains ~5 points of the gap (fixed by the per-side split), but the residual is concentrated in the regime-shift vintages 06-02/06-03 (treatment 0.375/0.708; every later vintage ≥ 0.847, mostly ≥ 0.90). That is **Alternative 1 firing in the offline data already** — static trailing-window calibration cannot adapt to regime shifts, which is ACI's (Gibbs & Candès 2021) design target. The result lands below the [0.84, 0.86) straddle band, so the wait-for-more-vintages path (Alternative 2) does not apply; per the pre-committed alternative-1 path, **EXP-016 = ACI with per-side scores** is the next experiment. Descriptive companion confirmed the design redirect: horizon-grouped calibration makes short horizons *worse* (h1-6 lower-side 0.646 vs pooled 0.625 — both bad, and small per-group calibration sets add variance), closing the door on the original horizon-conditioned sketch in augur#19. Logged as EXP-015 (`parked`) in `experiments/registry.jsonl`; per-side scores carry into EXP-016's design.
 
 ---
 
