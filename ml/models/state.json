@@ -3729,13 +3729,13 @@
       "mae": 28.35,
       "last_week_mae": 22.61,
       "n_samples": 6518,
-      "mae_vs_exchange": 27.29,
+      "mae_vs_exchange": 25.03,
       "mae_at_low_price": null,
       "mae_at_low_price_n": 0
     }
   ],
   "consumer_surcharge": {
     "value_eur_mwh": 110.85,
-    "last_updated": "2026-07-03T08:31:50.258308+00:00"
+    "last_updated": "2026-07-03T09:29:18.045908+00:00"
   }
 }
