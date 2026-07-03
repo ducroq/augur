@@ -1,3 +1,13 @@
+# Pinned, reproducible runtime environment for the Augur ML pipeline.
+# AUTHORITATIVE for installs — scripts/bootstrap_venv.sh installs from this,
+# NOT from the loose ranges in requirements.txt. Regenerate after an
+# intentional dependency change:  pip freeze --exclude-editable > requirements.lock
+#
+# History: pandas was 3.0.4 here after the 2026-07-03 migration — a YANKED
+# release (reported datetime segfaults). Repinned to the mature 2.x line
+# (2.3.3) on 2026-07-03; all 195 tests pass on py3.12. river is held at
+# 0.25.0 because ml/models/river_model.pkl is pickled under it — bumping
+# river requires a warmup regen (see memory/gotcha-log.md 2026-07-03).
 altair==6.2.2
 attrs==26.1.0
 cffi==2.0.0
@@ -8,18 +18,20 @@ jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 lightgbm==4.6.0
 MarkupSafe==3.0.3
-narwhals==2.22.1
+narwhals==2.23.0
 numpy==2.5.0
 packaging==26.2
-pandas==3.0.4
+pandas==2.3.3
 pyarrow==24.0.0
 pycparser==3.0
 python-dateutil==2.9.0.post0
+pytz==2026.2
 referencing==0.37.0
 river==0.25.0
-rpds-py==2026.5.1
+rpds-py==2026.6.3
 scikit-learn==1.9.0
 scipy==1.18.0
 six==1.17.0
 threadpoolctl==3.6.0
-typing_extensions==4.15.0
+typing_extensions==4.16.0
+tzdata==2026.2

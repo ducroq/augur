@@ -1,8 +1,16 @@
-# Full dependencies for ML pipeline (sadalsuud)
+# Runtime dependencies for the Augur ML pipeline (sadalsuud + situla).
+#
+# These are INTENT ranges. requirements.lock holds the exact, reproducible
+# pins and is what scripts/bootstrap_venv.sh installs — always prefer it.
+# The upper bounds below exist because an unbounded `>=` install during the
+# 2026-07-03 migration silently pulled bleeding-edge majors (river 0.25 that
+# couldn't unpickle the ARF model, and a yanked pandas 3.0.4). Never widen a
+# ceiling without rebuilding + running the full test suite; bumping river
+# additionally requires a warmup regen of river_model.pkl.
 cryptography>=42.0
-river>=0.21
-pandas>=2.2
-numpy>=1.26
-scikit-learn>=1.4
+river==0.25.0          # pickle-coupled to ml/models/river_model.pkl — bump only with a warmup regen
+pandas>=2.2,<3         # stay on the mature 2.x line; 3.0.4 was yanked (datetime segfaults)
+numpy>=1.26,<3
+scikit-learn>=1.4,<2
 pyarrow>=15.0
-lightgbm>=4.0
+lightgbm>=4.0,<5
