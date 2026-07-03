@@ -7,10 +7,10 @@
 # couldn't unpickle the ARF model, and a yanked pandas 3.0.4). Never widen a
 # ceiling without rebuilding + running the full test suite; bumping river
 # additionally requires a warmup regen of river_model.pkl.
-cryptography>=42.0
+cryptography>=42.0,<50   # HMAC-verify + AES-CBC decrypt — hard constraint; ceiling matches lock (49.x)
 river==0.25.0          # pickle-coupled to ml/models/river_model.pkl — bump only with a warmup regen
 pandas>=2.2,<3         # stay on the mature 2.x line; 3.0.4 was yanked (datetime segfaults)
 numpy>=1.26,<3
 scikit-learn>=1.4,<2
-pyarrow>=15.0
+pyarrow>=15.0,<25        # ceiling matches lock (24.x); parquet build for LGBM training
 lightgbm>=4.0,<5

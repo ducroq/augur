@@ -3,5 +3,8 @@
 # smoke gate in scripts/daily_update.sh and the bootstrap verification).
 #
 # Install alongside the runtime env:  scripts/bootstrap_venv.sh --dev
-# Exact versions are captured in requirements.lock (pip freeze).
+# NOTE: pytest is intentionally NOT in requirements.lock — that lock is the
+# runtime closure only (pip freeze --exclude-editable). Dev tooling is
+# pinned loosely here and never affects production output; keep it out of
+# the runtime lock so deploy installs stay minimal and reproducible.
 pytest>=8.0

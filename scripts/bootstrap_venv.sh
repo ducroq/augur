@@ -46,7 +46,8 @@ if [ -f "$LOCK" ]; then
 else
     echo "!!  WARNING: requirements.lock not found — falling back to the loose"
     echo "!!  ranges in requirements.txt. This install is NOT reproducible."
-    echo "!!  Regenerate the lock:  pip freeze > requirements.lock"
+    echo "!!  Regenerate the lock (from a runtime venv, NOT --dev):"
+    echo "!!    pip freeze --exclude-editable > requirements.lock"
     pip install --quiet -r "$RUNTIME_REQ"
 fi
 

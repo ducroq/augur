@@ -103,9 +103,17 @@ fi
 # import-fails at runtime, which only surfaces in the log file, not the
 # commit subject. This probe alarms in the commit message so the failure is
 # visible on origin/main without log inspection. Doesn't block ARF.
+# NOTE (2026-07-03): river is deliberately NOT probed here. It is a
+# backup-only dependency (ARF); the production LightGBM shadow imports only
+# lightgbm/pandas. This probe gates the shadow, so a broken `import river`
+# must NOT skip the production forecast — that would be the exact
+# "backup dep freezes the dashboard" class the same-day decoupling removed
+# from ARF's runtime. A broken river surfaces via ARF_STATUS in the commit
+# subject instead (ARF now runs non-fatal). Previously this line also had
+# `import river`; a multi-model review caught the leftover coupling.
 DEP_PROBE_OK=1
-python3 -c "from lightgbm import LGBMRegressor; import river; import pandas; import lightgbm" 2>/dev/null || {
-    echo "ALARM: dep probe failed — lightgbm/river/pandas import broken in venv. Shadow steps will be skipped."
+python3 -c "from lightgbm import LGBMRegressor; import pandas; import lightgbm" 2>/dev/null || {
+    echo "ALARM: dep probe failed — lightgbm/pandas import broken in venv. Shadow steps will be skipped."
     DEP_PROBE_OK=0
 }
 
