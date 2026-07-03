@@ -4,6 +4,24 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
+## 2026-07-03 — Post-migration recovery: venv/pickle freeze, ARF decoupling, dependency pinning
+
+**Trigger**: Repo moved from the original (Windows) dev machine to **situla** (Linux dev), deploy stays on **sadalsuud**. User flagged "not everything is up to speed." Investigation found the dashboard silently frozen on **2026-06-28** data: `augur-daily.service` had failed every night since 2026-06-29 (day after a sadalsuud reboot), while the timer stayed healthy — the only alive-signal (missing daily commits on origin/main) had gone unnoticed for 5 days.
+
+**Root cause (a chain)**: The migration rebuilt sadalsuud's `.venv` from `requirements.txt`'s loose `>=` ranges, so pip pulled bleeding-edge majors (**river 0.25.0, pandas 3.0.4, numpy 2.5.0**). river 0.25 can't unpickle `river_model.pkl` (saved under ~0.21): `Can't get attribute '__pyx_unpickle_VectorDict'`. ARF ran under `set -e` as "must succeed" — a comment stale since the 2026-05-29 EXP-014 demotion to a backup signal — so the unpickle failure aborted the whole script **before** the production LightGBM shadow, commit, or push. LightGBM itself was fine under the new deps (verified: shadow pickle loads, all shadow modules import, 195/195 tests pass).
+
+**Fixes shipped**:
+1. **Decoupled ARF from production** (`96dd499`): ARF now runs under `set +e`; a backup-signal failure surfaces as `ARF FAIL rc=N` in the commit subject instead of killing the production push. Added a non-blocking pytest **smoke gate** pre-flight.
+2. **Regenerated `river_model.pkl`** under river 0.25 via `ml.training.warmup` (consolidate → warmup → ml.update). Because warmup replays the full consolidated parquet, **the 5 missed days (Jun 29–Jul 2, incl. the ~150 EUR/MWh spikes) are learned** — the online-learning gap is closed, not skipped. `ml.update` confirmed load + 72h forecast + surcharge-cache refresh (110.85).
+3. **Pinned dependencies** (`affa443`) and **repinned off the yanked pandas** (`0574e3d`): `requirements.lock` moved pandas 3.0.4 (a *yanked* release — reported datetime segfaults) → **2.3.3** (river/numpy/lightgbm unchanged, so the pickle stayed valid — no second regen). `requirements.txt` gained ceilings (`pandas<3`, `numpy<3`, `sklearn<2`, `lightgbm<5`, `cryptography<50`, `pyarrow<25`) and `river==0.25.0` (pickle-coupled). New `scripts/bootstrap_venv.sh` builds an identical venv from the lock on both boxes; 195 tests pass on py3.12 (sadalsuud) and 3.14 (situla).
+4. **Multi-model review follow-up** (`2fa839e`): a 6-model review battery (opus/sonnet/haiku/fable) + adversarial opus verify caught that the decoupling was *incomplete* — the pre-flight `DEP_PROBE` still coupled `import river` to the production shadow gate. Removed river from the probe (a broken backup-only dep can no longer skip production).
+
+**Verification**: full `daily_update.sh` ran clean end-to-end mid-day and pushed `fedf8f6` (ARF OK | shadow rc=0/eval rc=0), restoring the live dashboard ~8h before the scheduled run. Production forecast horizon confirmed 2026-07-03 22:00 → 2026-07-06 21:00 (72h).
+
+**Open follow-ups (parked, user-deferred)**: systemd `OnFailure=` alerting (the outage was silent 5 days — biggest remaining gap); py3.12 on situla for exact dev/prod interpreter parity; numpy-2.5 `pd.Timedelta` bare-int DeprecationWarnings in `update_shadow.py` (~207/271), harmless while numpy is pinned. Full incident writeup in `memory/gotcha-log.md` (2026-07-03).
+
+---
+
 ## 2026-06-12 — v2.2 blast-radius forensics, output-quality guards, and the EXP-015/016 calibration-layer arc
 
 **Trigger**: Session-start review noticed eval-log rows for 2026-06-08 and 2026-06-10 missing and `arf_mae: null` on 06-09, despite "ARF OK | eval rc=0" commit subjects on all three days.

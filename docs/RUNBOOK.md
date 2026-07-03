@@ -11,7 +11,7 @@
 
 ### Prerequisites
 
-- Python 3.11+ with pip
+- Python 3.12 (deploy box sadalsuud pins 3.12; the venv is locked in `requirements.lock`). Dev box situla currently runs 3.14 — same pinned package set, cp314 wheels resolve, but for exact parity install 3.12.
 - [Hugo](https://gohugo.io/) v0.124.0+
 - Node.js 16+ (for npm scripts)
 - Encryption keys from energyDataHub (ENCRYPTION_KEY_B64, HMAC_KEY_B64)
@@ -22,18 +22,28 @@
 git clone https://github.com/ducroq/augur.git
 cd augur
 npm install
-pip install -r requirements.txt
+
+# Reproducible Python venv from the pinned lockfile (creates ./.venv).
+# Installs the EXACT versions in requirements.lock — NOT the loose ranges
+# in requirements.txt (a fresh `pip install -r requirements.txt` is what
+# silently pulled bleeding-edge majors during the 2026-07-03 migration and
+# broke the ARF pickle). --dev also installs pytest for the test suite.
+scripts/bootstrap_venv.sh --dev
+source .venv/bin/activate
 ```
 
 ### Running
 
 ```bash
-# Set keys (PowerShell)
-$env:ENCRYPTION_KEY_B64 = "your_key"
-$env:HMAC_KEY_B64 = "your_key"
+# Set keys (bash) — or place them in a .env file (the daily job sources it)
+export ENCRYPTION_KEY_B64="your_key"
+export HMAC_KEY_B64="your_key"
 
 # Decrypt data
 python decrypt_data_cached.py --force
+
+# Run tests
+python -m pytest tests/ -q
 
 # Dashboard
 hugo server -D

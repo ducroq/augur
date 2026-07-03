@@ -143,7 +143,7 @@ Client browser (https://energy.jeroenveen.nl):
 | `decrypt_data_cached.py` | Production decryption with caching + `--force` (ADR-003) |
 | `utils/secure_data_handler.py` | AES-CBC-256 + HMAC-SHA256 |
 | `scripts/netlify_build.sh` | Shared Netlify build script |
-| `scripts/daily_update.sh` | Sadalsuud daily job — ARF backup + parquet consolidate + LGBM retrain + shadow eval + commit + push. Triggered by `scripts/systemd/augur-daily.timer` (deployed to `/etc/systemd/system/`), gated by `scripts/wait_for_edh.sh` polling EDH freshness. Two pre-flight alarms: `SHADOW_PRE_AGE_H >36h` (stale state) and `DEP_PROBE_OK=0` (lightgbm/river import broken in venv), plus two post-run output guards (added 2026-06-12 after the EDH v2.2 silent-empty incident, augur#14): ARF forecast <24h and no new eval row >2 days. All surface in the daily commit subject. |
+| `scripts/daily_update.sh` | Sadalsuud daily job — ARF backup + parquet consolidate + LGBM retrain + shadow eval + commit + push. Triggered by `scripts/systemd/augur-daily.timer` (deployed to `/etc/systemd/system/`), gated by `scripts/wait_for_edh.sh` polling EDH freshness. **ARF runs NON-FATAL (`set +e`) since 2026-07-03** — a backup-signal failure can no longer abort the production LightGBM push; its rc shows as `ARF OK`/`ARF FAIL rc=N` in the commit subject. Pre-flight alarms (all surface in the commit subject): `SHADOW_PRE_AGE_H >36h` (stale state), `DEP_PROBE_OK=0` (**lightgbm/pandas** import broken — river deliberately excluded 2026-07-03 so a broken backup-only dep can't skip production), and a non-blocking pytest smoke gate (`SMOKE_OK`, writes `logs/smoke.log`). Two post-run output guards (2026-06-12, augur#14): ARF forecast <24h and no new eval row >2 days. |
 | `scripts/wait_for_edh.sh` | systemd `ExecStartPre` gate — polls EDH `data_quality_report.json:timestamp` for today's date (max wait 4h, then proceeds with stale data so the run isn't fail-closed). |
 | `scripts/systemd/{augur-daily.service,augur-daily.timer,README.md}` | Canonical systemd unit files; deploy via `sudo cp` to `/etc/systemd/system/`. |
 | `netlify.toml` | Build pipeline: decrypt → hugo |
@@ -174,13 +174,14 @@ Client browser (https://energy.jeroenveen.nl):
 ## How to Work Here
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies — reproducible venv from the pinned lockfile
+scripts/bootstrap_venv.sh --dev     # creates ./.venv from requirements.lock; --dev adds pytest
+source .venv/bin/activate
 npm install
 
-# Set encryption keys (Windows PowerShell)
-$env:ENCRYPTION_KEY_B64 = "your_key"
-$env:HMAC_KEY_B64 = "your_key"
+# Set encryption keys (bash; or use a .env file the daily job sources)
+export ENCRYPTION_KEY_B64="your_key"
+export HMAC_KEY_B64="your_key"
 
 # Fetch and decrypt data
 python decrypt_data_cached.py --force
