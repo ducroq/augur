@@ -109,13 +109,46 @@ python3 -c "from lightgbm import LGBMRegressor; import river; import pandas; imp
     DEP_PROBE_OK=0
 }
 
-# Run ARF model update (production — must succeed)
+# Pre-flight pytest smoke gate (NON-BLOCKING). The import dep-probe above
+# catches an empty/husk install, but a subtly wrong environment (major
+# version bump, unpicklable model) can import cleanly and still misbehave.
+# A fast unit subset catches that class before it ships. Non-blocking on
+# purpose: a flaky test must never freeze the dashboard — the failure
+# surfaces as an ALARM in the commit subject, same as the other pre-flight
+# alarms. Needs pytest (requirements-dev.txt); skipped with a WARN if absent.
+SMOKE_OK=1
+if python -c "import pytest" 2>/dev/null; then
+    echo "Running pytest smoke gate..."
+    python -m pytest -q -x --no-header -p no:cacheprovider \
+        "$AUGUR_DIR/tests/test_secure_pickle.py" \
+        "$AUGUR_DIR/tests/test_conformal.py" \
+        "$AUGUR_DIR/tests/test_metrics.py" \
+        "$AUGUR_DIR/tests/test_lightgbm_quantile.py" \
+        > "$AUGUR_DIR/logs/smoke.log" 2>&1 || SMOKE_OK=0
+    [ "$SMOKE_OK" = "0" ] && echo "ALARM: pytest smoke gate failed — see logs/smoke.log; env may be broken."
+else
+    echo "WARN: pytest not installed in venv — smoke gate skipped (run scripts/bootstrap_venv.sh --dev)."
+fi
+
+# Run ARF model update (backup signal — NON-FATAL since the 2026-05-29
+# EXP-014 demotion; LightGBM-Quantile is production). A failure here must
+# NOT abort the LightGBM production shadow steps or the git push — so run
+# it under set +e and surface any failure as an ALARM in the commit
+# subject. (Before 2026-07-03 this ran under set -e as "must succeed",
+# which let a stale ARF pickle freeze the whole dashboard for 5 days after
+# the situla/sadalsuud migration — see memory/gotcha-log.md.)
 echo "Running ARF model update..."
+set +e
 python -m ml.update --data-dir $DATAHUB_DIR/data --augur-dir $AUGUR_DIR
+ARF_UPDATE_RC=$?
+if [ $ARF_UPDATE_RC -ne 0 ]; then
+    echo "ALARM: ARF model update failed (rc=$ARF_UPDATE_RC) — backup signal down; continuing to LightGBM production steps."
+fi
 
 # --- EXP-009 shadow pipeline: non-blocking -------------------------------
-# Shadow failures must not block the ARF commit. set +e for this block;
-# the trap restores set -e regardless of how we exit it.
+# Shadow failures must not block the LightGBM production commit. Already
+# under set +e from the ARF block above; kept explicit for clarity. The
+# trap restores set -e regardless of how we exit it.
 set +e
 
 # Parquet consolidate runs even with shadow parked — parquet has other uses
@@ -225,9 +258,14 @@ STALE_MARKER=""
 [ "$SHADOW_WAS_STALE" = "1" ] && STALE_MARKER=" [recovered after stale state ${SHADOW_PRE_AGE_H}h]"
 DEP_MARKER=""
 [ "$DEP_PROBE_OK" = "0" ] && DEP_MARKER=" [ALARM: dep probe failed — shadow skipped]"
+# ARF is now a non-fatal backup signal — report its real rc, don't hardcode "OK".
+ARF_STATUS="ARF OK"
+[ "${ARF_UPDATE_RC:-0}" -ne 0 ] && ARF_STATUS="ARF FAIL rc=${ARF_UPDATE_RC}"
+SMOKE_MARKER=""
+[ "${SMOKE_OK:-1}" = "0" ] && SMOKE_MARKER=" [ALARM: smoke tests failed]"
 
 git diff --cached --quiet && echo "No changes to commit" || {
-    git commit -m "Daily update $(date -u '+%Y-%m-%d') — ARF OK | ${SHADOW_STATUS}${STALE_MARKER}${DEP_MARKER}${ARF_EMPTY_MARKER}${EVAL_STALE_MARKER}"
+    git commit -m "Daily update $(date -u '+%Y-%m-%d') — ${ARF_STATUS} | ${SHADOW_STATUS}${STALE_MARKER}${DEP_MARKER}${SMOKE_MARKER}${ARF_EMPTY_MARKER}${EVAL_STALE_MARKER}"
     git push
 }
 

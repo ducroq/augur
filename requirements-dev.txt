@@ -1,0 +1,7 @@
+# Dev/test-only dependencies — NOT needed for the Netlify build or the
+# daily ML job's happy path, but required to run the pytest suite (the
+# smoke gate in scripts/daily_update.sh and the bootstrap verification).
+#
+# Install alongside the runtime env:  scripts/bootstrap_venv.sh --dev
+# Exact versions are captured in requirements.lock (pip freeze).
+pytest>=8.0
