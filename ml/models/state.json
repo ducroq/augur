@@ -5015,13 +5015,13 @@
       "mae": 14.61,
       "last_week_mae": 16.24,
       "n_samples": 9471,
-      "mae_vs_exchange": 14.44,
+      "mae_vs_exchange": 2.84,
       "mae_at_low_price": 14.87,
       "mae_at_low_price_n": 73
     }
   ],
   "consumer_surcharge": {
     "value_eur_mwh": 110.85,
-    "last_updated": "2026-08-02T16:55:29.949275+00:00"
+    "last_updated": "2026-08-03T20:31:26.217145+00:00"
   }
 }
