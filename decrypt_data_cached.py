@@ -13,6 +13,7 @@ import os
 import sys
 import json
 import base64
+import gzip
 import urllib.request
 import time
 import logging
@@ -152,7 +153,20 @@ def fetch_with_retry(url, max_retries=3, initial_delay=1):
         try:
             logger.info(f"Attempt {attempt + 1}/{max_retries}: Fetching {url}")
             with urllib.request.urlopen(url, timeout=30) as response:
-                data = response.read().decode()
+                raw = response.read()
+
+                # urllib does not decompress automatically; handle the common case.
+                content_encoding = response.headers.get('Content-Encoding', '').lower()
+                if content_encoding in ('gzip', 'x-gzip'):
+                    raw = gzip.decompress(raw)
+                elif content_encoding == 'br':
+                    raise ValueError("Brotli-encoded responses are not supported")
+
+                # Respect the server-declared charset instead of assuming UTF-8.
+                # Google (and others) can return `charset=ISO-8859-1` to the default
+                # urllib User-Agent, which breaks a hard-coded UTF-8 decode.
+                charset = response.headers.get_content_charset() or 'utf-8'
+                data = raw.decode(charset)
                 logger.info(f"Successfully fetched {len(data)} characters from {url}")
                 return data
         except urllib.error.HTTPError as e:
