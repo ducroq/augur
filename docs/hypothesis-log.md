@@ -20,6 +20,22 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 
 ## Open
 
+### [2026-08-20] Feature expansion is the highest-leverage untried lever; calibration asymmetry has flipped to the upper side
+
+**Position (provisional):** Production LightGBM-Quantile runs on 24 features built from only 4 columns (`price_eur_mwh`, `wind_speed_80m`, `solar_ghi`, `load_forecast`) while energyDataHub already collects ~7 more series (`ned_production`, `grid_imbalance`, `cross_border_flows`, `gas_storage`, `gas_flows`, `market_proxies`, `generation_forecast`) that never reach `consolidate.py`. Expanding features — residual load, generation mix, and volatility/uncertainty signals — is the highest-leverage untried lever for both point skill and the augur#19 quantile-spread gap. Re-computing `calibration_history` coverage through 2026-08-19 shows the per-side asymmetry has **flipped to the upper side**: August lower 0.916 / upper 0.755 (band ~0.67 vs 0.80 target), versus lower 0.834 / upper 0.886 through 2026-06-11 — so augur#19's "lower-side" framing is now stale.
+
+**Alternative:** EXP-017 (9-quantile training) alone fixes the raw-quantile gap without new features — the path queued by the EXP-015/016 resolution.
+
+**Method (pre-committed, deferred):** two-stage. *Stage 0* — per-feature-group ablation (drop lags / rolling / calendar / wind / solar / load; measure MAE + quantile score + coverage) on existing data. *Stage 1* — walk-forward backtest (temporal split, 56-day window, vintage-corrected) of incumbent (24 features, 3 quantiles) vs candidate (24 + fundamentals + volatility + calendar-gaps). Gates: calibration — lower AND upper coverage ∈ [0.85, 0.95] AND Winkler ≤ 1.05× incumbent; skill guardrail — paired DM on |y−p50| (α=0.10 one-sided, HAC bandwidth 71) not worse. Freshness skew (consolidate overwrites rows with later vintages) bounds backtest optimism — plan a short live confirmation before any production change.
+
+**Revisit trigger:** next session — pick up EXP-018, run Stage-0 ablation first.
+
+**Review by:** 2026-08-27.
+
+**Domain:** EXP-018, feature engineering, calibration (augur#19).
+
+**Status:** open — deferred 2026-08-20. Supersedes individual feature issues #2/#3/#4/#22 into one evaluated experiment. GPU hosts (jwasys-b650-eagle-ax, sadaltager, gpu-server) available but not needed for LightGBM feature work; hold for a possible neural-quantile track.
+
 ### [2026-05-29] The Augur method + the M4 arc are publishable if we invest ~2-3 weeks of empirical follow-up
 
 **Position (provisional):** Augur's production stack (ADR-006: LightGBM-Quantile multi-horizon + CQR + horizon-as-feature stacking + 56-day rolling window on NL day-ahead) is *not* novel as a method — every component is in Lago, Marcjasz, De Schutter & Weron (2021) or Nowotarski & Weron (2018). On its own it's a competent application, not a paper. But combined with the five-iteration M4 → EXP-014 narrative arc (`docs/articles/m4-metric-redesign-story.md`) and the promotion method (ADR-007), plus ~2-3 weeks of standard EPF empirical follow-up, the package becomes publishable as an applied methodology paper at *International Journal of Forecasting* practitioner section, IEEE PES workshops, or similar applied-ML venues.
