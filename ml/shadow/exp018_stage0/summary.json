@@ -1,0 +1,383 @@
+{
+  "config": {
+    "parquet": "ml/data/training_history.parquet",
+    "vintage_start": "2025-12-01",
+    "vintage_end": "2026-08-22",
+    "window_days": 56,
+    "max_horizon": 72,
+    "hac_lags": 71,
+    "quantiles": [
+      0.1,
+      0.5,
+      0.9
+    ],
+    "cqr_applied": false,
+    "n_vintages": 263
+  },
+  "variants": {
+    "full": {
+      "n_obs": 18715,
+      "n_vintages": 260,
+      "mae": 28.972030697430174,
+      "quantile_score": 10.541171304285873,
+      "coverage_lower": 0.7778787069195833,
+      "coverage_upper": 0.8046486775313919,
+      "coverage_band": 0.5825273844509752,
+      "band_width_median": 63.5470491654732,
+      "winkler": 169.26953013694336,
+      "n_features": 24,
+      "dropped": [],
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 1560,
+          "mae": 11.622673698298623,
+          "quantile_score": 4.193471332702685,
+          "coverage_lower": 0.7487179487179487,
+          "coverage_upper": 0.7801282051282051
+        },
+        "h7_24": {
+          "n_obs": 4679,
+          "mae": 27.208945627583407,
+          "quantile_score": 10.15245950112043,
+          "coverage_lower": 0.7719598204744603,
+          "coverage_upper": 0.8048728360760846
+        },
+        "h25_72": {
+          "n_obs": 12476,
+          "mae": 31.80262319185613,
+          "quantile_score": 11.480670701743461,
+          "coverage_lower": 0.7837447899967939,
+          "coverage_upper": 0.8076306508496313
+        }
+      }
+    },
+    "drop_lags": {
+      "n_obs": 18715,
+      "n_vintages": 260,
+      "mae": 28.75109401501272,
+      "quantile_score": 10.531220839571326,
+      "coverage_lower": 0.7759551162169382,
+      "coverage_upper": 0.8089233235372696,
+      "coverage_band": 0.5848784397542078,
+      "band_width_median": 63.10575951026981,
+      "winkler": 170.22461795457943,
+      "n_features": 16,
+      "dropped": [
+        "price_lag_1h",
+        "price_lag_2h",
+        "price_lag_3h",
+        "price_lag_6h",
+        "price_lag_12h",
+        "price_lag_24h",
+        "price_lag_48h",
+        "price_lag_168h"
+      ],
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 1560,
+          "mae": 11.310967574357136,
+          "quantile_score": 4.137518173055151,
+          "coverage_lower": 0.7339743589743589,
+          "coverage_upper": 0.7871794871794872
+        },
+        "h7_24": {
+          "n_obs": 4679,
+          "mae": 27.716405658744577,
+          "quantile_score": 10.327204212172397,
+          "coverage_lower": 0.7687540072665099,
+          "coverage_upper": 0.8102158580893354
+        },
+        "h25_72": {
+          "n_obs": 12476,
+          "mae": 31.319858367882333,
+          "quantile_score": 11.407204324611785,
+          "coverage_lower": 0.7839050977877525,
+          "coverage_upper": 0.8111574222507214
+        }
+      },
+      "dm_full_beats_variant": {
+        "statistic": 0.2517947729410009,
+        "p_one_sided": 0.5994001511145454,
+        "mean_loss_diff_full_minus_variant": 0.009950464714548293,
+        "hac_lags": 71
+      }
+    },
+    "drop_rolling": {
+      "n_obs": 18715,
+      "n_vintages": 260,
+      "mae": 27.24156937489159,
+      "quantile_score": 9.715117717119792,
+      "coverage_lower": 0.8051830082821266,
+      "coverage_upper": 0.7932139994656693,
+      "coverage_band": 0.5983970077477959,
+      "band_width_median": 58.20252253679057,
+      "winkler": 153.40162856122416,
+      "n_features": 18,
+      "dropped": [
+        "price_rolling_mean_6h",
+        "price_rolling_mean_24h",
+        "price_rolling_mean_168h",
+        "price_rolling_std_6h",
+        "price_rolling_std_24h",
+        "price_rolling_std_168h"
+      ],
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 1560,
+          "mae": 11.189968304229339,
+          "quantile_score": 4.190280429437252,
+          "coverage_lower": 0.7660256410256411,
+          "coverage_upper": 0.7564102564102564
+        },
+        "h7_24": {
+          "n_obs": 4679,
+          "mae": 26.028838462490462,
+          "quantile_score": 9.392423788028115,
+          "coverage_lower": 0.7941867920495832,
+          "coverage_upper": 0.8093609745672152
+        },
+        "h25_72": {
+          "n_obs": 12476,
+          "mae": 29.70348550260544,
+          "quantile_score": 10.52696695269247,
+          "coverage_lower": 0.8142032702789356,
+          "coverage_upper": 0.7917601795447259
+        }
+      },
+      "dm_full_beats_variant": {
+        "statistic": 6.47614220760286,
+        "p_one_sided": 0.9999999999529513,
+        "mean_loss_diff_full_minus_variant": 0.82605358716608,
+        "hac_lags": 71
+      }
+    },
+    "drop_calendar": {
+      "n_obs": 18715,
+      "n_vintages": 260,
+      "mae": 31.077519799101385,
+      "quantile_score": 11.513000780852389,
+      "coverage_lower": 0.7728025647876036,
+      "coverage_upper": 0.8098316858135186,
+      "coverage_band": 0.5826342506011221,
+      "band_width_median": 66.17781119526373,
+      "winkler": 187.48870149257422,
+      "n_features": 17,
+      "dropped": [
+        "hour",
+        "hour_sin",
+        "hour_cos",
+        "dow_sin",
+        "dow_cos",
+        "is_weekend",
+        "month_sin"
+      ],
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 1560,
+          "mae": 12.994898592066425,
+          "quantile_score": 4.686930251497579,
+          "coverage_lower": 0.7660256410256411,
+          "coverage_upper": 0.8243589743589743
+        },
+        "h7_24": {
+          "n_obs": 4679,
+          "mae": 30.268020755140945,
+          "quantile_score": 11.212134732414267,
+          "coverage_lower": 0.7728147039965805,
+          "coverage_upper": 0.8014533019876042
+        },
+        "h25_72": {
+          "n_obs": 12476,
+          "mae": 33.64216672998191,
+          "quantile_score": 12.479369991050811,
+          "coverage_lower": 0.7736453991663995,
+          "coverage_upper": 0.8111574222507214
+        }
+      },
+      "dm_full_beats_variant": {
+        "statistic": -8.208216426146935,
+        "p_one_sided": 1.1224914207521453e-16,
+        "mean_loss_diff_full_minus_variant": -0.9718294765665176,
+        "hac_lags": 71
+      }
+    },
+    "drop_wind": {
+      "n_obs": 18715,
+      "n_vintages": 260,
+      "mae": 28.873494601829357,
+      "quantile_score": 10.512020627063619,
+      "coverage_lower": 0.7757948169917179,
+      "coverage_upper": 0.8146940956452043,
+      "coverage_band": 0.5904889126369223,
+      "band_width_median": 64.38898829837794,
+      "winkler": 168.73235683479888,
+      "n_features": 23,
+      "dropped": [
+        "wind_speed_80m"
+      ],
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 1560,
+          "mae": 11.876403944868143,
+          "quantile_score": 4.214468600963714,
+          "coverage_lower": 0.7532051282051282,
+          "coverage_upper": 0.7608974358974359
+        },
+        "h7_24": {
+          "n_obs": 4679,
+          "mae": 27.299892945819842,
+          "quantile_score": 10.156863726407396,
+          "coverage_lower": 0.7711049369523403,
+          "coverage_upper": 0.8179098097884163
+        },
+        "h25_72": {
+          "n_obs": 12476,
+          "mae": 31.588975811618397,
+          "quantile_score": 11.432665088340174,
+          "coverage_lower": 0.7803783263866624,
+          "coverage_upper": 0.8202148124398846
+        }
+      },
+      "dm_full_beats_variant": {
+        "statistic": 0.6885616547335639,
+        "p_one_sided": 0.7544504206967648,
+        "mean_loss_diff_full_minus_variant": 0.029150677222253736,
+        "hac_lags": 71
+      }
+    },
+    "drop_solar": {
+      "n_obs": 18715,
+      "n_vintages": 260,
+      "mae": 28.88534590877099,
+      "quantile_score": 10.555121434540688,
+      "coverage_lower": 0.7777718407694363,
+      "coverage_upper": 0.8070531659096981,
+      "coverage_band": 0.5848250066791344,
+      "band_width_median": 63.815517295496704,
+      "winkler": 169.99391527366353,
+      "n_features": 23,
+      "dropped": [
+        "solar_ghi"
+      ],
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 1560,
+          "mae": 11.627707831482684,
+          "quantile_score": 4.192899193330533,
+          "coverage_lower": 0.7551282051282051,
+          "coverage_upper": 0.7775641025641026
+        },
+        "h7_24": {
+          "n_obs": 4679,
+          "mae": 27.341511800734942,
+          "quantile_score": 10.14074219555613,
+          "coverage_lower": 0.7687540072665099,
+          "coverage_upper": 0.8072237657619149
+        },
+        "h25_72": {
+          "n_obs": 12476,
+          "mae": 31.622241964563752,
+          "quantile_score": 11.50606301481454,
+          "coverage_lower": 0.7839852516832319,
+          "coverage_upper": 0.8106764988778454
+        }
+      },
+      "dm_full_beats_variant": {
+        "statistic": -0.36370827823931373,
+        "p_one_sided": 0.35803793050170113,
+        "mean_loss_diff_full_minus_variant": -0.013950130254814556,
+        "hac_lags": 71
+      }
+    },
+    "drop_load": {
+      "n_obs": 18715,
+      "n_vintages": 260,
+      "mae": 28.865427458972615,
+      "quantile_score": 10.552473322449698,
+      "coverage_lower": 0.7773443761688485,
+      "coverage_upper": 0.8091370558375635,
+      "coverage_band": 0.586481432006412,
+      "band_width_median": 63.93922181362613,
+      "winkler": 170.369055320888,
+      "n_features": 23,
+      "dropped": [
+        "load_forecast"
+      ],
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 1560,
+          "mae": 11.475978275323914,
+          "quantile_score": 4.179741795393992,
+          "coverage_lower": 0.7423076923076923,
+          "coverage_upper": 0.7698717948717949
+        },
+        "h7_24": {
+          "n_obs": 4679,
+          "mae": 27.215380238110853,
+          "quantile_score": 10.14203510366265,
+          "coverage_lower": 0.7715323787134003,
+          "coverage_upper": 0.8132079504167558
+        },
+        "h25_72": {
+          "n_obs": 12476,
+          "mae": 31.65863935965426,
+          "quantile_score": 11.503250944116218,
+          "coverage_lower": 0.7839050977877525,
+          "coverage_upper": 0.8125200384738698
+        }
+      },
+      "dm_full_beats_variant": {
+        "statistic": -0.3037174003471199,
+        "p_one_sided": 0.3806716001457783,
+        "mean_loss_diff_full_minus_variant": -0.011302018163825532,
+        "hac_lags": 71
+      }
+    },
+    "drop_exog": {
+      "n_obs": 18715,
+      "n_vintages": 260,
+      "mae": 29.00982261643956,
+      "quantile_score": 10.621288832869169,
+      "coverage_lower": 0.7733903286134117,
+      "coverage_upper": 0.8070531659096981,
+      "coverage_band": 0.5804434945231098,
+      "band_width_median": 62.79007945107851,
+      "winkler": 170.70322891559698,
+      "n_features": 21,
+      "dropped": [
+        "wind_speed_80m",
+        "solar_ghi",
+        "load_forecast"
+      ],
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 1560,
+          "mae": 11.615569601686548,
+          "quantile_score": 4.209212957658644,
+          "coverage_lower": 0.7621794871794871,
+          "coverage_upper": 0.7628205128205128
+        },
+        "h7_24": {
+          "n_obs": 4679,
+          "mae": 27.70724233461962,
+          "quantile_score": 10.252077500992524,
+          "coverage_lower": 0.761060055567429,
+          "coverage_upper": 0.8091472536866852
+        },
+        "h25_72": {
+          "n_obs": 12476,
+          "mae": 31.673321160977082,
+          "quantile_score": 11.561524340017233,
+          "coverage_lower": 0.7794164796409105,
+          "coverage_upper": 0.8117986534145559
+        }
+      },
+      "dm_full_beats_variant": {
+        "statistic": -1.7397176814779087,
+        "p_one_sided": 0.0409543015243533,
+        "mean_loss_diff_full_minus_variant": -0.08011752858329663,
+        "hac_lags": 71
+      }
+    }
+  }
+}

@@ -20,6 +20,47 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 
 ## Open
 
+### [2026-08-25] EXP-018a: removing the six rolling-stat features (and the three exogenous) beats the 24-feature production set out of sample
+
+**Position (provisional):** The EXP-018 Stage-0 sweep (entry below) found the production feature set carries features that actively hurt: dropping the six rolling stats buys −6.0% MAE / −7.8% quantile score, and the 15-feature **lean** set (rolling + exogenous removed) buys −6.5% / −8.1% with better lower-side coverage. Position: this is a real generalisation gain, not a selection artifact, and it will reproduce on vintages that did not exist when the finding was made. Mechanism claim: absolute-level features (`price_rolling_mean_168h` above all) make tree splits that are calibrated to the training window's price level, which is exactly what breaks when the level drifts — the same failure that produced August's upper-side coverage breach.
+
+**Why this needs its own pre-commit:** Stage 0 was pre-committed as *descriptive*. The lean variant is the best of eight compared on one 263-vintage window, so its effect size is upward-biased by selection. Per ADR-007 ("don't loosen Method when the answer arrives; open a new entry"), the confirming test is fixed here, before the confirming data is looked at — and before any change to `FEATURE_COLUMNS`.
+
+**Alternatives (failure-mode signals):**
+
+1. **Regime-dependent, not universally harmful.** Rolling stats cost us in the volatile 2026 regime but earned their place in calm months — Stage 0 shows a +5.8% *loss* from dropping them in Dec 2025 and a wash in Jan. **Signal:** the fresh-vintage window is calm and shows no gain. Then the answer is regime-conditional features (or a longer training window), not deletion, and this entry is refuted rather than the feature set vindicated.
+2. **The real lever is stationarity, not removal.** Lean wins because absolute-level features drift, not because the information is worthless. **Signal:** a stationary reformulation (`price_lag_1h − price_rolling_mean_168h` spreads, price/rolling-mean ratios) beats *both* lean and incumbent in the same harness. Then park the deletion and open EXP-019 for the reformulation.
+3. **Selection-bias mirage.** **Signal:** fresh-vintage QS gain is under 2% (against −8.1% in-sample). Do not ship on a shrunken effect; extend the holdout instead.
+4. **Exogenous removal is the wrong half.** Lean drops rolling *and* exogenous; the offline harness is if anything biased *toward* keeping exogenous (`consolidate.py` overwrites parquet rows with later vintages, so backtest exogenous is fresher than live). **Signal:** `drop_rolling` alone ≥ lean on fresh vintages. Then ship the rolling deletion only and keep wind/solar/load.
+
+**Method (pre-committed 2026-08-25):**
+
+*Stage 1 — fresh-vintage confirmation, offline, zero production risk.* When ≥14 vintages with `t0 ≥ 2026-08-25` exist in `ml/data/training_history.parquet` (≈2026-09-09, allowing for the 72h realisation lag), run:
+
+```
+PYTHONPATH=. OMP_NUM_THREADS=1 .venv/bin/python scripts/exp018_stage0_ablation.py \
+    --start 2026-08-25 --end <first-unrealised-day> --jobs 14 \
+    --variants full,drop_rolling,drop_rolling_and_exog \
+    --out ml/shadow/exp018_stage1
+```
+
+Incumbent = `full`. Treatment = whichever of `drop_rolling` / `drop_rolling_and_exog` has the lower in-sample QS (i.e. `drop_rolling_and_exog`, fixed here so the choice is not made on the holdout). IMPLEMENT iff **all four** hold on the fresh vintages:
+
+1. **Skill:** paired DM on per-observation quantile score, H1 treatment better, one-sided **p < 0.10**, HAC bandwidth 71.
+2. **Effect size survives:** treatment QS at least **3% better** than incumbent (guards Alternative 3; in-sample was 8.1%).
+3. **Calibration:** treatment lower-side and upper-side coverage each **not more than 0.02 worse** than incumbent (raw quantiles, no CQR — same "not worse than incumbent" framing as EXP-014).
+4. **Sharpness:** treatment mean Winkler (α=0.20) **≤ 1.05 ×** incumbent.
+
+*Stage 2 — live confirmation after deploy.* Swap `FEATURE_COLUMNS` in `ml/shadow/features_pandas.py`, deploy, then after **14 evaluable post-deploy vintages** in `shadow_state.json:calibration_history` (NOT `eval_log.jsonl` — it mixes 24/48/72h vintages): (1) mean `lightgbm_mae` from `eval_log.jsonl` ≤ the pre-deploy trailing-14-vintage mean; (2) band coverage not worse than the pre-deploy trailing-14 baseline (0.660 for Aug 2026 — a low bar, deliberately: this entry is about skill, augur#19 is the calibration arc); (3) no new alarm classes in the daily commit subjects. PASS → registry `kept`, update ADR-006's feature list + CLAUDE.md. FAIL → revert (one-line: restore the six/nine columns), registry `rolled_back`.
+
+**Revisit trigger:** ≥14 vintages with `t0 ≥ 2026-08-25` in the parquet — ≈2026-09-09. Surface in `/curate`.
+
+**Review by:** 2026-09-16.
+
+**Domain:** EXP-018a, feature engineering, LightGBM production architecture (ADR-006), augur#19.
+
+**Status:** open — pre-committed 2026-08-25, awaiting fresh vintages. Branch `exp018-feature-reduction`.
+
 ### [2026-08-20] Feature expansion is the highest-leverage untried lever; calibration asymmetry has flipped to the upper side
 
 **Position (provisional):** Production LightGBM-Quantile runs on 24 features built from only 4 columns (`price_eur_mwh`, `wind_speed_80m`, `solar_ghi`, `load_forecast`) while energyDataHub already collects ~7 more series (`ned_production`, `grid_imbalance`, `cross_border_flows`, `gas_storage`, `gas_flows`, `market_proxies`, `generation_forecast`) that never reach `consolidate.py`. Expanding features — residual load, generation mix, and volatility/uncertainty signals — is the highest-leverage untried lever for both point skill and the augur#19 quantile-spread gap. Re-computing `calibration_history` coverage through 2026-08-19 shows the per-side asymmetry has **flipped to the upper side**: August lower 0.916 / upper 0.755 (band ~0.67 vs 0.80 target), versus lower 0.834 / upper 0.886 through 2026-06-11 — so augur#19's "lower-side" framing is now stale.
@@ -34,7 +75,18 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 
 **Domain:** EXP-018, feature engineering, calibration (augur#19).
 
-**Status:** open — deferred 2026-08-20. Supersedes individual feature issues #2/#3/#4/#22 into one evaluated experiment. GPU hosts (jwasys-b650-eagle-ax, sadaltager, gpu-server) available but not needed for LightGBM feature work; hold for a possible neural-quantile track.
+**Status:** Stage 0 run 2026-08-25 — **Position refuted, Alternative not confirmed either.** Supersedes individual feature issues #2/#3/#4/#22 into one evaluated experiment. GPU hosts (jwasys-b650-eagle-ax, sadaltager, gpu-server) available but not needed for LightGBM feature work; hold for a possible neural-quantile track.
+
+**Stage-0 resolution (2026-08-25):** `scripts/exp018_stage0_ablation.py`, 263 vintages 2025-12-01..2026-08-22, production-shaped (56-day window, h+1..h+72, no CQR), 2104 fits. Results in `ml/shadow/exp018_stage0/summary.json`.
+
+The Position said feature *expansion* is the highest-leverage lever. Stage 0 says the opposite: the existing set contains features that actively hurt, and the exogenous series we already feed contribute almost nothing.
+
+- **Rolling stats are harmful.** Dropping all six lifts MAE −6.0% (28.97 → 27.24), quantile score −7.8% (10.54 → 9.72) *and* lower-side coverage 0.778 → 0.805. Reverse-direction DM (HAC 71): stat −6.48, p<0.0001 on QS; −5.02, p<0.0001 on |error|. Holds in 7 of 9 months, biggest in the volatile recent regime (May −14%, Jul −11%, Aug −9%), costs only Dec 2025 (+5.8%); holds across all three horizon groups.
+- **Calendar is the only group clearly earning its place** (+7.3% MAE, +9.2% QS when dropped, DM p=0.000).
+- **The exogenous trio is worth ~nothing.** wind −0.3%, solar −0.3%, load −0.4% individually; all three together +0.8% QS (p=0.041). Not a data defect — over the last 120 days `load_forecast` correlates 0.59 with price and `solar_ghi` −0.53. LightGBM extracts nothing beyond what price lags plus calendar already encode.
+- **Mechanism (second sweep, `ml/shadow/exp018_stage0_mech/`)**: damage is diffuse, not one broken column — rolling_mean −1.6%, rolling_std −1.8%, the 168h pair −2.2%, short windows −0.8%, all six −6.0%. Best variant is the 15-feature **lean** set (drop rolling + exog): MAE 27.08 (−6.5%), QS 9.69 (−8.1%), lower coverage 0.810. Reading: level-carrying, redundant features dilute the split search, and absolute-threshold splits learned in a 56-day window generalise badly when the price level moves.
+
+Consequences: (a) the addition bet (#2/#3/#4/#22) is demoted behind a **reduction** bet — see the [2026-08-25] entry below; (b) augur#19's framing needs rewriting *again* — production through 2026-08-24 is lower 0.887 / upper 0.774 / band 0.660, so the breach is upper-side, while EXP-017's premise was a high-biased q10.
 
 ### [2026-05-29] The Augur method + the M4 arc are publishable if we invest ~2-3 weeks of empirical follow-up
 

@@ -4,6 +4,26 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
+## 2026-08-25 — EXP-018 Stage 0: the production feature set is carrying dead weight
+
+**Trigger**: The 2026-08-20 curation deferred EXP-018 (feature expansion + ablation) to "next session" with a 2026-08-27 review-by. Picked up as the session's first work item.
+
+**What ran**: New harness `scripts/exp018_stage0_ablation.py` — production-shaped walk-forward (t0 = last clean feature row of each vintage day, 56-day training window, `MultiHorizonLightGBMQuantileForecaster`, h+1..h+72, **no CQR**), 263 vintages 2025-12-01..2026-08-22. Two sweeps: 8 group-level variants (2104 fits) and 6 mechanism-split variants (1578 fits), ~45 min each on 14 cores. Row set fixed to complete full-feature vectors so every variant sees identical timestamps; scoring uses raw tau outputs for pinball (EXP-013's sort-then-pinball lesson) and sorted quantiles for coverage/Winkler.
+
+**Findings**:
+
+1. **The six rolling-stat features actively hurt.** Removing them: MAE 28.97 → 27.24 (−6.0%), quantile score 10.54 → 9.72 (−7.8%), lower-side coverage 0.778 → 0.805. Reverse DM (HAC 71): −6.48, p<0.0001 on QS; −5.02, p<0.0001 on |error|. Wins in 7 of 9 months, largest in the volatile recent regime (May −14%, Jul −11%, Aug −9%), loses only Dec 2025 (+5.8%); holds in all three horizon groups, so it is not a long-horizon artifact.
+2. **Calendar is the only group clearly earning its place** — dropping it costs +7.3% MAE / +9.2% QS, DM p=0.000.
+3. **The exogenous trio is inert.** wind −0.3%, solar −0.3%, load −0.4% individually; all three together +0.8% QS (p=0.041). Not a data defect: over the last 120 days `load_forecast` correlates 0.59 with price and `solar_ghi` −0.53. The model extracts nothing from them beyond what price lags + calendar already encode. This refutes the EXP-018 premise that *more* fundamentals (#2/#3/#4/#22) is the highest-leverage lever.
+4. **Mechanism is diffuse, not one bad column**: rolling_mean −1.6%, rolling_std −1.8%, the 168h pair −2.2%, short windows −0.8%, all six −6.0%. Best variant is a 15-feature **lean** set (rolling + exogenous removed): MAE 27.08 (−6.5%), QS 9.69 (−8.1%), lower coverage 0.810. Reading: redundant absolute-level features dilute the split search, and splits calibrated to a 56-day window's price level generalise badly when the level drifts.
+5. **augur#19 has flipped sides again.** Recomputed from `calibration_history` through 2026-08-24: Jul lower 0.865 / upper 0.841 / band 0.706; **Aug lower 0.887 / upper 0.774 / band 0.660**. The lower side has essentially healed; the upper side is now the breach, and total band coverage is well under the 0.80 target. August's mean price (128 EUR/MWh, the highest in the parquet, vs 106 in July) makes this the mirror of EXP-016's first-shift-day finding — a trailing-window model under-reaching an upward level shift. EXP-017's premise (q10_raw biased high) is stale.
+
+**What did NOT change**: no production code touched. `FEATURE_COLUMNS` is untouched; the finding is a best-of-eight selection on a single window and ships only through the pre-committed confirmation in `docs/hypothesis-log.md` [2026-08-25] EXP-018a — fresh vintages with `t0 ≥ 2026-08-25`, four gates (DM p<0.10, ≥3% QS effect survives, coverage not >0.02 worse per side, Winkler ≤1.05×), then a 14-vintage live watch with a one-line revert.
+
+**Logged**: `experiments/registry.jsonl` EXP-018 (`kept` — evidence, no deployment); Stage-0 resolution appended to the 2026-08-20 hypothesis-log entry; EXP-018a pre-commit opened. Branch `exp018-feature-reduction`.
+
+---
+
 ## 2026-07-03 — Post-migration recovery: venv/pickle freeze, ARF decoupling, dependency pinning
 
 **Trigger**: Repo moved from the original (Windows) dev machine to **situla** (Linux dev), deploy stays on **sadalsuud**. User flagged "not everything is up to speed." Investigation found the dashboard silently frozen on **2026-06-28** data: `augur-daily.service` had failed every night since 2026-06-29 (day after a sadalsuud reboot), while the timer stayed healthy — the only alive-signal (missing daily commits on origin/main) had gone unnoticed for 5 days.
