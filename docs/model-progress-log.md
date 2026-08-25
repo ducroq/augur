@@ -20,7 +20,9 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 **What did NOT change**: no production code touched. `FEATURE_COLUMNS` is untouched; the finding is a best-of-eight selection on a single window and ships only through the pre-committed confirmation in `docs/hypothesis-log.md` [2026-08-25] EXP-018a — fresh vintages with `t0 ≥ 2026-08-25`, four gates (DM p<0.10, ≥3% QS effect survives, coverage not >0.02 worse per side, Winkler ≤1.05×), then a 14-vintage live watch with a one-line revert.
 
-**Logged**: `experiments/registry.jsonl` EXP-018 (`kept` — evidence, no deployment); Stage-0 resolution appended to the 2026-08-20 hypothesis-log entry; EXP-018a pre-commit opened. Branch `exp018-feature-reduction`.
+**Logged**: `experiments/registry.jsonl` EXP-018 (`kept` — evidence, no deployment); Stage-0 resolution appended to the 2026-08-20 hypothesis-log entry; EXP-018a pre-commit opened. Branch `exp018-feature-reduction`, merged to `main` as `d7581b9`.
+
+**Same-day follow-up — EXP-019 (`rejected`)**: tested whether the lever is stationarity rather than removal. `scripts/exp019_stationary_ablation.py` adds anchor-relative spreads (`spread_lag_Hh = price_lag_Hh − price_rolling_mean_168h`, pure column algebra over the existing builder — same rows, no new inputs) and sweeps 5 variants over the same 263 vintages. Anchor-relative spreads **tie** plain deletion (lean 27.08 / QS 9.69 vs stat_lean_noanchor 27.33 / QS 9.71; DM QS p=0.405, |error| p=0.160), so the reparameterisation buys nothing. The informative half: **re-adding `price_rolling_mean_168h` as the single explicit level column costs significantly** (−5.7% → −2.5% MAE vs incumbent, QS p=0.0001). Since raw price lags are also absolute levels and are harmless, drift is at most half the story — redundant smoothed-level columns diluting the split search fits better. EXP-018a Alternative 2 refuted pre-emptively; Stage-1 treatment stays the plain lean set. Alternative 1 (regime-dependence) remains live: both lean variants lose in Dec 2025/Jan 2026 and win 10-13% in Mar/May/Jul/Aug, which is exactly what the fresh-vintage window will test.
 
 ---
 

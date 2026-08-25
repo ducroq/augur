@@ -106,3 +106,6 @@ ml/forecasts/
 # EXP-018 ablation: per-hour prediction dumps are large and regenerable from
 # scripts/exp018_stage0_ablation.py; the summary.json next to them is the record.
 ml/shadow/exp018_stage0*/predictions.parquet
+
+# EXP-019 sweep: same rationale as EXP-018 — summary.json is the record.
+ml/shadow/exp019_stationary*/predictions.parquet
