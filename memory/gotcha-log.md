@@ -1,5 +1,11 @@
 # Gotcha Log
 
+Header markers carry entry status so a header-only scan (`grep -nE '^#{2,3} '`) is
+enough to see what is still open: `[RESOLVED]` = closed, `[RESOLVED*]` = closed for
+the incident with residual follow-ups named in the body, `[xN]` = recurrence count.
+Markers were lifted from bodies into headers on 2026-08-26; keep new ones in the
+header.
+
 ## Promoted
 
 | Entry | Promoted to | Date |
@@ -43,7 +49,7 @@
 **Pattern**: A "canary" URL's response encoding is outside your control — never hard-code UTF-8 for an arbitrary host. And a "retry logic" test that only fetches one external URL wasn't testing retry at all.
 **Status**: [RESOLVED] — CI green (run `32290476187`), deployed via Netlify auto-build on push.
 
-### Dev/deploy migration (situla+sadalsuud) rebuilt the venv from loose pins → river 0.25 couldn't unpickle ARF → 5-day silent dashboard freeze (2026-07-03)
+### Dev/deploy migration (situla+sadalsuud) rebuilt the venv from loose pins → river 0.25 couldn't unpickle ARF → 5-day silent dashboard freeze (2026-07-03) [RESOLVED*]
 **Problem**: After moving dev to situla with deploy on sadalsuud, the dashboard silently froze on 2026-06-28 data. `origin/main` had no daily commit for 5 days, yet the `augur-daily.timer` was healthy and firing nightly. The `augur-daily.service` was `failed` every night since 2026-06-29 (the day after a sadalsuud reboot at ~10:30). systemd's journal showed only the wrapper; the real error was in `logs/daily_update.log` (root-owned, mode 640): `AttributeError: Can't get attribute '__pyx_unpickle_VectorDict' on <module 'river.utils.vectordict'>`.
 **Root cause**: A chain, not one bug. (1) The migration rebuilt sadalsuud's `.venv` from `requirements.txt`'s loose `>=` ranges (`river>=0.21`, `pandas>=2.2`, `numpy>=1.26`), so pip pulled bleeding-edge majors: river 0.25.0, pandas 3.0.4, numpy 2.5.0. (2) river 0.25's Cython `VectorDict` pickle helper is incompatible with the committed `river_model.pkl` (saved under ~0.21). (3) ARF's `ml.update` ran under `set -e` with the comment "production — must succeed" — STALE since the 2026-05-29 EXP-014 demotion that made ARF a *backup* signal. So a backup-signal unpickle failure aborted the whole script *before* the production LightGBM shadow step, commit, or push. LightGBM itself was fine under the new deps (verified: `shadow_model.pkl` loads, all shadow modules import, 195/195 tests pass).
 **Fix** (commits `96dd499`, `affa443`): (a) Run ARF under `set +e` in `daily_update.sh`; failure now surfaces as `ARF FAIL rc=N` in the commit subject instead of killing production. (b) Regenerate `river_model.pkl` via `ml.training.warmup` under river 0.25 (consolidate→warmup→ml.update; ml.update confirmed load + 72h forecast + surcharge cache refresh). (c) Pin the verified-working set in `requirements.lock` (pip freeze). (d) `scripts/bootstrap_venv.sh` for reproducible identical venvs + situla parity. (e) Non-blocking pytest smoke gate as a pre-flight in `daily_update.sh`.
@@ -53,7 +59,7 @@
 
 ---
 
-### "ARF OK | eval rc=0" while ARF published empty forecasts and eval vintages silently vanished (2026-06-12)
+### "ARF OK | eval rc=0" while ARF published empty forecasts and eval vintages silently vanished (2026-06-12) [RESOLVED]
 **Problem**: Investigating two missing eval-log rows (2026-06-08, 2026-06-10) revealed the EDH v2.2 break's blast radius was bigger than the 2026-06-10 entry recorded: (a) ARF's archives for 06-08 (both runs) and 06-09 contain ZERO forecast hours — the live `augur_forecast.json` was empty those days while three daily commits said "ARF OK"; (b) eval vintages 06-08 and 06-10 have zero rows in `calibration_history` — permanently unevaluable; (c) the 06-09 eval row has `arf_mae: null` because `find_arf_archive_for_day` picked the empty 06-08 archive with no fallback to an earlier non-empty one.
 **Root cause**: Three independent mechanisms, all downstream of the v2.2 parser break. (1) `daily_update.sh`'s status line reflects exit codes only — `ml.update` exits 0 even when `generate_forecast` emits zero hours (every hour skipped because `fb.build` found no load data). (2) `eval_day` in `shadow_state.json` is a forecast *vintage* keyed to the date of the last realised parquet price (t0); with the parquet stale, t0 froze, new predictions deduped into the old vintage, and when the fix landed t0 jumped over 06-10 — vintages are skippable by design and nothing alarms. (3) The archive-lookup in `evaluate_shadow.py` takes the single most recent file before the eval day, empty or not.
 **Fix**: Two non-blocking post-run guards in `daily_update.sh` (commit `1c33daa`), surfacing in the commit subject like the pre-flight alarms: `[ALARM: ARF forecast Nh]` when the published forecast spans <24h, `[ALARM: eval stale Nd]` when no eval row lands for >2 days. Incident documented on augur#14 (the umbrella for gap detection); the eval-vintage gaps themselves are unrecoverable.
@@ -63,7 +69,7 @@
 
 ---
 
-### EDH v2.2 envelope wrap ALSO broke Augur Python parsers (recurrence of 2026-06-07, 3 days later) (2026-06-10)
+### EDH v2.2 envelope wrap ALSO broke Augur Python parsers (recurrence of 2026-06-07, 3 days later) (2026-06-10) [RESOLVED]
 **Problem**: User reported the dashboard's 72h forecast showing only ~24h of stub data, not the expected three-day horizon. Initial diagnosis chained Augur log lines `WARNING ENTSO-E data missing in 260609_083716_energy_price_forecast.json — skipping Energy Zero to avoid contamination` to "EDH's ENTSO-E NL day-ahead collector is down again" (echoing the 2026-03-26 outage precedent in memory). A memo from the EDH-side investigation corrected the attribution: ENTSO-E NL was healthy; the actual cause was EDH's schema v2.2 envelope wrap (`3dfc7fb`, 2026-06-07 12:43 CEST) that Augur's Python parsers had never been updated for.
 **Root cause**: The dashboard-side fix in `4a557c8` (2026-06-07) shipped its commit message asserting "Python ML pipeline migrated transparently via `_migrate_2_1_to_2_2`". That assertion was UNVERIFIED and WRONG — `load_json_file` in `ml/data/consolidate.py` (line 67) never invokes `schema_registry`, so `parse_price_file`/`_parse_single_source`/`parse_wind_file` kept reading top-level `data['entsoe']` and `data['offshore_wind']`, silently returned empty Series for every v2.2 file, and pinned `training_history.parquet` at 2026-06-07 21:00Z. `update_shadow.py` picks `t0 = parquet.index.max()`, so the 72h LGBM forecast covered mostly-past hours and the dashboard rendered only a 24h stub. ARF (`ml/update.py`) was equally broken — it imports the same parsers from `consolidate.py`.
 **Fix**: Single helper `_unwrap_v22_envelope(data)` in `ml/data/consolidate.py` applied at three sites (`parse_price_file`, `_parse_single_source`, `parse_wind_file`) mirroring the JS `obj.data ?? obj` shim from `4a557c8`. Commit `e11487b`. Verified end-to-end on sadalsuud: v2.2 file `260609_083716` 0 → 96 entsoe quarterly points, v2.1 file `260606_183514` 192 → 192 (no regression), full consolidate advanced parquet 2026-06-07 21:00Z → 2026-06-11 21:00Z, shadow update advanced t0 and produced full 72h forecast (2026-06-12..2026-06-14). Manual `systemctl start augur-daily.service` (commit `576a65c`) cycled the full daily chain clean; eval log backfilled 2026-06-07 (LGBM 30.6 vs ARF 39.5, LGBM wins) and 2026-06-09 (LGBM 19.9, ARF empty so no compare). Architectural alternative (importing EDH's `migrate_to_current` for full version-walk support) rejected because Augur's parquet history only reaches v2.1+ (starts 2025-09-28) and cross-repo Python import adds sys.path glue + test mock complexity.
@@ -75,7 +81,7 @@
 
 ---
 
-### lightgbm install on sadalsuud silently mangled mid-day (2026-06-10)
+### lightgbm install on sadalsuud silently mangled mid-day (2026-06-10) [RESOLVED*]
 **Problem**: During end-to-end smoketest of the v2.2 parser fix, `python -m ml.shadow.update_shadow` raised `ImportError: cannot import name 'LGBMRegressor' from 'lightgbm' (unknown location)`. Yesterday's 18:30 CEST daily run had been clean. Inspection found the venv's `lightgbm/` directory existed but contained ONLY `lib/` and `__pycache__/` subdirectories (no `__init__.py`, no source `.py` files). `pip show lightgbm` reported "Package(s) not found" — pip considered it uninstalled. Directory mtime was 2026-06-10 15:50 UTC (17:50 CEST), before this session started.
 **Root cause**: Unknown. Plausible candidates: interrupted `pip install/uninstall` between yesterday's clean run and this morning's session; unattended-upgrades Python ABI bump invalidating the install; manual `rm` from a sibling session.
 **Fix**: `.venv/bin/pip install --force-reinstall lightgbm` reinstalled `lightgbm-4.6.0` (and bumped numpy 2.4.3 → 2.4.6). End-to-end smoketest passed after reinstall.
@@ -84,7 +90,7 @@
 
 ---
 
-### sadalsuud `.venv/` was tracked in git, leaking pip thrash into daily commits (2026-06-10)
+### sadalsuud `.venv/` was tracked in git, leaking pip thrash into daily commits (2026-06-10) [RESOLVED]
 **Problem**: After the v2.2 parser smoketest involved a `pip install --force-reinstall lightgbm`, sadalsuud's `git status` showed thousands of modified/deleted/untracked files inside `.venv/` (numpy 2.4.3 dist-info deleted, 2.4.6 added, source files modified, etc.). Each daily `git add -A && git commit` in `scripts/daily_update.sh` had been sweeping whatever venv noise existed at run time into the daily commit. The lightgbm reinstall today would have leaked into the next nightly commit as a ~20k-line diff.
 **Root cause**: `.gitignore` had no `.venv/` or `venv/` pattern. The venv had been tracked since whenever it was first created on sadalsuud. `git ls-files .venv | wc -l` = 7921 files tracked. Normally invisible because the venv is stable between cron runs.
 **Fix**: Two commits. `d20992a` adds `.venv/` and `venv/` to `.gitignore` (Python section). `967b653` runs `git rm -r --cached .venv/` on sadalsuud to actually untrack the 7921 existing files (large deletion commit, but disk content preserved). Future `git add -A` in `daily_update.sh` ignores the venv entirely. Verified clean on the next manual augur-daily run (`576a65c`: only 6 data/state files committed, no venv noise).
@@ -93,7 +99,7 @@
 
 ---
 
-### Upstream schema bump silently emptied wholesale + wind charts (2026-06-07)
+### Upstream schema bump silently emptied wholesale + wind charts (2026-06-07) [RESOLVED*]
 **Problem**: User reported the live dashboard was stale after updating the data collector. ARF cron pushed `9735d8a Daily update 2026-06-07` at 14:45 UTC, Netlify build succeeded, JSON files on the CDN carried today's prices (`schema_version: 2.3`, ENTSO-E goes through 2026-06-08, weather through 2026-06-17). Yet the Prices tab wholesale lines (entsoe/epex/elspot) and the Forecast→Wind chart rendered with zero traces.
 **Root cause**: Earlier today (`12:34 +0200`) the user pushed `energydatahub` commit `3dfc7fb` ("strategic envelope wrap v2.2"), which made `CombinedDataSet.to_dict()` produce a canonical `{metadata, data: {entsoe: ...}}` envelope so `energy_price_forecast.json` and `wind_forecast.json` matched the other 14 already-wrapped feeds. The commit message explicitly called it "Breaking change for consumers reading payload[\"entsoe\"] etc. — switch to payload[\"data\"][\"entsoe\"]". The Python ML side migrated transparently via `_migrate_2_1_to_2_2`; the dashboard JS read raw via `fetch()` + `JSON.parse()` and silently produced empty trace arrays from `data-processor.js:118` (`energyData[source.key]` undefined) and `tab-charts.js:65,78` (`wind['offshore_wind']` undefined).
 **Fix**: Defensive `const root = obj.data ?? obj` shim at three consumer sites (`data-processor.js:117`, `tab-charts.js:64-67/78-79`, plus `dashboard.js:264` lastUpdate chain extended with `?.data?.entsoe ?? ?.entsoe`). Commit `4a557c8`. Review battery: code-reviewer PASS, security-auditor PASS (no new XSS path; HMAC at build time + Plotly `%{x}` escaping contain the re-activated code path), user-interaction-reviewer REVIEW (5 silent-failure UX findings filed as augur#24). User reported back: hard-refresh restored entsoe/epex/wind; only Elspot looked "missing" but turned out to be Elspot's existing today-only coverage from EDH `collectors/elspot.py:129-133` plus a bit-identical-to-ENTSO-E quirk from the Feb 2026 pynordpool migration — pre-existing EDH issues, not today's regression.
@@ -102,7 +108,7 @@
 
 ---
 
-### Plotly datetime axis renders in UTC by default (2026-06-06)
+### Plotly datetime axis renders in UTC by default (2026-06-06) [RESOLVED]
 **Problem**: Augur forecast file was emitting real UTC ISO strings since the ADR-008 fix (`5ae82b4`), but the chart's vertical "now" line showed 06:00 when user's local wall-clock was 08:00 CEST. User observed during morning session 2026-06-06.
 **Root cause**: ADR-008's claim "Plotly renders UTC strings in the browser's local timezone" was wrong. Plotly's default datetime axis renders ISO strings with parseable offsets at their UTC clock positions (NOT browser-local). The fix in `5ae82b4` removed the inconsistent per-trace mutation but left the chart axis labeled in UTC. Inter-trace alignment was correct (all in UTC), but the user reads axis labels in their local timezone.
 **Fix**: New utility `utcToLocalNaiveISO(input)` in `static/js/modules/chart-renderer.js` (commit `fc24676`). Parses any ISO/Date to the absolute moment, then emits a *naive* ISO ("YYYY-MM-DDTHH:mm:ss.SSS", no offset) in browser-local. Plotly treats naive strings as local time without further conversion. Applied at the single rendering boundary: `renderChart()` maps it across every trace's `x` array via `localizeTraces()`, `getCurrentTimeLineShape()` routes the now-line through it, and `getChartLayout()` routes the explicit axis range bounds through it. Data-processor code unchanged — keeps using `new Date(ts)` for sorting/filtering which correctly handles absolute moments.
@@ -111,7 +117,7 @@
 
 ---
 
-### Browser cache on non-fingerprinted JS asset surfaces dropdown as "empty" (2026-06-06)
+### Browser cache on non-fingerprinted JS asset surfaces dropdown as "empty" (2026-06-06) [RESOLVED]
 **Problem**: After pushing `656e917` (added Cloud Cover dropdown), user reported the new dropdown showed no items. Inspecting live HTML and JS via curl confirmed both deployed correctly with both `populateSelect` calls. So why did the user see one empty dropdown?
 **Root cause**: `/js/dashboard.js` is served by Netlify with `Cache-Control: public,max-age=86400,must-revalidate` and a fixed URL (not fingerprinted). User's browser was running the OLD pre-`656e917` dashboard.js (cached) against the NEW HTML that has both `<select>` elements. Old JS only called `populateSelect` for `#weather-location`, so `#weather-location-cloud` rendered as an empty `<select>`.
 **Fix (immediate)**: Hard-refresh in browser (`Ctrl+Shift+R`) — invalidates the JS cache, fetches the new version, both dropdowns populate. The user-interaction reviewer's Finding #3 predicted exactly this scenario (file: 2nd review battery 2026-06-05).
@@ -121,7 +127,7 @@
 
 ---
 
-### Rapid commits trigger GH Pages "in progress" deployment errors (2026-06-06)
+### Rapid commits trigger GH Pages "in progress" deployment errors (2026-06-06) [RESOLVED]
 **Problem**: Three commits pushed to energydatahub within ~5 minutes (`cabf0ae` → `1f68f9f` → `f0ad743`) triggered three GitHub Pages workflow runs. The first succeeded; the second and third failed with `HttpError: Deployment request failed for <SHA> due to in progress deployment. Please cancel <prev SHA> first or wait for it to complete.`
 **Root cause**: GitHub Pages allows only one deployment in flight per repo. When a new deployment is requested while a prior one is still in "in progress" status (even if its workflow run otherwise looks complete), the API rejects it with 400. Particularly likely with the `actions/deploy-pages@v5` action; the prior deployment's slot can stay reserved for a minute or two after the workflow shows complete.
 **Fix**: Re-run the latest failed pages-build workflow once enough time has passed for the prior deployment slot to clear. `gh run rerun <run-id>` works. The intermediate failed runs can be left as-is — their artifacts are superseded by the latest successful one.
@@ -130,7 +136,7 @@
 
 ---
 
-### Silent-failure factory recognised across a different collector (2026-06-06)
+### Silent-failure factory recognised across a different collector (2026-06-06) [RESOLVED]
 **Problem**: `GoogleWeatherCollector` in the energyDataHub repo had been returning `API_KEY_INVALID` for ~7 months after Google Weather went GA in Nov 2025. The dashboard's Weather tab charts ("Temperature & Wind 10-day", "Cloud Cover & Humidity") showed "no data available" the entire time. The `data_quality_report.json` correctly flagged `overall_status: critical`, but the workflow exited 0 because the per-collector error was swallowed into an empty location dict at `googleweather.py:522-527`.
 **Root cause**: Same structural pattern as the May 2026 shadow-cron incident (gotcha 2026-05-08 "Shadow cron failed silently for 7 nights"). Layers conspired: (a) per-collector exception caught and stored as `{name, error, data: None}`, (b) orchestrator iterates location dicts and treats empty as "skip", (c) workflow exit code only reflects orchestrator success, not quality-report status. Three layers each defensible alone; together a "silent failure factory" across a different code path.
 **Fix**: Two-part. (1) Replace GoogleWeatherCollector entirely with `OpenMeteoWeatherCollector` (already in the repo for demand-side data, just at different locations). Output to the same `weather_forecast_multi_location.json` filename so augur's downstream consumer needs no change. Commits `df1bdb8` → `6e9433e`. (2) Add a defensive workflow step in `.github/workflows/collect-data.yml` that `jq`-checks `data_quality_report.json:overall_status` and exits 1 on `critical`. Placed before the docs-copy + commit + Netlify-trigger steps so degraded data doesn't propagate. This is the same shape as the May 2026 fix but applied at the workflow level rather than the collector level.
@@ -139,7 +145,7 @@
 
 ---
 
-### ADR mandating a code pattern is worthless if the pattern can be silently bypassed (2026-06-03)
+### ADR mandating a code pattern is worthless if the pattern can be silently bypassed (2026-06-03) [RESOLVED]
 **Problem**: ADR-001 (2025-11-15) mandated the `convertUTCToAmsterdam(date).toISOString()` pattern for all chart timestamps. Worked when ADR-001 was written. By 2026-06-03 the Augur ML forecast trace (added later) wrote real-UTC ISO strings to `augur_forecast_shadow.json` and the dashboard rendered those directly without conversion — bypassing the ADR entirely. EnergyZero traces (which followed the ADR) and Augur forecast traces (which didn't) ended up on different x-grids; by construction they could never align. User noticed visually after months of running. Filed as augur#16.
 **Root cause**: ADR-001 documented a convention but no mechanism enforced it. New code paths added between 2025-11 and 2026-06 didn't have a reason to know the convention existed. The ADR text + the function naming (`convertUTCToAmsterdam` suggests a sensible utility, not "mandatory invariant for every chart input") gave the impression of a helper, not a rule.
 **Fix**: ADR-008 supersedes ADR-001. New convention: data layer carries real UTC; Plotly renders in browser-local. The Augur forecast trace had been doing this all along — ADR-008 just unifies EZ and the now-line onto the same convention. `convertUTCToAmsterdam` deleted entirely (zero remaining callers ≠ "the pattern is fine if applied uniformly", which was ADR-001's hope).
@@ -148,7 +154,7 @@
 
 ---
 
-### `Closes augur#NN` in commit message doesn't auto-close — must be bare `#NN` for same-repo (2026-06-03)
+### `Closes augur#NN` in commit message doesn't auto-close — must be bare `#NN` for same-repo (2026-06-03) [RESOLVED]
 **Problem**: Commit `07fb9a4` had trailer `Closes augur#17.` (treating the cross-repo-style prefix as documentation). Pushed to main. Issue did NOT auto-close. Had to close manually with `gh issue close 17 --comment`. Next commit used `Closes #16` (bare) — issue auto-closed correctly.
 **Root cause**: GitHub's closing-keyword parser interprets `augur#17` as a cross-repo reference to a repo literally named `augur` in the same org as the commit's repo (which would resolve to `ducroq/augur` — the same repo, but it doesn't reliably trigger). The bare `#NN` form is what the parser auto-fires on. The cross-repo form sometimes works for org-prefix resolution but the org-bare form ("just the repo name") is unreliable.
 **Fix**: For same-repo issue references in commit messages, use `Closes #NN` (or `Fixes`, `Resolves`). For cross-repo, use the full `Closes ducroq/repo#NN`. Never the bare `repo#NN`.
@@ -157,7 +163,7 @@
 
 ---
 
-### First cron after un-parking shadow always trips `[recovered after stale state Nh]` marker (2026-06-01)
+### First cron after un-parking shadow always trips `[recovered after stale state Nh]` marker (2026-06-01) [RESOLVED]
 **Problem**: Calendar-scheduled glance at GitHub for the 2026-05-30 daily cron commit. Subject line read `Daily update 2026-05-30 — ARF OK | shadow rc=0/eval rc=0 [recovered after stale state 47h]` — and `daily_update.sh:87` logs `ALARM: shadow_state.json is 47h stale at start of run (>36h). Likely silent failure on prior run(s).` Strongly suggests a real failure mode on a day that should have been the first clean post-promotion run.
 **Root cause**: Benign one-shot from un-parking. `shadow_state.json:last_run_utc` is only updated at `update_shadow.py:527` when the shadow block runs successfully. The 2026-05-29 cron ran in M4-parked mode (`shadow rc=parked/eval rc=parked` in commit `35a922b`), so it never touched the state file. EXP-014 (same date) re-enabled the shadow block in `daily_update.sh:106-128`. The first post-re-enable cron (2026-05-30 14:45 UTC) therefore saw `last_run_utc` from the 2026-05-28 run — ~48h stale — and tripped the >36h heartbeat guard at `daily_update.sh:71-89`. Shadow ran successfully on the same invocation; eval correctly backfilled with `n_overlap_hours: 48` for date `2026-05-28`. 2026-05-31 commit clean, no recurrence.
 **Fix**: None to the runtime — recovery worked exactly as designed. Cleaned up stale comment at `daily_update.sh:161-165` that referenced the retired `"parked"` sentinel (the post-EXP-014 fallback is `"skip"`, not `"parked"`); kept the defensive string equality on the healthchecks ping for future sentinel resilience.
@@ -166,7 +172,7 @@
 
 ---
 
-### scipy 1.17 broke statsmodels.api import (2026-05-29)
+### scipy 1.17 broke statsmodels.api import (2026-05-29) [RESOLVED]
 **Problem**: While building `ml/shadow/metrics.py:diebold_mariano`, importing `import statsmodels.api as sm` raised `ImportError: cannot import name '_lazywhere' from 'scipy._lib._util'`. statsmodels.distributions.discrete tries to import a private scipy helper that was removed in scipy 1.17.
 **Root cause**: statsmodels (0.14.4 in the dev env) hasn't caught up with scipy 1.17's removal of `_lazywhere`. Augur doesn't pin either, so the project picked up scipy 1.17 from PyPI and broke a transitively-used statsmodels feature.
 **Fix**: Replaced `statsmodels.api.OLS + cov_hac` with a manual Bartlett-kernel Newey-West HAC implementation inline in `diebold_mariano` (~10 lines of numpy). No statsmodels dependency now. See `ml/shadow/metrics.py` and the 2026-05-29 commit that introduced the function.
@@ -175,7 +181,7 @@
 
 ---
 
-### Sadalsuud Tailscale outage caught cron mid-run — DNS failure at git pull, then host offline (2026-05-22)
+### Sadalsuud Tailscale outage caught cron mid-run — DNS failure at git pull, then host offline (2026-05-22) [RESOLVED]
 **Problem**: Healthchecks.io alerted at 17:45 CEST that the Augur-shadow heartbeat had been silent for 25h. Diagnostic showed sadalsuud unreachable on Tailscale (last seen 2h prior), with other HCL-site nodes also offline ~6h prior — site-level network issue. Today's 14:45 UTC cron actually tried to run, but failed at the first `git pull energydatahub` step with `Could not resolve host: github.com`. `set -e` bailed cleanly before any ML steps; no partial state corruption.
 **Root cause**: Tailscale severed at HCL edge site mid-day; LXC host went fully offline shortly after. Not an augur code or orchestration bug — a host-availability failure mode that systemd migration (augur#12) doesn't address.
 **Fix**: User restarted sadalsuud. Ran `bash scripts/daily_update.sh` manually at 16:52 UTC. Backfill landed commit `1fc3ba5`: 2026-05-21 eval row logged (lgbm_mae=26.339, arf_mae=41.897, coverage=0.375), HC re-pinged. M4 row count crossed 14-row threshold (Method now data-ready for the 2026-05-23 verdict session).
@@ -188,7 +194,7 @@
 
 ---
 
-### update_shadow.py appends to pending_predictions without dedup — running twice on same parquet stacks duplicates (2026-05-08)
+### update_shadow.py appends to pending_predictions without dedup — running twice on same parquet stacks duplicates (2026-05-08) [RESOLVED]
 **Problem**: During the silent-failure recovery, I ran `update_shadow.py` manually at 08:45 UTC for bootstrap, then a smoke-test rehearsal at 08:46 UTC, then the cron would have run at 14:45 UTC. All three runs see the same parquet (EDH at 16:00 UTC hadn't dropped yet) so each picks the same `t0=2026-05-07 21:00 UTC` and generates 72 pending predictions with the same `eval_day=2026-05-07`. Result: 144 pending entries (and would have been 216 after cron) for the same eval_day, with two-three predictions per timestamp. When realised, all get moved to calibration_history → the May 7 eval row's MAE/coverage averages over multiple prediction sets, polluting M4 promotion data.
 **Root cause**: `run_shadow_update` at `ml/shadow/update_shadow.py:385` does `state["pending_predictions"] = trim_to_recent_days(list(state["pending_predictions"]) + new_pending, MAX_HISTORY_DAYS)` — it appends without deduplicating against existing entries with the same (timestamp, eval_day). `trim_to_recent_days` only trims by calendar day, not by uniqueness. Normally invisible because t0 advances daily as parquet advances; bites when t0 stays the same across runs.
 **Fix (operational)**: Reset `pending_predictions = []` on sadalsuud before tonight's cron so the stacked dups are gone. Cron then produces canonical first set.
@@ -198,7 +204,7 @@
 
 ---
 
-### Shadow cron failed silently for 7 nights — argparse mismatch hidden by non-blocking + conditional-add (2026-05-08)
+### Shadow cron failed silently for 7 nights — argparse mismatch hidden by non-blocking + conditional-add (2026-05-08) [RESOLVED]
 **Problem**: M3 deployed 2026-04-30. By 2026-05-08, shadow pipeline had run successfully ONCE: `shadow_state.json:last_run_utc` frozen at Apr 30, `calibration_history` empty, `eval_log.jsonl` never created — yet daily commits May 1-7 were titled "Daily update YYYY-MM-DD — ARF + LGBM-shadow", strongly suggesting shadow was running. M4 14-day window was effectively at day 0, not day 7.
 **Root cause**: `scripts/daily_update.sh:63` called `python -m ml.shadow.update_shadow --augur-dir $AUGUR_DIR`, but `update_shadow.py`'s argparse only defines `--parquet/--shadow-dir/--forecast-out`. argparse exits rc=2 every night. `evaluate_shadow.py` (called next) accepts the flags it's passed, so the asymmetry only bit the update step.
 **Fix**: Drop the flag — `update_shadow.py` defaults resolve from `_REPO_ROOT` (line 59-62). Single-line script edit. Followup TODO: harmonize the two CLIs so daily_update.sh has one consistent invocation pattern.
@@ -218,7 +224,7 @@
 
 ---
 
-### sadalsuud venv missing a Python dep that the cron script silently needed (2026-04-30)
+### sadalsuud venv missing a Python dep that the cron script silently needed (2026-04-30) [RESOLVED]
 **Problem**: First manual dry-run of EXP-009 M3 shadow pipeline on sadalsuud crashed with `ModuleNotFoundError: No module named 'lightgbm'`. The M3 commits added `lightgbm>=4.0` to `requirements.txt` but cron doesn't `pip install -r requirements.txt` — it just activates the venv and runs.
 **Root cause**: `scripts/daily_update.sh` activates `.venv` and runs Python directly. There's no dependency-install step. New deps land in requirements.txt locally, get pushed to origin, sadalsuud pulls main, and the cron uses whatever the venv currently has — which may not match requirements.txt.
 **Fix**: `pip install lightgbm>=4.0` manually in sadalsuud's venv. Updated `memory/sadalsuud-server.md` (auto-memory) with the manual-install discipline.
@@ -227,7 +233,7 @@
 
 ---
 
-### Path-fix commit left orphan tracked files in the wrong location (2026-04-30)
+### Path-fix commit left orphan tracked files in the wrong location (2026-04-30) [RESOLVED]
 **Problem**: M3 review fixup A redirected ARF forecast archives from `static/ml/forecasts/` (where the buggy `output_dir.parent` calculation wrote them) to `ml/forecasts/` (the documented location). On sadalsuud, the migration `mv` for the existing files surfaced as a working-tree disaster: `git status` showed dozens of deleted files, and the deletions weren't committed to ANY branch. The next `git pull` or branch checkout would have either conflicted or wiped the moved files.
 **Root cause**: `static/ml/forecasts/` was NOT gitignored (only `static/data/*.json` was). So the buggy code had been committing forecast archives to git for weeks. The path-fix commit corrected future writes but didn't address the historical files at the old path — leaving them tracked forever, and any filesystem-level migration showing up as untracked deletions on every machine that runs the cron.
 **Fix**: On sadalsuud, `git restore static/ml/forecasts/` to undo the local deletion (files are tracked, restoration is a checkout); leave the old files in place as frozen historical archives; new writes go to the new path. Both locations now exist; the duplication wastes ~few MB.
@@ -236,7 +242,7 @@
 
 ---
 
-### Pandas mixed timezone offsets in CSV parse to object dtype (2026-04-28)
+### Pandas mixed timezone offsets in CSV parse to object dtype (2026-04-28) [RESOLVED]
 **Problem**: `pd.read_csv("metrics_trajectory.csv", parse_dates=["commit_date"])` returned the column as object dtype instead of datetime64. Subsequent `.dt.tz_convert(...)` raised `AttributeError: Can only use .dt accessor with datetimelike values`.
 **Root cause**: The CSV had ISO-8601 timestamps spanning the EU DST transition — values like `2026-03-26T15:18:55+01:00` and `2026-03-29T16:45:06+02:00` in the same column. Pandas' `parse_dates` heuristic falls back to object dtype rather than picking a single dtype with mixed offsets.
 **Fix**: Don't rely on `parse_dates=`. Read first, then explicitly `pd.to_datetime(col, utc=True)` — `utc=True` normalises offsets to UTC, producing a clean tz-aware datetime64 column. Pattern saved in `_load_trajectory()` in `scripts/build_arf_retrospective_figures.py`.
@@ -245,7 +251,7 @@
 
 ---
 
-### Local main can lag origin/main when working from parked feature branch (2026-04-28)
+### Local main can lag origin/main when working from parked feature branch (2026-04-28) [RESOLVED]
 **Problem**: While diagnosing live model degradation, the initial read of `ml/models/state.json` showed `last_timestamp: 2026-04-21` and `git log -- ml/models/state.json` on `main` ended on the same date. Concluded production pipeline had been silent for 7 days. Wrong.
 **Root cause**: Local checkout was on `feat/new-features-ttf-genmix` (parked), forked at `12f0177 Daily model update 2026-04-21`. Local `main` was 7 commits behind `origin/main`, which had been receiving daily updates through 2026-04-28. The live dashboard reads from `origin/main`, not the local working tree.
 **Fix**: `git fetch origin && git show origin/main:ml/models/state.json` revealed the true production state — cron healthy, real degradation driven by a price regime shift. The misdiagnosis cost ~5 minutes and one round of pushback from the user.
@@ -254,14 +260,14 @@
 
 ---
 
-### Calibrated weather noise improved rather than degraded model (2026-04-19)
+### Calibrated weather noise improved rather than degraded model (2026-04-19) [RESOLVED]
 **Problem**: Designed a "leakage probe" for long-history warmup expecting perfect-knowledge weather to win over calibrated-noise weather. Got the opposite — noisy variant beat clean on both training MAE (14.98 vs 16.40) and backtest MAE (16.36 vs 18.06).
 **Root cause**: Calibrated noise (wind σ=1.8 m/s, solar σ=30 W/m² GHI-gated) acted as regularization, not leakage simulation. Price lags dominate the feature set; reducing weather feature precision prevented River ARF from overfitting to weak weather signals.
 **Fix**: Not a bug — downgrade the weather-leakage risk (FMEA #1, pre-RPN 648 / residual 180) going forward. Assume calibrated noise is safe-or-beneficial rather than a necessary evil.
 **Pattern**: When a feature has been shown low-importance by Lasso (temperature dropped per `memory/ml-decisions.md`), "perfect" vs "noisy" variants of that feature family are not meaningfully different. Test the assumption before architecting around it.
 **Status**: [RESOLVED] — captured in `docs/long-history-mini-results.md` on `feat/long-history-warmup` branch.
 
-### Backtest "N/N wins" claim missed an ARF cron-skip day (2026-04-29)
+### Backtest "N/N wins" claim missed an ARF cron-skip day (2026-04-29) [RESOLVED]
 **Problem**: Milestone 2 writeup led with "LightGBM wins 14/14 days" on the 14-day apples-to-apples window. Surfaced in review: window is 15 calendar days (04-14 → 04-28 inclusive), but ARF's `metrics_history.csv` is missing 04-22 (cron skip). The merge produced 14 rows — every one a LGBM win — so "14/14 wins" is technically correct but reads as "swept a contiguous 14-day window" when actually it's "all 14 evaluable days out of 15 calendar days, with 04-22 unrepresented in ARF". LGBM had predictions for 04-22 too (MAE 8.17) and would have won.
 **Root cause**: When merging on an external metrics series with cron gaps, headlines built from the merge silently inherit the gap. Sample-size phrasing didn't distinguish "evaluable rows" from "calendar days".
 **Fix**: State explicitly in summary: "LGBM wins all N evaluable days of the M-day calendar window; the gap on YYYY-MM-DD is an external-cron skip, not a LGBM failure." Done in `ml/shadow/backtest_results/summary.md`, `milestone_2_5_summary.md`, `docs/model-progress-log.md`.
@@ -270,7 +276,7 @@
 
 ---
 
-### Backtest MAE headlines need an explicit horizon qualifier (2026-04-29)
+### Backtest MAE headlines need an explicit horizon qualifier (2026-04-29) [RESOLVED]
 **Problem**: Milestone 2/2.5 summaries originally led with "MAE 12.83" / "+46% vs ARF" without specifying that this measures next-hour prediction with realized lag inputs ("h+1 perfect-lag"). The deployed system forecasts 72 hours ahead via iterated lag feeding; iterated MAE will be materially higher. A reader who saw only the headline could assume the deployed system would land at 12-13 EUR/MWh — which is the model-quality ceiling, not the deployed-system quality. Surfaced in the data-analyzer review.
 **Root cause**: Internal comparison framework focuses on h+1 because that's apples-to-apples with ARF's `update_mae` (which is also predict-before-learn at h+1). Easy to forget the qualifier when stating numbers in summaries.
 **Fix**: Always pair MAE headlines from a contemporaneous-prediction backtest with the qualifier "h+1 perfect-lag" or equivalent. Once iterated multi-horizon validation lands (milestone 3+), state which horizon the headline measures. Updated `summary.md`, `milestone_2_5_summary.md`, `model-progress-log.md`, `memory/arf-retired.md` (auto-memory).
@@ -279,7 +285,7 @@
 
 ---
 
-### Python stdout encoding breaks on Unicode arrows under Git Bash (2026-04-19, recurred 2026-04-29)
+### Python stdout encoding breaks on Unicode arrows under Git Bash (2026-04-19, recurred 2026-04-29) [RESOLVED]
 **Problem**: Probe script printing `→` arrow crashed with `UnicodeEncodeError: 'charmap' codec can't encode character '\u2192'` on Windows. Aborted a multi-probe parallel run mid-way.
 **Root cause**: Windows Python defaults to cp1252 stdout when invoked via Git Bash without explicit encoding. Non-ASCII output fails immediately.
 **Fix**: Set `PYTHONIOENCODING=utf-8` before the python invocation, or avoid non-ASCII characters in print statements for committed scripts.
@@ -289,44 +295,44 @@
 
 ---
 
-### Energy Zero consumer prices contaminating training target (2026-04-02)
+### Energy Zero consumer prices contaminating training target (2026-04-02) [RESOLVED]
 **Problem**: When ENTSO-E collector is down, `parse_price_file()` silently fell back to Energy Zero consumer prices (incl. VAT + ~110 EUR/MWh surcharge) as the training target. Model learned from wrong price series for ~5 days (March 26-31), causing last_week_mae to degrade from ~17 to 21.
 **Root cause**: `parse_price_file()` merged all sources including `energy_zero` with ENTSO-E overwriting — but when ENTSO-E is absent, Energy Zero remained as the "price".
 **Fix**: Removed `energy_zero` from the merge loop in `parse_price_file()` — only wholesale sources (entsoe, elspot, epex) are used. Added warning log when ENTSO-E is missing. Rolled back model to pre-contamination checkpoint (bbaa2c8, 4119 samples).
 **Pattern**: Any multi-source merge with silent fallback can corrupt data when the authoritative source disappears. Always validate that the primary source is present, or fail loudly.
 **Status**: [RESOLVED]
 
-### CI workflow references stale file names (2026-04-01)
+### CI workflow references stale file names (2026-04-01) [RESOLVED]
 **Problem**: CI failed on `chart.js not copied` and `No module named 'decrypt_data'` — both files were renamed/deleted in earlier refactors but `.github/workflows/test.yml` was never updated.
 **Root cause**: File renames (chart.js → dashboard.js, decrypt_data.py → decrypt_data_cached.py) didn't include CI workflow updates.
 **Fix**: Updated test.yml to reference `dashboard.js` and `decrypt_data_cached`. Added `sourceType:module` for ESLint on ES6 imports.
 **Status**: [RESOLVED]
 
-### Netlify --force flag not bypassing hash cache (2026-03, pre-Augur)
+### Netlify --force flag not bypassing hash cache (2026-03, pre-Augur) [RESOLVED]
 **Problem**: Webhook-triggered builds were serving stale data despite --force flag.
 **Root cause**: `decrypt_data_cached.py` --force bypassed age check but not hash check. Cached hash matched → skipped decryption even when forced.
 **Fix**: Added `if not force_refresh` guard around hash comparison at line 292.
 **Status**: [RESOLVED] — fix deployed, documented in ADR-003.
 
-### Elspot timezone offset malformed (2026-03, pre-Augur)
+### Elspot timezone offset malformed (2026-03, pre-Augur) [RESOLVED]
 **Problem**: Elspot data had `+00:09` timezone offset instead of `+02:00`.
 **Root cause**: Bug in energyDataHub's Elspot collector producing malformed timezone strings.
 **Fix**: energyDataHub migrated from nordpool to pynordpool (API v2) in 40632f6, and upstream entsoe-py/tenneteu-py timezone bugs fixed in 33fc596.
 **Status**: [RESOLVED] — root cause fixed in energyDataHub. Legacy `chart.js` deleted 2026-03-28.
 
-### energyDataHub ENTSO-E backfill completed (2026-03-28)
+### energyDataHub ENTSO-E backfill completed (2026-03-28) [RESOLVED]
 **Problem**: 43% of energyDataHub price files (123 of 235) were missing `entsoe` and/or `entsoe_de` datasets due to silent API failures since Sep 2025. Augur's warmup training used incomplete price data.
 **Fix**: energyDataHub backfilled 100 files with historical ENTSO-E day-ahead prices (NL + DE). Commit ducroq/energydatahub@7a1e4c1. Re-warmup completed 2026-03-28 (4,192 rows, MAE 13.80).
 **Remaining**: 26 early files (Sep-Oct 2025) still degraded due to malformed timestamps — low impact.
 **Status**: [RESOLVED]
 
-### Non-monotonic price index crashes _nearest (2026-03-28)
+### Non-monotonic price index crashes _nearest (2026-03-28) [RESOLVED]
 **Problem**: `_nearest()` in `ml/update.py` crashed with `ValueError: index must be monotonic` during forecast generation after ENTSO-E backfill.
 **Root cause**: `parse_price_file` merges multiple sources (energy_zero, elspot, epex, entsoe) by overwriting — the resulting series can have an unsorted index.
 **Fix**: Added `if not series.index.is_monotonic_increasing: series = series.sort_index()` guard in `_nearest`.
 **Status**: [RESOLVED]
 
-### Energy Zero hardcoded +2h offset (2026-03, pre-Augur)
+### Energy Zero hardcoded +2h offset (2026-03, pre-Augur) [RESOLVED]
 **Problem**: Legacy code added fixed +2 hours for NL timezone, incorrect during winter (UTC+1).
 **Root cause**: Quick implementation without proper timezone library.
 **Fix**: Modular `timezone-utils.js` uses `Intl.DateTimeFormat` correctly. Legacy `chart.js` deleted.
