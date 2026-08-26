@@ -78,7 +78,9 @@ Client browser (https://energy.jeroenveen.nl):
 ### ML Pipeline (live)
 - **Status (2026-05-29 — post EXP-014 promotion)**: LightGBM-Quantile drives the dashboard via `static/data/augur_forecast_shadow.json` (loaded by `static/js/dashboard.js:loadAugurForecast`). ARF cron continues as a backup signal — `static/data/augur_forecast.json` still updates daily and is read by `static/js/modules/model-viz.js` for the Model-tab metric widgets. The shadow now generates consumer-pricing fields too (`update_shadow.py:read_arf_surcharge` reads the cached surcharge from ARF's state.json and applies the same VAT+surcharge transform). To revert: change the path in `dashboard.js:loadAugurForecast` back to `augur_forecast.json`.
 - **Why the swap**: five iterations of criterion redesign converged on a single-criterion-plus-guardrail design (skill: paired DM on |y−p50_LGBM| vs |y−point_ARF|, HAC bandwidth 71, p<0.10; calibration: LGBM not >0.02 worse than ARF on either side). Applied to the M4 paired data: LGBM MAE 28.9 vs ARF MAE 38.4 (25% better, DM p=0.029); LGBM lower-side coverage 0.811 vs ARF 0.824 (within tolerance); LGBM upper-side 0.870 vs ARF 0.621 (LGBM materially better). PROMOTE = True. See `docs/articles/m4-metric-redesign-story.md` for the full arc, `docs/hypothesis-log.md` for the pre-committed criteria, `experiments/registry.jsonl` EXP-008..EXP-014.
-- **Known weakness inherited from the swap**: lower-side coverage 0.834 over 30 vintages / 2112 realised hours through 2026-06-11, below the 0.90 nominal target (measure from `shadow_state.json:calibration_history`, NOT `eval_log.jsonl` — eval rows mix 24/48/72h vintages and have permanent holes at 2026-06-08/06-10 from the EDH v2.2 break). Tracked as **augur#19**. **Calibration-layer arc resolved 2026-06-12**: EXP-015 (per-side CQR, `parked`) fixes the side asymmetry; EXP-016 (per-side ACI, `parked`) fixes post-shift days but hits a γ-independent ~0.85 ceiling from first-shift-day misses and trips the Winkler guardrail. Conclusion: the gap lives in the raw quantiles → **EXP-017 (9-quantile training) is next**, needing a walk-forward backtest + fresh ADR-007 pre-commit. See `docs/hypothesis-log.md` (both entries resolved same-day) and `experiments/registry.jsonl` EXP-015/016.
+- **Known weakness — calibration (augur#19), reframed 2026-08-25**: the P80 band is under-covering and **the deficit has moved to the upper side**. Measured from `shadow_state.json:calibration_history` (NOT `eval_log.jsonl` — eval rows mix 24/48/72h vintages and have permanent holes at 2026-06-08/06-10 from the EDH v2.2 break): Jul 2026 lower 0.865 / upper 0.841 / band 0.706; **Aug 2026 lower 0.887 / upper 0.774 / band 0.660** (target 0.80). The lower side has essentially healed since the 0.834 figure that opened the issue through 2026-06-11. Most likely driver: August's mean price of 128 EUR/MWh is the highest in the parquet, and a trailing-56-day model under-reaches an upward level shift.
+- **Calibration-layer arc resolved 2026-06-12**: EXP-015 (per-side CQR, `parked`) fixes the side asymmetry; EXP-016 (per-side ACI, `parked`) fixes post-shift days but hits a γ-independent ~0.85 ceiling from first-shift-day misses and trips the Winkler guardrail. Their conclusion — the gap lives in the raw quantiles → EXP-017 (9-quantile training) next — **is now stale on its premise**: EXP-015/016 diagnosed a high-biased `q10_raw`, and the live breach is the opposite side. Re-derive after the feature set settles. See `docs/hypothesis-log.md` and `experiments/registry.jsonl` EXP-015/016.
+- **Feature-set finding (EXP-018/EXP-019, 2026-08-25 — evidence only, nothing deployed)**: a production-shaped ablation over 263 vintages found the 24-feature set carries dead weight. Dropping the six rolling stats buys −6.0% MAE / −7.8% quantile score *and* lifts lower-side coverage (DM p<0.0001); calendar is the only group clearly earning its place (+7.3% MAE when dropped); wind/solar/load are inert (±0.4% each). Best variant is a **15-feature lean set** (−6.5% MAE / −8.1% QS). EXP-019 refuted the stationary-reparameterisation alternative (anchor-relative spreads tie plain deletion) but showed re-adding `price_rolling_mean_168h` alone costs most of the gain. Because this is a best-of-eight selection on one window, it ships only through the pre-committed **EXP-018a** gates on fresh vintages (`t0 ≥ 2026-08-25`, ≈2026-09-09) in `docs/hypothesis-log.md`.
 
 **ARF (backup signal, retired-as-model 2026-04-28, kept-running 2026-05-29 — see ADR-006 / ADR-004 superseded)**:
 - Model: River ARFRegressor (10 trees), continuous online learning
@@ -99,7 +101,7 @@ Client browser (https://energy.jeroenveen.nl):
 - Promotion criterion (now resolved): see `docs/hypothesis-log.md` iteration-5 entry and `scripts/exp014_evaluate_promotion.py`
 - Pickle integrity: HMAC-SHA256 sidecar via `ml/shadow/secure_pickle.py`; verify-before-load
 - Calibration_history schema: `p10/p50/p90` are sorted-CQR-widened; `p10_raw/p50_raw/p90_raw` are the raw tau-quantile model outputs (added 2026-05-29 after EXP-013 code review caught sort-then-pinball bias).
-- Open: augur#19 (calibration — EXP-017 9-quantile training next, after EXP-015/016 parked 2026-06-12), augur#26 (ARF 48h truncation — root-caused to the 15-min price buffer eviction, fixed `f49a1c8` maxlen 200→800; open pending ≥72h forecast confirmation on the 06-13/06-14 runs; EDH window narrowing secondary, filed energydatahub#33). augur#12 (cron→systemd + run-after-EDH) **resolved 2026-06-09** — system-level timer firing, observation window through 2026-06-15.
+- Open: **augur#19** (calibration — now an *upper-side* / band-width gap, see the reframed weakness bullet above; EXP-017's premise stale), **augur#28 / EXP-018a** (feature reduction — awaiting fresh vintages ≈2026-09-09). Closed 2026-08-26: augur#12 (cron→systemd, timer verified enabled+active), augur#26 (ARF back to 72h — `f49a1c8` maxlen 200→800 confirmed in `static/data/augur_forecast.json`), augur#27 (lockfile committed `affa443`; stale `# Cron:` comment removed).
 
 ## Key Paths
 
@@ -116,7 +118,7 @@ Client browser (https://energy.jeroenveen.nl):
 | `ml/shadow/eval_log.jsonl` | Append-only eval log per realised eval day |
 | `ml/shadow/secure_pickle.py` | HMAC-SHA256 sidecar; `save_signed_pickle` / `load_verified_pickle` |
 | `ml/shadow/metrics.py` | Reusable metrics module — pinball, mean_quantile_score, twcrps_left_tail, lower_side_coverage, winkler_interval_score, diebold_mariano (manual Newey-West HAC) |
-| `ml/models/shadow/shadow_model.pkl` | Trained LGBM artifact (HMAC-signed; committed daily by sadalsuud) |
+| `ml/models/shadow/shadow_model.pkl` | Trained LGBM artifact (HMAC-signed; **gitignored** — regenerated nightly on sadalsuud from the rolling window, never committed) |
 | `ml/models/shadow/shadow_state.json` | `last_run_utc`, `pending_predictions`, `calibration_history` (with `p10_raw`/`p50_raw`/`p90_raw`), CQR stats |
 | `static/data/augur_forecast_shadow.json` | Production forecast file consumed by `dashboard.js` |
 | `ml/data/consolidate.py` | Parses encrypted energyDataHub history into training parquet |
@@ -151,7 +153,7 @@ Client browser (https://energy.jeroenveen.nl):
 **Process + experiments**:
 | Path | What it is |
 |------|-----------|
-| `experiments/registry.jsonl` | Append-only experiment log (EXP-001..EXP-016); schema in `experiments/README.md` |
+| `experiments/registry.jsonl` | Append-only experiment log (EXP-001..EXP-019, gap at EXP-017 which was never run); schema in `experiments/README.md` |
 | `docs/decisions/006-lightgbm-quantile-production-architecture.md` | ADR-006 — what the production system does |
 | `docs/decisions/007-model-promotion-method.md` | ADR-007 — how we decide what to change |
 | `docs/decisions/004-river-online-learning-architecture.md` | ADR-004 — superseded by ADR-006 |
@@ -170,6 +172,9 @@ Client browser (https://energy.jeroenveen.nl):
 | `scripts/exp014_evaluate_promotion.py` | EXP-014 promotion-criterion runner |
 | `scripts/exp015_replay_cqr.py` | EXP-015 offline replay — per-side CQR vs production bands on `calibration_history` raws |
 | `scripts/exp016_replay_aci.py` | EXP-016 offline replay — per-side ACI (Gibbs-Candès) with α trace + γ sensitivity |
+| `scripts/exp018_stage0_ablation.py` | EXP-018 per-feature-group ablation — production-shaped walk-forward, `--variants`/`--reuse-predictions`; **also the EXP-018a Stage-1 runner** |
+| `scripts/exp019_stationary_ablation.py` | EXP-019 anchor-relative spread variants (imports the EXP-018 harness) |
+| `ml/shadow/exp018_stage0*/summary.json`, `ml/shadow/exp019_stationary/summary.json` | Sweep records (per-hour `predictions.parquet` dumps are gitignored, regenerable) |
 
 ## How to Work Here
 

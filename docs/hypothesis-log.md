@@ -61,33 +61,6 @@ Incumbent = `full`. Treatment = whichever of `drop_rolling` / `drop_rolling_and_
 
 **Status:** open — pre-committed 2026-08-25, awaiting fresh vintages. Branch `exp018-feature-reduction`.
 
-### [2026-08-20] Feature expansion is the highest-leverage untried lever; calibration asymmetry has flipped to the upper side
-
-**Position (provisional):** Production LightGBM-Quantile runs on 24 features built from only 4 columns (`price_eur_mwh`, `wind_speed_80m`, `solar_ghi`, `load_forecast`) while energyDataHub already collects ~7 more series (`ned_production`, `grid_imbalance`, `cross_border_flows`, `gas_storage`, `gas_flows`, `market_proxies`, `generation_forecast`) that never reach `consolidate.py`. Expanding features — residual load, generation mix, and volatility/uncertainty signals — is the highest-leverage untried lever for both point skill and the augur#19 quantile-spread gap. Re-computing `calibration_history` coverage through 2026-08-19 shows the per-side asymmetry has **flipped to the upper side**: August lower 0.916 / upper 0.755 (band ~0.67 vs 0.80 target), versus lower 0.834 / upper 0.886 through 2026-06-11 — so augur#19's "lower-side" framing is now stale.
-
-**Alternative:** EXP-017 (9-quantile training) alone fixes the raw-quantile gap without new features — the path queued by the EXP-015/016 resolution.
-
-**Method (pre-committed, deferred):** two-stage. *Stage 0* — per-feature-group ablation (drop lags / rolling / calendar / wind / solar / load; measure MAE + quantile score + coverage) on existing data. *Stage 1* — walk-forward backtest (temporal split, 56-day window, vintage-corrected) of incumbent (24 features, 3 quantiles) vs candidate (24 + fundamentals + volatility + calendar-gaps). Gates: calibration — lower AND upper coverage ∈ [0.85, 0.95] AND Winkler ≤ 1.05× incumbent; skill guardrail — paired DM on |y−p50| (α=0.10 one-sided, HAC bandwidth 71) not worse. Freshness skew (consolidate overwrites rows with later vintages) bounds backtest optimism — plan a short live confirmation before any production change.
-
-**Revisit trigger:** next session — pick up EXP-018, run Stage-0 ablation first.
-
-**Review by:** 2026-08-27.
-
-**Domain:** EXP-018, feature engineering, calibration (augur#19).
-
-**Status:** Stage 0 run 2026-08-25 — **Position refuted, Alternative not confirmed either.** Supersedes individual feature issues #2/#3/#4/#22 into one evaluated experiment. GPU hosts (jwasys-b650-eagle-ax, sadaltager, gpu-server) available but not needed for LightGBM feature work; hold for a possible neural-quantile track.
-
-**Stage-0 resolution (2026-08-25):** `scripts/exp018_stage0_ablation.py`, 263 vintages 2025-12-01..2026-08-22, production-shaped (56-day window, h+1..h+72, no CQR), 2104 fits. Results in `ml/shadow/exp018_stage0/summary.json`.
-
-The Position said feature *expansion* is the highest-leverage lever. Stage 0 says the opposite: the existing set contains features that actively hurt, and the exogenous series we already feed contribute almost nothing.
-
-- **Rolling stats are harmful.** Dropping all six lifts MAE −6.0% (28.97 → 27.24), quantile score −7.8% (10.54 → 9.72) *and* lower-side coverage 0.778 → 0.805. Reverse-direction DM (HAC 71): stat −6.48, p<0.0001 on QS; −5.02, p<0.0001 on |error|. Holds in 7 of 9 months, biggest in the volatile recent regime (May −14%, Jul −11%, Aug −9%), costs only Dec 2025 (+5.8%); holds across all three horizon groups.
-- **Calendar is the only group clearly earning its place** (+7.3% MAE, +9.2% QS when dropped, DM p=0.000).
-- **The exogenous trio is worth ~nothing.** wind −0.3%, solar −0.3%, load −0.4% individually; all three together +0.8% QS (p=0.041). Not a data defect — over the last 120 days `load_forecast` correlates 0.59 with price and `solar_ghi` −0.53. LightGBM extracts nothing beyond what price lags plus calendar already encode.
-- **Mechanism (second sweep, `ml/shadow/exp018_stage0_mech/`)**: damage is diffuse, not one broken column — rolling_mean −1.6%, rolling_std −1.8%, the 168h pair −2.2%, short windows −0.8%, all six −6.0%. Best variant is the 15-feature **lean** set (drop rolling + exog): MAE 27.08 (−6.5%), QS 9.69 (−8.1%), lower coverage 0.810. Reading: level-carrying, redundant features dilute the split search, and absolute-threshold splits learned in a 56-day window generalise badly when the price level moves.
-
-Consequences: (a) the addition bet (#2/#3/#4/#22) is demoted behind a **reduction** bet — see the [2026-08-25] entry below; (b) augur#19's framing needs rewriting *again* — production through 2026-08-24 is lower 0.887 / upper 0.774 / band 0.660, so the breach is upper-side, while EXP-017's premise was a high-biased q10.
-
 ### [2026-05-29] The Augur method + the M4 arc are publishable if we invest ~2-3 weeks of empirical follow-up
 
 **Position (provisional):** Augur's production stack (ADR-006: LightGBM-Quantile multi-horizon + CQR + horizon-as-feature stacking + 56-day rolling window on NL day-ahead) is *not* novel as a method — every component is in Lago, Marcjasz, De Schutter & Weron (2021) or Nowotarski & Weron (2018). On its own it's a competent application, not a paper. But combined with the five-iteration M4 → EXP-014 narrative arc (`docs/articles/m4-metric-redesign-story.md`) and the promotion method (ADR-007), plus ~2-3 weeks of standard EPF empirical follow-up, the package becomes publishable as an applied methodology paper at *International Journal of Forecasting* practitioner section, IEEE PES workshops, or similar applied-ML venues.
@@ -126,6 +99,35 @@ Items 1-5 are ~1 week. Items 6-8 are ~1 week. Item 9 is the polishing pass, ~3-5
 ---
 
 ## Resolved
+
+### [2026-08-20 → resolved 2026-08-25] Feature expansion is the highest-leverage untried lever; calibration asymmetry has flipped to the upper side
+
+**Position (provisional):** Production LightGBM-Quantile runs on 24 features built from only 4 columns (`price_eur_mwh`, `wind_speed_80m`, `solar_ghi`, `load_forecast`) while energyDataHub already collects ~7 more series (`ned_production`, `grid_imbalance`, `cross_border_flows`, `gas_storage`, `gas_flows`, `market_proxies`, `generation_forecast`) that never reach `consolidate.py`. Expanding features — residual load, generation mix, and volatility/uncertainty signals — is the highest-leverage untried lever for both point skill and the augur#19 quantile-spread gap. Re-computing `calibration_history` coverage through 2026-08-19 shows the per-side asymmetry has **flipped to the upper side**: August lower 0.916 / upper 0.755 (band ~0.67 vs 0.80 target), versus lower 0.834 / upper 0.886 through 2026-06-11 — so augur#19's "lower-side" framing is now stale.
+
+**Alternative:** EXP-017 (9-quantile training) alone fixes the raw-quantile gap without new features — the path queued by the EXP-015/016 resolution.
+
+**Method (pre-committed, deferred):** two-stage. *Stage 0* — per-feature-group ablation (drop lags / rolling / calendar / wind / solar / load; measure MAE + quantile score + coverage) on existing data. *Stage 1* — walk-forward backtest (temporal split, 56-day window, vintage-corrected) of incumbent (24 features, 3 quantiles) vs candidate (24 + fundamentals + volatility + calendar-gaps). Gates: calibration — lower AND upper coverage ∈ [0.85, 0.95] AND Winkler ≤ 1.05× incumbent; skill guardrail — paired DM on |y−p50| (α=0.10 one-sided, HAC bandwidth 71) not worse. Freshness skew (consolidate overwrites rows with later vintages) bounds backtest optimism — plan a short live confirmation before any production change.
+
+**Revisit trigger:** next session — pick up EXP-018, run Stage-0 ablation first.
+
+**Review by:** 2026-08-27.
+
+**Domain:** EXP-018, feature engineering, calibration (augur#19).
+
+**Status:** Stage 0 run 2026-08-25 — **Position refuted, Alternative not confirmed either.** Supersedes individual feature issues #2/#3/#4/#22 into one evaluated experiment. GPU hosts (jwasys-b650-eagle-ax, sadaltager, gpu-server) available but not needed for LightGBM feature work; hold for a possible neural-quantile track.
+
+**Stage-0 resolution (2026-08-25):** `scripts/exp018_stage0_ablation.py`, 263 vintages 2025-12-01..2026-08-22, production-shaped (56-day window, h+1..h+72, no CQR), 2104 fits. Results in `ml/shadow/exp018_stage0/summary.json`.
+
+The Position said feature *expansion* is the highest-leverage lever. Stage 0 says the opposite: the existing set contains features that actively hurt, and the exogenous series we already feed contribute almost nothing.
+
+- **Rolling stats are harmful.** Dropping all six lifts MAE −6.0% (28.97 → 27.24), quantile score −7.8% (10.54 → 9.72) *and* lower-side coverage 0.778 → 0.805. Reverse-direction DM (HAC 71): stat −6.48, p<0.0001 on QS; −5.02, p<0.0001 on |error|. Holds in 7 of 9 months, biggest in the volatile recent regime (May −14%, Jul −11%, Aug −9%), costs only Dec 2025 (+5.8%); holds across all three horizon groups.
+- **Calendar is the only group clearly earning its place** (+7.3% MAE, +9.2% QS when dropped, DM p=0.000).
+- **The exogenous trio is worth ~nothing.** wind −0.3%, solar −0.3%, load −0.4% individually; all three together +0.8% QS (p=0.041). Not a data defect — over the last 120 days `load_forecast` correlates 0.59 with price and `solar_ghi` −0.53. LightGBM extracts nothing beyond what price lags plus calendar already encode.
+- **Mechanism (second sweep, `ml/shadow/exp018_stage0_mech/`)**: damage is diffuse, not one broken column — rolling_mean −1.6%, rolling_std −1.8%, the 168h pair −2.2%, short windows −0.8%, all six −6.0%. Best variant is the 15-feature **lean** set (drop rolling + exog): MAE 27.08 (−6.5%), QS 9.69 (−8.1%), lower coverage 0.810. Reading: level-carrying, redundant features dilute the split search, and absolute-threshold splits learned in a 56-day window generalise badly when the price level moves.
+
+Consequences: (a) the addition bet (#2/#3/#4/#22) is demoted behind a **reduction** bet — see the [2026-08-25] entry below; (b) augur#19's framing needs rewriting *again* — production through 2026-08-24 is lower 0.887 / upper 0.774 / band 0.660, so the breach is upper-side, while EXP-017's premise was a high-biased q10.
+
+---
 
 ### [2026-06-12 → resolved 2026-06-12] EXP-016: per-side ACI closes the regime-shift coverage gap that static per-side CQR (EXP-015) could not
 

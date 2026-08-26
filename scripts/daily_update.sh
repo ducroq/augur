@@ -1,6 +1,8 @@
 #!/bin/bash
-# Augur daily model update — runs via cron on sadalsuud
-# Cron: 45 16 * * * /home/jeroen/local_dev/augur/scripts/daily_update.sh >> /home/jeroen/local_dev/augur/logs/daily_update.log 2>&1
+# Augur daily model update — runs on sadalsuud via the system-level systemd
+# timer at /etc/systemd/system/augur-daily.timer (16:30 UTC + wait_for_edh.sh
+# ExecStartPre gate). Canonical unit files: scripts/systemd/. Cron was retired
+# 2026-06-09 and the crontab deleted 2026-06-10 (augur#12).
 #
 # Order of operations:
 #   1. Pull energyDataHub + Augur
