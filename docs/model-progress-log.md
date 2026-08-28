@@ -4,6 +4,33 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
+## 2026-08-28 — The vintage stream broke silently for three days: t0 followed a stale parquet
+
+**Trigger**: The 2026-08-27 daily commit carried `[ALARM: eval stale 3d]` while every step reported `rc=0` and `eval_log.jsonl` ended at 2026-08-24.
+
+**What the trace showed**: `metadata.t0` across the last six daily commits, paired with the per-vintage state in `shadow_state.json`:
+
+| Run | Finished (UTC) | t0 | New vintage |
+|---|---|---|---|
+| 08-22 | 16:31 | 08-23T21 | eval_day 08-23 ✓ |
+| 08-23 | **20:31** | 08-23T21 | — (t0 repeated) |
+| 08-24 | 16:31 | 08-24T21 | eval_day 08-24 ✓ |
+| 08-25 | 16:33 | **08-26T21** | eval_day 08-26 ✓ (08-25 skipped) |
+| 08-26 | 16:45 | 08-27T20 | eval_day 08-27 ✓ |
+| 08-27 | **20:32** | 08-27T20 | — (t0 repeated) |
+
+`update_shadow.py` sets `t0 = parquet["price_eur_mwh"].dropna().index.max()`, so it tracks the data rather than the clock, and nothing asserted it moved. A repeated t0 means the `(timestamp_utc, eval_day)` dedup overwrites an identical prediction set — retrain, republish an unchanged forecast, exit 0, add nothing evaluable. A jumped t0 means the skipped day never got a prediction set and can never be evaluated: **2026-08-25 is a permanent hole**, the third after 06-08/06-10.
+
+**Upstream cause (EDH, out of scope here)**: the 08-23 and 08-27 runs both finished at 20:3x UTC — exactly `16:30 + 4h`, `wait_for_edh.sh`'s hard cap — so EDH never published and the gate proceeded with stale data as designed. The 08-24 run passed the gate immediately yet still had a stale price column, which points at a *partial* publish (report timestamp fresh, ENTSO-E day-ahead missing).
+
+**What changed**: `classify_t0_advance()` in `ml/shadow/update_shadow.py` compares each run's t0 to `state["last_t0"]` by calendar date — 08-26T21 → 08-27T20 is 23h and healthy, since how much of the delivery day EDH published moves the last realised hour around. Anything but +1 is logged and persisted as `t0_advance_days`; `scripts/daily_update.sh` reads it and appends `[ALARM: t0 stale <date>]` / `[ALARM: t0 jumped Nd]` / `[ALARM: t0 backwards <date>]` to the commit subject, gated on `SHADOW_UPDATE_RC=0` so a failed run can't re-fire the previous run's value. Non-fatal throughout: a frozen dashboard is worse than a stale one. 7 tests in `TestClassifyT0Advance`; suite 195 → 202.
+
+**What did NOT change**: no model, feature, or forecast logic. `FEATURE_COLUMNS`, the CQR layer, and the EDH gate's fail-open behaviour are all untouched.
+
+**Consequence for EXP-018a**: Stage 1 is unaffected — `exp018_stage0_ablation.py` replays its own t0 grid off `training_history.parquet`, so a missing *shadow* vintage costs it no holdout day, provided the parquet's price rows backfill. **Stage 2 is affected**: it reads trailing-14 means from `eval_log.jsonl`, which now has a hole at 2026-08-25. Noted in the pre-commit.
+
+**Pattern** (`memory/gotcha-log.md`, promoted): a cursor derived from data rather than the clock must be asserted to advance, at the step that owns it. The eval-stale alarm fired correctly and named `evaluate_shadow.py`, which was blameless — when step B's health check is the only witness to step A's failure, it will point at the wrong component.
+
 ## 2026-08-25 — EXP-018 Stage 0: the production feature set is carrying dead weight
 
 **Trigger**: The 2026-08-20 curation deferred EXP-018 (feature expansion + ablation) to "next session" with a 2026-08-27 review-by. Picked up as the session's first work item.

@@ -25,6 +25,7 @@ from ml.shadow.update_shadow import (
     SHADOW_MODEL_FILENAME,
     SHADOW_STATE_FILENAME,
     backfill_realized,
+    classify_t0_advance,
     compute_cqr_q,
     format_forecast_dicts,
     load_shadow_state,
@@ -278,6 +279,72 @@ class TestWriteForecastJson:
         assert set(payload.keys()) == {"metadata", "forecast", "forecast_upper", "forecast_lower"}
         assert payload["metadata"]["model"] == "LightGBM-Quantile-Multi-Horizon"
         assert payload["forecast"]["2026-04-30T01:00:00+00:00"] == 20.0
+
+
+# --- t0-advance guard --------------------------------------------------------
+
+
+class TestClassifyT0Advance:
+    """Guard against the two ways the vintage stream breaks silently.
+
+    Both shapes were live 2026-08-23..27 behind a late EDH publish and stayed
+    invisible for three days; see memory/gotcha-log.md.
+    """
+
+    def test_healthy_one_day_step_is_silent(self):
+        advance, alarm = classify_t0_advance(
+            "2026-08-26T21:00:00+00:00", pd.Timestamp("2026-08-27T21:00:00+00:00")
+        )
+        assert advance == 1
+        assert alarm is None
+
+    def test_partial_delivery_day_still_counts_as_one_step(self):
+        """08-26T21 -> 08-27T20 is 23h, not 24 — a healthy step all the same.
+
+        How much of the delivery day EDH has published moves the last realised
+        hour around, so the guard compares calendar dates, not elapsed hours.
+        """
+        advance, alarm = classify_t0_advance(
+            "2026-08-26T21:00:00+00:00", pd.Timestamp("2026-08-27T20:00:00+00:00")
+        )
+        assert advance == 1
+        assert alarm is None
+
+    def test_repeated_t0_alarms(self):
+        """The 2026-08-27 shape: stale parquet, vintage overwritten by dedup."""
+        advance, alarm = classify_t0_advance(
+            "2026-08-27T20:00:00+00:00", pd.Timestamp("2026-08-27T20:00:00+00:00")
+        )
+        assert advance == 0
+        assert alarm is not None and "did not advance" in alarm
+
+    def test_jumped_t0_alarms_with_skipped_count(self):
+        """The 2026-08-25 shape: parquet caught up two days, one vintage lost."""
+        advance, alarm = classify_t0_advance(
+            "2026-08-24T21:00:00+00:00", pd.Timestamp("2026-08-26T21:00:00+00:00")
+        )
+        assert advance == 2
+        assert alarm is not None and "1 vintage(s) skipped" in alarm
+
+    def test_backwards_t0_alarms(self):
+        advance, alarm = classify_t0_advance(
+            "2026-08-27T21:00:00+00:00", pd.Timestamp("2026-08-26T21:00:00+00:00")
+        )
+        assert advance == -1
+        assert alarm is not None and "BACKWARDS" in alarm
+
+    def test_first_run_has_nothing_to_compare(self):
+        assert classify_t0_advance(None, pd.Timestamp("2026-08-27T21:00:00+00:00")) == (
+            None,
+            None,
+        )
+
+    def test_accepts_timestamp_as_well_as_iso_string(self):
+        advance, _ = classify_t0_advance(
+            pd.Timestamp("2026-08-26T21:00:00+00:00"),
+            pd.Timestamp("2026-08-27T21:00:00+00:00"),
+        )
+        assert advance == 1
 
 
 # --- end-to-end parquet smoke -----------------------------------------------

@@ -27,7 +27,9 @@
 #   pre-flight:  SHADOW_PRE_AGE_H >36h (stale shadow state), DEP_PROBE_OK=0
 #                (broken venv imports)
 #   post-run:    ARF forecast <24h (empty output despite rc=0), no new eval
-#                row for >2 days (skipped vintages despite rc=0) — augur#14
+#                row for >2 days (skipped vintages despite rc=0) — augur#14;
+#                t0 not advancing exactly one calendar day (stale parquet
+#                overwriting a vintage, or a jump that loses one for good)
 
 set -e
 
@@ -248,6 +250,45 @@ if [ "${EVAL_LAG_DAYS:-999}" -gt 2 ]; then
     EVAL_STALE_MARKER=" [ALARM: eval stale ${EVAL_LAG_DAYS}d]"
 fi
 
+# t0-advance guard (2026-08-28). update_shadow.py records how many calendar
+# days t0 moved since the previous run; anything but 1 means the vintage
+# stream broke. This is the UPSTREAM signal for the eval-stale alarm above:
+# on 2026-08-23/27 a late EDH publish left the parquet stale, t0 repeated,
+# the prediction set was overwritten, and the only symptom three days later
+# pointed at evaluate_shadow.py rather than at the stale data. Only read it
+# when the shadow update actually succeeded — otherwise shadow_state.json
+# still holds the previous run's values and would re-fire a stale alarm.
+T0_MARKER=""
+if [ "${SHADOW_UPDATE_RC:-1}" -eq 0 ]; then
+    T0_ADVANCE_INFO=$(python3 -c "
+import json
+try:
+    with open('$AUGUR_DIR/ml/models/shadow/shadow_state.json') as f:
+        st = json.load(f)
+    adv = st.get('t0_advance_days')
+    print('none' if adv is None else adv, (st.get('last_t0') or '')[:10])
+except Exception:
+    print('none', '')
+" 2>/dev/null || echo "none ")
+    T0_ADVANCE=$(echo "$T0_ADVANCE_INFO" | cut -d' ' -f1)
+    T0_DATE=$(echo "$T0_ADVANCE_INFO" | cut -d' ' -f2)
+    case "$T0_ADVANCE" in
+        none|1) : ;;  # first run after a state reset, or a healthy one-day step
+        0)
+            echo "ALARM: t0 did not advance (still ${T0_DATE}) — stale parquet; this run overwrote yesterday's vintage and produced nothing evaluable."
+            T0_MARKER=" [ALARM: t0 stale ${T0_DATE}]"
+            ;;
+        -*)
+            echo "ALARM: t0 moved backwards to ${T0_DATE} — parquet lost realised prices; check consolidate.py."
+            T0_MARKER=" [ALARM: t0 backwards ${T0_DATE}]"
+            ;;
+        *)
+            echo "ALARM: t0 jumped ${T0_ADVANCE}d to ${T0_DATE} — $((T0_ADVANCE - 1)) vintage(s) skipped and permanently unevaluable."
+            T0_MARKER=" [ALARM: t0 jumped ${T0_ADVANCE}d]"
+            ;;
+    esac
+fi
+
 # Commit and push
 echo "Committing and pushing..."
 cd $AUGUR_DIR
@@ -275,7 +316,7 @@ SMOKE_MARKER=""
 [ "${SMOKE_OK:-1}" = "0" ] && SMOKE_MARKER=" [ALARM: smoke tests failed]"
 
 git diff --cached --quiet && echo "No changes to commit" || {
-    git commit -m "Daily update $(date -u '+%Y-%m-%d') — ${ARF_STATUS} | ${SHADOW_STATUS}${STALE_MARKER}${DEP_MARKER}${SMOKE_MARKER}${ARF_EMPTY_MARKER}${EVAL_STALE_MARKER}"
+    git commit -m "Daily update $(date -u '+%Y-%m-%d') — ${ARF_STATUS} | ${SHADOW_STATUS}${STALE_MARKER}${DEP_MARKER}${SMOKE_MARKER}${ARF_EMPTY_MARKER}${EVAL_STALE_MARKER}${T0_MARKER}"
     git push
 }
 

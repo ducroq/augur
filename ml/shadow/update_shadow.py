@@ -10,6 +10,10 @@ Order of operations per run:
     2. Backfill realised prices into pending predictions from prior runs
     3. Move backfilled rows into calibration_history; trim both lists to a
        rolling window
+    3b. Guard: check t0 advanced exactly one calendar day since the last run
+       (a repeated t0 means a stale parquet and a wasted vintage; a jump
+       means a permanently unevaluable day) — non-fatal, surfaced as an
+       ALARM in the daily commit subject
     4. Compute CQR q for today from calibration_history (final design from
        EXP-009 milestone 2.5: 7-day calibration, target 0.80)
     5. Train ``MultiHorizonLightGBMQuantileForecaster`` on the rolling
@@ -76,6 +80,8 @@ def load_shadow_state(path: Path) -> dict:
             "pending_predictions": [],
             "calibration_history": [],
             "last_run_utc": None,
+            "last_t0": None,
+            "t0_advance_days": None,
             "last_train_window": None,
             "n_train_samples": 0,
             "last_cqr_q": 0.0,
@@ -404,6 +410,59 @@ def _normalize_parquet_index(parquet: pd.DataFrame) -> pd.DataFrame:
     return parquet.sort_index()
 
 
+# Expected calendar-day advance of t0 between consecutive runs.
+#
+# Why this guard exists: t0 is `parquet["price_eur_mwh"].dropna().index.max()`,
+# so it tracks the DATA, not the clock, and nothing checked that it moved.
+# Two failure shapes follow, both observed live 2026-08-23..27 when EDH
+# published late (wait_for_edh.sh hit its 4h cap) or only partially:
+#   advance == 0  the run sees the same parquet as yesterday, so the
+#                 (timestamp_utc, eval_day) dedup below silently OVERWRITES an
+#                 identical prediction set. The run retrains, republishes an
+#                 unchanged forecast, exits 0 — and adds nothing evaluable.
+#   advance >= 2  the parquet caught up by more than a day, so the skipped
+#                 day never gets a prediction set at all and can NEVER be
+#                 evaluated. 2026-08-25 was lost this way.
+# Neither was visible for three days; both surfaced only as the downstream
+# "eval stale" alarm, which points at evaluate_shadow.py instead of at the
+# stale parquet that actually caused it. See memory/gotcha-log.md.
+T0_EXPECTED_ADVANCE_DAYS = 1
+
+
+def classify_t0_advance(
+    prev_t0: str | pd.Timestamp | None, t0: pd.Timestamp
+) -> tuple[int | None, str | None]:
+    """Return ``(advance_days, alarm_message)`` for this run's t0 vs the last run's.
+
+    Compares calendar DATES, not raw hours: a healthy step is 08-26T21:00 →
+    08-27T20:00 (23h) as readily as a clean 24h, depending on how much of the
+    delivery day EDH had published. Returns ``(None, None)`` on the first run
+    (or after a state reset), when there is no previous t0 to compare against.
+    """
+    if prev_t0 is None:
+        return None, None
+    prev = pd.Timestamp(prev_t0)
+    advance = (t0.date() - prev.date()).days
+    if advance == T0_EXPECTED_ADVANCE_DAYS:
+        return advance, None
+    if advance == 0:
+        return advance, (
+            f"ALARM: t0 did not advance (still {t0.date()}) — parquet is stale, "
+            "this run overwrites yesterday's vintage and produces nothing new "
+            "to evaluate."
+        )
+    if advance < 0:
+        return advance, (
+            f"ALARM: t0 went BACKWARDS ({prev.date()} -> {t0.date()}) — parquet "
+            "lost realised prices; investigate consolidate.py before trusting "
+            "this run."
+        )
+    return advance, (
+        f"ALARM: t0 jumped {advance}d ({prev.date()} -> {t0.date()}) — "
+        f"{advance - 1} vintage(s) skipped and permanently unevaluable."
+    )
+
+
 def run_shadow_update(
     parquet_path: Path = DEFAULT_PARQUET,
     shadow_dir: Path = DEFAULT_SHADOW_DIR,
@@ -440,6 +499,11 @@ def run_shadow_update(
     if len(realized_index) == 0:
         raise ValueError("No realised prices in parquet")
     t0 = realized_index.max()
+
+    # 3b. Guard: did t0 actually advance one day since the last run?
+    t0_advance_days, t0_alarm = classify_t0_advance(state.get("last_t0"), t0)
+    if t0_alarm:
+        logger.warning(t0_alarm)
 
     # 4. Compute CQR q for today
     today = t0.strftime("%Y-%m-%d")
@@ -536,6 +600,10 @@ def run_shadow_update(
     )
 
     state["last_run_utc"] = datetime.now(timezone.utc).isoformat()
+    # Persisted for the next run's t0 guard and for daily_update.sh's
+    # post-run alarm, which reads both fields out of shadow_state.json.
+    state["last_t0"] = t0.isoformat()
+    state["t0_advance_days"] = t0_advance_days
     state["last_train_window"] = {
         "start": pd.Timestamp(window.index.min()).isoformat(),
         "end": pd.Timestamp(window.index.max()).isoformat(),
