@@ -91,6 +91,8 @@ Client browser (https://energy.jeroenveen.nl):
 - Forecast archive: timestamped copies in `ml/forecasts/` on sadalsuud (still used by `evaluate_shadow.py` for daily comparison)
 - Retirement reasoning + structural ceiling: `docs/river-arf-retrospective.md` (including post-promotion closing addendum)
 
+- **Pipeline reliability (2026-08-28)**: t0 is data-derived (`parquet.index.max()`), so a stale parquet used to stall it — overwriting a vintage — and a catching-up parquet used to skip one, permanently. Both now alarm in the daily commit subject via `classify_t0_advance`, and `wait_for_edh.sh` requires the EDH report to be stamped ≥12:00 UTC so an overnight catch-up publish can't release the run early. Residual risk is upstream: EDH published on only 31 of 35 days over 2026-07-25..08-28 (ducroq/energyDataHub#50). Known permanent `eval_log.jsonl` holes: 2026-06-08, 2026-06-10, 2026-08-25. Position + 14-run review in `docs/hypothesis-log.md` [2026-08-28].
+
 **LightGBM-Quantile (production from 2026-05-29)**:
 - Model: 9 LGBMRegressor (3 horizon groups × 3 quantiles p10/p50/p90, horizon-as-feature stacking)
 - Training: rolling 56-day window from `ml/data/training_history.parquet` (regenerated nightly by `ml.data.consolidate`)
@@ -101,7 +103,7 @@ Client browser (https://energy.jeroenveen.nl):
 - Promotion criterion (now resolved): see `docs/hypothesis-log.md` iteration-5 entry and `scripts/exp014_evaluate_promotion.py`
 - Pickle integrity: HMAC-SHA256 sidecar via `ml/shadow/secure_pickle.py`; verify-before-load
 - Calibration_history schema: `p10/p50/p90` are sorted-CQR-widened; `p10_raw/p50_raw/p90_raw` are the raw tau-quantile model outputs (added 2026-05-29 after EXP-013 code review caught sort-then-pinball bias).
-- Open: **augur#19** (calibration — now an *upper-side* / band-width gap, see the reframed weakness bullet above; EXP-017's premise stale), **augur#28 / EXP-018a** (feature reduction — awaiting fresh vintages ≈2026-09-09). Closed 2026-08-26: augur#12 (cron→systemd, timer verified enabled+active), augur#26 (ARF back to 72h — `f49a1c8` maxlen 200→800 confirmed in `static/data/augur_forecast.json`), augur#27 (lockfile committed `affa443`; stale `# Cron:` comment removed).
+- Open: **augur#19** (calibration — now an *upper-side* / band-width gap, see the reframed weakness bullet above; EXP-017's premise stale), **augur#28 / EXP-018a** (feature reduction — awaiting fresh vintages ≈2026-09-09), **augur#14** (gap *detection* shipped 2026-08-28; automated backfill still undecided — a reconstructed vintage built from fresher exogenous would not be comparable with the live ones beside it), **augur#25** (event-driven EDH trigger — the 2026-08-24 90-second race is the concrete case for it). Closed 2026-08-26: augur#12 (cron→systemd, timer verified enabled+active), augur#26 (ARF back to 72h — `f49a1c8` maxlen 200→800 confirmed in `static/data/augur_forecast.json`), augur#27 (lockfile committed `affa443`; stale `# Cron:` comment removed).
 
 ## Key Paths
 

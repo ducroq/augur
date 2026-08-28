@@ -20,6 +20,36 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 
 ## Open
 
+### [2026-08-28] The t0 guard plus the publish-hour gate end silent vintage loss; EDH's skipped publishes are the residual, and they are not ours to fix
+
+**Position (provisional):** Two changes shipped today (`4a2afc4`, `05b4d43`) close the failure that cost the 2026-08-25 vintage: `wait_for_edh.sh` now requires the EDH report to be stamped ≥12:00 UTC as well as dated today, so an overnight catch-up publish can no longer release the run early; and `classify_t0_advance` alarms in the commit subject whenever t0 fails to advance exactly one calendar day. Position: from here on, **every vintage is either produced or loudly announced as missing** — no further day is lost without a same-day marker naming the cause. The residual failure rate is then EDH's, not ours: over 2026-07-25..08-28 EDH published on 31 of 35 days (missing 08-03, 08-06, 08-23, 08-27; catch-up double-publishes on 08-09 and 08-24), so expect roughly one `[ALARM: t0 stale …]` per fortnight with no Augur-side defect behind it.
+
+**Alternatives (failure-mode signals):**
+
+1. **The 12:00 UTC floor is mis-set.** If EDH ever moves its schedule earlier, or a legitimate publish lands before noon UTC, the gate waits the full 4h and the run goes out late on stale data every day. **Signal:** `[ALARM: t0 stale …]` on days where EDH *did* publish, with a pre-noon timestamp in `logs/daily_update.log`. Then the floor is the bug, not the publish — move it, or switch to the semantically exact test (report timestamp strictly newer than the one the last successful run consumed, persisted across runs).
+2. **The race is narrower than the fix.** The 08-24 miss was 90 seconds. If EDH's publish drifts to straddle 16:30 routinely, the gate releases on the *previous* day's ≥12:00 publish before today's lands — the same failure with a different clock offset. **Signal:** a `t0 stale` alarm on a day EDH published after 16:30. Then the fix is augur#25 (repository_dispatch, event-driven) rather than any polling threshold.
+3. **Skipped publishes are not random.** Four misses in five weeks may be a systematic EDH failure (a workflow that silently exits 0) rather than transient runner flakiness. **Signal:** the EDH issue filed today identifies a repeating cause. Then Augur's absorption is a band-aid over something fixable upstream, and the residual rate should drop rather than persist.
+
+**Method:** After **14 consecutive daily runs** on the deployed code (2026-08-28 → ≈2026-09-11), from the daily commit subjects and `ml/models/shadow/shadow_state.json`:
+
+```
+# (1) No silent loss: every eval_day gap in calibration_history has a
+#     matching [ALARM: t0 ...] marker on the commit for that date.
+# (2) No false alarms: every [ALARM: t0 stale] day is one where EDH
+#     genuinely published nothing >= 12:00 UTC (check EDH commit history).
+# (3) Alarm rate <= 3 in 14 days, consistent with EDH's observed ~11% miss rate.
+```
+
+Position confirmed if all three hold. (1) failing means the guard has a blind spot — investigate before trusting any trailing-window metric. (2) failing confirms Alternative 1 or 2. (3) failing means EDH reliability degraded and Alternative 3 becomes the priority.
+
+**Revisit trigger:** 14 daily runs on deployed code, ≈2026-09-11 — before EXP-018a Stage 1 (≈2026-09-09) consumes the vintages this guard protects. Surface in `/curate`.
+
+**Review by:** 2026-09-18.
+
+**Domain:** daily pipeline reliability, `wait_for_edh.sh`, `update_shadow.py`, augur#14, augur#25, EDH publish reliability.
+
+**Status:** open — deployed to sadalsuud 2026-08-28, first observation is the 2026-08-28 18:30 CEST run.
+
 ### [2026-08-25] EXP-018a: removing the six rolling-stat features (and the three exogenous) beats the 24-feature production set out of sample
 
 **Position (provisional):** The EXP-018 Stage-0 sweep (entry below) found the production feature set carries features that actively hurt: dropping the six rolling stats buys −6.0% MAE / −7.8% quantile score, and the 15-feature **lean** set (rolling + exogenous removed) buys −6.5% / −8.1% with better lower-side coverage. Position: this is a real generalisation gain, not a selection artifact, and it will reproduce on vintages that did not exist when the finding was made. Mechanism claim: absolute-level features (`price_rolling_mean_168h` above all) make tree splits that are calibrated to the training window's price level, which is exactly what breaks when the level drifts — the same failure that produced August's upper-side coverage breach.
