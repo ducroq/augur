@@ -414,8 +414,10 @@ def _normalize_parquet_index(parquet: pd.DataFrame) -> pd.DataFrame:
 #
 # Why this guard exists: t0 is `parquet["price_eur_mwh"].dropna().index.max()`,
 # so it tracks the DATA, not the clock, and nothing checked that it moved.
-# Two failure shapes follow, both observed live 2026-08-23..27 when EDH
-# published late (wait_for_edh.sh hit its 4h cap) or only partially:
+# Two failure shapes follow, both observed live 2026-08-23..27. EDH skipped
+# its scheduled publish entirely on 08-23 and 08-27, and the catch-up commit
+# for the first of those released Augur's gate early on 08-24 (see
+# scripts/wait_for_edh.sh):
 #   advance == 0  the run sees the same parquet as yesterday, so the
 #                 (timestamp_utc, eval_day) dedup below silently OVERWRITES an
 #                 identical prediction set. The run retrains, republishes an
