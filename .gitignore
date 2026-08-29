@@ -109,3 +109,4 @@ ml/shadow/exp018_stage0*/predictions.parquet
 
 # EXP-019 sweep: same rationale as EXP-018 — summary.json is the record.
 ml/shadow/exp019_stationary*/predictions.parquet
+ml/shadow/exp020_fundamentals*/predictions.parquet

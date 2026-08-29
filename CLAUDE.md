@@ -81,6 +81,7 @@ Client browser (https://energy.jeroenveen.nl):
 - **Known weakness — calibration (augur#19), reframed 2026-08-25**: the P80 band is under-covering and **the deficit has moved to the upper side**. Measured from `shadow_state.json:calibration_history` (NOT `eval_log.jsonl` — eval rows mix 24/48/72h vintages and have permanent holes at 2026-06-08/06-10 from the EDH v2.2 break and at 2026-08-25 from the t0-stall incident): Jul 2026 lower 0.865 / upper 0.841 / band 0.706; **Aug 2026 lower 0.887 / upper 0.774 / band 0.660** (target 0.80). The lower side has essentially healed since the 0.834 figure that opened the issue through 2026-06-11. Most likely driver: August's mean price of 128 EUR/MWh is the highest in the parquet, and a trailing-56-day model under-reaches an upward level shift.
 - **Calibration-layer arc resolved 2026-06-12**: EXP-015 (per-side CQR, `parked`) fixes the side asymmetry; EXP-016 (per-side ACI, `parked`) fixes post-shift days but hits a γ-independent ~0.85 ceiling from first-shift-day misses and trips the Winkler guardrail. Their conclusion — the gap lives in the raw quantiles → EXP-017 (9-quantile training) next — **is now stale on its premise**: EXP-015/016 diagnosed a high-biased `q10_raw`, and the live breach is the opposite side. Re-derive after the feature set settles. See `docs/hypothesis-log.md` and `experiments/registry.jsonl` EXP-015/016.
 - **Feature-set finding (EXP-018/EXP-019, 2026-08-25 — evidence only, nothing deployed)**: a production-shaped ablation over 263 vintages found the 24-feature set carries dead weight. Dropping the six rolling stats buys −6.0% MAE / −7.8% quantile score *and* lifts lower-side coverage (DM p<0.0001); calendar is the only group clearly earning its place (+7.3% MAE when dropped); wind/solar/load are inert (±0.4% each). Best variant is a **15-feature lean set** (−6.5% MAE / −8.1% QS). EXP-019 refuted the stationary-reparameterisation alternative (anchor-relative spreads tie plain deletion) but showed re-adding `price_rolling_mean_168h` alone costs most of the gain. Because this is a best-of-eight selection on one window, it ships only through the pre-committed **EXP-018a** gates on fresh vintages (`t0 ≥ 2026-08-25`, ≈2026-09-09) in `docs/hypothesis-log.md`.
+- **Fundamentals refuted (EXP-020, 2026-08-29 — evidence only, nothing deployed)**: the counter-bet to the above — that the exogenous trio is inert because it is the wrong *shape* (not the merit-order quantity; no fuel-cost level anchor) — was pre-committed and tested. **Refuted on both bases.** `residual_load_mw` is a tie with the lean set (DM p=0.648 on 195 vintages, p=0.899 on the 263-vintage control), plain `load_forecast` likewise (p=0.851), and **TTF gas actively degrades** (+3.2% QS, p=0.991). Primary gate `lean+fundamentals` vs `lean` fails on skill and effect size; confirmatory `full+fundamentals` vs `full` fails identically. The gas result is the informative half and corrects the hypothesis's own mechanism: this model class does not *lack* a level anchor, it **rejects added level columns** — the second independent confirmation of EXP-019's split-search-dilution reading, now generalised from internal (`price_rolling_mean_168h`) to exogenous (gas) provenance. Not a regime artifact (worse in 5 of 7 months, Jul +16.7%, no rescue in August). **Standing conclusion: at a 56-day window this model gains nothing from added exogenous columns and loses from added level columns — the next lever is window length or model class, not features** (→ augur#15, foundation models). The four parquet columns stay (additive-only, free); `FEATURE_COLUMNS` is untouched.
 
 **ARF (backup signal, retired-as-model 2026-04-28, kept-running 2026-05-29 — see ADR-006 / ADR-004 superseded)**:
 - Model: River ARFRegressor (10 trees), continuous online learning
@@ -103,7 +104,7 @@ Client browser (https://energy.jeroenveen.nl):
 - Promotion criterion (now resolved): see `docs/hypothesis-log.md` iteration-5 entry and `scripts/exp014_evaluate_promotion.py`
 - Pickle integrity: HMAC-SHA256 sidecar via `ml/shadow/secure_pickle.py`; verify-before-load
 - Calibration_history schema: `p10/p50/p90` are sorted-CQR-widened; `p10_raw/p50_raw/p90_raw` are the raw tau-quantile model outputs (added 2026-05-29 after EXP-013 code review caught sort-then-pinball bias).
-- Open: **augur#19** (calibration — now an *upper-side* / band-width gap, see the reframed weakness bullet above; EXP-017's premise stale), **augur#28 / EXP-018a** (feature reduction — awaiting fresh vintages ≈2026-09-09), **augur#14** (gap *detection* shipped 2026-08-28; automated backfill still undecided — a reconstructed vintage built from fresher exogenous would not be comparable with the live ones beside it), **augur#25** (event-driven EDH trigger — the 2026-08-24 90-second race is the concrete case for it). Closed 2026-08-26: augur#12 (cron→systemd, timer verified enabled+active), augur#26 (ARF back to 72h — `f49a1c8` maxlen 200→800 confirmed in `static/data/augur_forecast.json`), augur#27 (lockfile committed `affa443`; stale `# Cron:` comment removed).
+- Open: **augur#19** (calibration — now an *upper-side* / band-width gap, see the reframed weakness bullet above; EXP-017's premise stale; EXP-020 confirmed fundamentals do not fix it), **augur#28 / EXP-018a** (feature reduction — awaiting fresh vintages ≈2026-09-09), **augur#15** (foundation models — promoted 2026-08-29 to the leading next lever by EXP-020's negative result; GPU hosts reachable, see below), **augur#14** (gap *detection* shipped 2026-08-28; automated backfill still undecided — a reconstructed vintage built from fresher exogenous would not be comparable with the live ones beside it), **augur#25** (event-driven EDH trigger — the 2026-08-24 90-second race is the concrete case for it). Closed 2026-08-29: augur#3 (gas/carbon as features — EXP-020 tested TTF and it degrades). Closed 2026-08-26: augur#12 (cron→systemd, timer verified enabled+active), augur#26 (ARF back to 72h — `f49a1c8` maxlen 200→800 confirmed in `static/data/augur_forecast.json`), augur#27 (lockfile committed `affa443`; stale `# Cron:` comment removed).
 
 ## Key Paths
 
@@ -124,7 +125,7 @@ Client browser (https://energy.jeroenveen.nl):
 | `ml/models/shadow/shadow_state.json` | `last_run_utc`, `pending_predictions`, `calibration_history` (with `p10_raw`/`p50_raw`/`p90_raw`), CQR stats |
 | `static/data/augur_forecast_shadow.json` | Production forecast file consumed by `dashboard.js` |
 | `ml/data/consolidate.py` | Parses encrypted energyDataHub history into training parquet |
-| `ml/data/training_history.parquet` | Rolling 56-day training data (gitignored; regenerated nightly) |
+| `ml/data/training_history.parquet` | Training history (gitignored; regenerated nightly). Nine columns since 2026-08-29: the five the model uses (`price_eur_mwh`, `wind_speed_80m`, `solar_ghi`, `temperature`, `load_forecast`) plus four EXP-020 fundamentals (`wind_gen_forecast_mw`, `solar_gen_forecast_mw`, `gas_ttf_eur_mwh`, `is_holiday_nl`) that are **collected but not in `FEATURE_COLUMNS`** — EXP-020 refuted them; they stay because they are additive-only and free. |
 
 **ARF backup pipeline (kept running, ADR-004 superseded)**:
 | Path | What it is |
@@ -155,7 +156,7 @@ Client browser (https://energy.jeroenveen.nl):
 **Process + experiments**:
 | Path | What it is |
 |------|-----------|
-| `experiments/registry.jsonl` | Append-only experiment log (EXP-001..EXP-019, gap at EXP-017 which was never run); schema in `experiments/README.md` |
+| `experiments/registry.jsonl` | Append-only experiment log (EXP-001..EXP-020, gap at EXP-017 which was never run); schema in `experiments/README.md` |
 | `docs/decisions/006-lightgbm-quantile-production-architecture.md` | ADR-006 — what the production system does |
 | `docs/decisions/007-model-promotion-method.md` | ADR-007 — how we decide what to change |
 | `docs/decisions/004-river-online-learning-architecture.md` | ADR-004 — superseded by ADR-006 |
@@ -168,7 +169,7 @@ Client browser (https://energy.jeroenveen.nl):
 | `docs/lightgbm-quantile-shadow-plan.md` | Original shadow plan (historical) |
 | `docs/river-arf-retrospective.md` | ARF retirement narrative + closing addendum on the EXP-014 promotion |
 | `docs/model-progress-log.md` | Dated narrative log of ML pipeline changes |
-| `tests/` | pytest suite — 202 tests (SecureDataHandler, OnlineFeatureBuilder, LGBM forecaster + multi-horizon + secure_pickle + conformal + backtest + update_shadow + evaluate_shadow + slice MAE + archive path + metrics module + **consolidate parsers (test_consolidate.py, 18 tests, 2026-06-10)** + **t0-advance guard (TestClassifyT0Advance, 7 tests, 2026-08-28)**) |
+| `tests/` | pytest suite — 222 tests (SecureDataHandler, OnlineFeatureBuilder, LGBM forecaster + multi-horizon + secure_pickle + conformal + backtest + update_shadow + evaluate_shadow + slice MAE + archive path + metrics module + **consolidate parsers (test_consolidate.py, 18 tests, 2026-06-10)** + **t0-advance guard (TestClassifyT0Advance, 7 tests, 2026-08-28)** + **EXP-020 fundamentals parsers (20 tests, 2026-08-29)**) |
 | `scripts/m4_method_run.py` | M4 verdict runner (historical — pre-EXP-014) |
 | `scripts/exp012_evaluate.py` | EXP-012/013 paired-data evaluation (vintage-corrected) |
 | `scripts/exp014_evaluate_promotion.py` | EXP-014 promotion-criterion runner |
@@ -176,7 +177,8 @@ Client browser (https://energy.jeroenveen.nl):
 | `scripts/exp016_replay_aci.py` | EXP-016 offline replay — per-side ACI (Gibbs-Candès) with α trace + γ sensitivity |
 | `scripts/exp018_stage0_ablation.py` | EXP-018 per-feature-group ablation — production-shaped walk-forward, `--variants`/`--reuse-predictions`; **also the EXP-018a Stage-1 runner** |
 | `scripts/exp019_stationary_ablation.py` | EXP-019 anchor-relative spread variants (imports the EXP-018 harness) |
-| `ml/shadow/exp018_stage0*/summary.json`, `ml/shadow/exp019_stationary/summary.json` | Sweep records (per-hour `predictions.parquet` dumps are gitignored, regenerable) |
+| `scripts/exp020_fundamentals_ablation.py` | EXP-020 fundamentals arms (residual load / TTF gas / holiday) — imports the EXP-018 harness; `load_frame_ext` keeps the parquet fundamentals columns, per-arm DM bases, mechanical gate report |
+| `ml/shadow/exp018_stage0*/summary.json`, `ml/shadow/exp019_stationary/summary.json`, `ml/shadow/exp020_fundamentals/summary.json`, `ml/shadow/exp020_fundamentals_ctl/summary.json` | Sweep records (per-hour `predictions.parquet` dumps are gitignored, regenerable) |
 
 ## How to Work Here
 

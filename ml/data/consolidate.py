@@ -265,6 +265,110 @@ def parse_load_file(path: Path) -> pd.Series:
     return pd.Series(series, name="load_forecast")
 
 
+def parse_wind_generation_file(path: Path) -> pd.Series:
+    """Extract the ENTSO-E NL day-ahead wind generation forecast (MW).
+
+    Same file as `parse_wind_file`, different sub-dataset: `offshore_wind` is
+    Open-Meteo wind *speed* at one offshore point, `entsoe_wind_generation` is
+    the TSO's own day-ahead wind *generation* forecast in MW for the whole NL
+    bidding zone. Quarter-hourly; `consolidate` resamples to hourly.
+    """
+    data = _unwrap_v22_envelope(load_json_file(path))
+
+    gen = data.get("entsoe_wind_generation", {})
+    if not isinstance(gen, dict) or "data" not in gen:
+        return pd.Series(dtype=float, name="wind_gen_forecast_mw")
+
+    nl_data = gen["data"].get("NL", {})
+    if not isinstance(nl_data, dict):
+        return pd.Series(dtype=float, name="wind_gen_forecast_mw")
+
+    series = {}
+    for ts_str, fields in nl_data.items():
+        if isinstance(fields, dict) and isinstance(fields.get("wind_total"), (int, float)):
+            try:
+                ts = pd.Timestamp(ts_str).tz_convert("UTC")
+                series[ts] = fields["wind_total"]
+            except Exception:
+                continue
+    return pd.Series(series, name="wind_gen_forecast_mw")
+
+
+def parse_solar_generation_file(path: Path) -> pd.Series:
+    """Extract the NED.nl NL solar generation forecast (MW).
+
+    NED's `capacity_kw` is not installed capacity — it is the block's average
+    power in kW, and satisfies `capacity_kw == volume_kwh * 4` for the
+    quarter-hourly blocks (pinned by test). `utilization_pct` is measured
+    against true installed capacity (~25 GW), so it cannot be used directly.
+    """
+    data = _unwrap_v22_envelope(load_json_file(path))
+
+    solar = data.get("solar", {})
+    if not isinstance(solar, dict):
+        return pd.Series(dtype=float, name="solar_gen_forecast_mw")
+    forecast = solar.get("forecast", {})
+    if not isinstance(forecast, dict):
+        return pd.Series(dtype=float, name="solar_gen_forecast_mw")
+
+    series = {}
+    for ts_str, fields in forecast.items():
+        if isinstance(fields, dict) and isinstance(fields.get("capacity_kw"), (int, float)):
+            try:
+                ts = pd.Timestamp(ts_str).tz_convert("UTC")
+                series[ts] = fields["capacity_kw"] / 1000.0
+            except Exception:
+                continue
+    return pd.Series(series, name="solar_gen_forecast_mw")
+
+
+def parse_gas_price_file(path: Path) -> pd.Series:
+    """Extract the TTF gas settlement price (EUR/MWh) from a market_proxies file.
+
+    One scalar per file, stamped with its own trade `date` rather than the
+    file's collection timestamp. Indexed at that date's 00:00 UTC; TTF is a
+    business-day series, so `consolidate` forward-fills it over weekends.
+    """
+    data = _unwrap_v22_envelope(load_json_file(path))
+
+    ttf = data.get("gas_ttf", {})
+    if not isinstance(ttf, dict):
+        return pd.Series(dtype=float, name="gas_ttf_eur_mwh")
+
+    price = ttf.get("price")
+    date = ttf.get("date")
+    if not isinstance(price, (int, float)) or not isinstance(date, str):
+        return pd.Series(dtype=float, name="gas_ttf_eur_mwh")
+
+    try:
+        ts = pd.Timestamp(date, tz="UTC")
+    except Exception:
+        return pd.Series(dtype=float, name="gas_ttf_eur_mwh")
+    return pd.Series({ts: float(price)}, name="gas_ttf_eur_mwh")
+
+
+def parse_calendar_file(path: Path) -> pd.Series:
+    """Extract the NL public-holiday flag from a calendar_features file.
+
+    Hourly, keyed by local timestamp. The 24-feature set encodes hour/dow/month
+    cyclically but has no holiday flag, and NL holidays shift demand into a
+    weekend-like shape on days the `is_weekend` feature calls working days.
+    """
+    data = _unwrap_v22_envelope(load_json_file(path))
+    if not isinstance(data, dict):
+        return pd.Series(dtype=float, name="is_holiday_nl")
+
+    series = {}
+    for ts_str, fields in data.items():
+        if isinstance(fields, dict) and isinstance(fields.get("is_holiday_nl"), (bool, int, float)):
+            try:
+                ts = pd.Timestamp(ts_str).tz_convert("UTC")
+                series[ts] = float(fields["is_holiday_nl"])
+            except Exception:
+                continue
+    return pd.Series(series, name="is_holiday_nl")
+
+
 def glob_sorted(data_dir: Path, pattern: str) -> list[Path]:
     """Find files matching pattern, sorted by filename (timestamp order)."""
     return sorted(data_dir.glob(pattern))
@@ -282,6 +386,11 @@ def consolidate(data_dir: Path, output: Path):
         "solar_ghi": ("*_solar_forecast.json", parse_solar_file),
         "temperature": ("*_weather_forecast_multi_location.json", parse_weather_file),
         "load_forecast": ("*_load_forecast.json", parse_load_file),
+        # EXP-020 fundamentals (additive; not yet in FEATURE_COLUMNS).
+        "wind_gen_forecast_mw": ("*_wind_forecast.json", parse_wind_generation_file),
+        "solar_gen_forecast_mw": ("*_ned_production.json", parse_solar_generation_file),
+        "gas_ttf_eur_mwh": ("*_market_proxies.json", parse_gas_price_file),
+        "is_holiday_nl": ("*_calendar_features.json", parse_calendar_file),
     }
 
     all_series = {}
@@ -310,9 +419,22 @@ def consolidate(data_dir: Path, output: Path):
     df = df.resample("h").mean()
 
     # Forward-fill slow-changing features (max 6 hours)
-    for col in ["temperature", "load_forecast", "wind_speed_80m", "solar_ghi"]:
+    for col in [
+        "temperature",
+        "load_forecast",
+        "wind_speed_80m",
+        "solar_ghi",
+        "wind_gen_forecast_mw",
+        "solar_gen_forecast_mw",
+        "is_holiday_nl",
+    ]:
         if col in df.columns:
             df[col] = df[col].ffill(limit=6)
+
+    # TTF gas settles once per business day; carry it across weekends and
+    # holidays (5 days covers a long weekend plus a market holiday).
+    if "gas_ttf_eur_mwh" in df.columns:
+        df["gas_ttf_eur_mwh"] = df["gas_ttf_eur_mwh"].ffill(limit=120)
 
     # Drop rows with no price (target)
     before = len(df)

@@ -22,6 +22,10 @@ from ml.data.consolidate import (
     parse_weather_file,
     parse_load_file,
     parse_entsoe_wholesale,
+    parse_wind_generation_file,
+    parse_solar_generation_file,
+    parse_gas_price_file,
+    parse_calendar_file,
 )
 
 
@@ -210,3 +214,197 @@ class TestNonDictDataGuards:
         monkeypatch.setattr(consolidate, "load_json_file", lambda _: payload)
         out = parse_load_file(tmp_path / "fake.json")
         assert out.empty
+
+
+# --- EXP-020 fundamentals parsers ------------------------------------------
+
+def _wind_gen_inner() -> dict:
+    """`entsoe_wind_generation` sits beside `offshore_wind` in the same file."""
+    return {
+        "entsoe_wind_generation": {
+            "metadata": {"units": "MW", "forecast_type": "day-ahead"},
+            "data": {
+                "NL": {
+                    "2026-08-24T00:00:00+02:00": {
+                        "wind_offshore": 134.0,
+                        "wind_onshore": 224.0,
+                        "wind_total": 358.0,
+                    },
+                    "2026-08-24T00:15:00+02:00": {
+                        "wind_offshore": 140.0,
+                        "wind_onshore": 230.0,
+                        "wind_total": 370.0,
+                    },
+                },
+                "DE_LU": {
+                    "2026-08-24T00:00:00+02:00": {"wind_total": 11387.45},
+                },
+            },
+        },
+        "offshore_wind": {"data": {"NL_HKZ": {"2026-08-24T00:00:00+02:00": {"wind_speed_80m": 8.5}}}},
+    }
+
+
+class TestParseWindGenerationFile:
+    def test_v22_envelope_reads_nl_wind_total(self, monkeypatch, tmp_path):
+        payload = {"metadata": {}, "data": _wind_gen_inner()}
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: payload)
+        out = parse_wind_generation_file(tmp_path / "fake.json")
+        assert len(out) == 2
+        assert out.iloc[0] == 358.0
+        assert out.name == "wind_gen_forecast_mw"
+
+    def test_v21_flat(self, monkeypatch, tmp_path):
+        payload = {"metadata": {}, **_wind_gen_inner()}
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: payload)
+        out = parse_wind_generation_file(tmp_path / "fake.json")
+        assert len(out) == 2
+
+    def test_timestamps_normalised_to_utc(self, monkeypatch, tmp_path):
+        payload = {"metadata": {}, "data": _wind_gen_inner()}
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: payload)
+        out = parse_wind_generation_file(tmp_path / "fake.json")
+        # +02:00 local midnight is 22:00 UTC the previous day.
+        assert out.index[0] == pd.Timestamp("2026-08-23T22:00:00+00:00")
+
+    def test_does_not_read_the_offshore_wind_speed_subdataset(self, monkeypatch, tmp_path):
+        """Regression guard: the same file carries an Open-Meteo wind *speed*
+        series that `parse_wind_file` reads. Confusing the two would feed m/s
+        into an MW column."""
+        payload = {"metadata": {}, "data": _wind_gen_inner()}
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: payload)
+        out = parse_wind_generation_file(tmp_path / "fake.json")
+        assert 8.5 not in out.values
+
+    def test_missing_subdataset_returns_empty(self, monkeypatch, tmp_path):
+        payload = {"data": {"offshore_wind": {"data": {}}}}
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: payload)
+        assert parse_wind_generation_file(tmp_path / "fake.json").empty
+
+    def test_non_dict_nl_returns_empty(self, monkeypatch, tmp_path):
+        payload = {"data": {"entsoe_wind_generation": {"data": {"NL": ["bad"]}}}}
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: payload)
+        assert parse_wind_generation_file(tmp_path / "fake.json").empty
+
+
+def _ned_inner() -> dict:
+    return {
+        "solar": {
+            "forecast": {
+                "2026-08-24T12:15:00+02:00": {
+                    "capacity_kw": 16007908.0,
+                    "volume_kwh": 4001977.0,
+                    "utilization_pct": 0.6364,
+                },
+                "2026-08-24T12:30:00+02:00": {
+                    "capacity_kw": 15393975.0,
+                    "volume_kwh": 3848493.75,
+                    "utilization_pct": 0.6120,
+                },
+            },
+            "actual": {"2026-08-24T12:15:00+02:00": {"capacity_kw": 999999.0}},
+        },
+        "wind_onshore": {"forecast": {}},
+    }
+
+
+class TestParseSolarGenerationFile:
+    def test_converts_kw_to_mw(self, monkeypatch, tmp_path):
+        payload = {"metadata": {}, "data": _ned_inner()}
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: payload)
+        out = parse_solar_generation_file(tmp_path / "fake.json")
+        assert len(out) == 2
+        assert out.iloc[0] == pytest.approx(16007.908)
+        assert out.name == "solar_gen_forecast_mw"
+
+    def test_capacity_kw_is_block_power_not_installed_capacity(self):
+        """Pins the unit reading the parser depends on: NED's `capacity_kw`
+        equals `volume_kwh * 4` for quarter-hourly blocks, i.e. it is the
+        block's average power, not installed capacity (which `utilization_pct`
+        is measured against)."""
+        for fields in _ned_inner()["solar"]["forecast"].values():
+            assert fields["capacity_kw"] == pytest.approx(fields["volume_kwh"] * 4)
+
+    def test_reads_forecast_not_actual(self, monkeypatch, tmp_path):
+        payload = {"metadata": {}, "data": _ned_inner()}
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: payload)
+        out = parse_solar_generation_file(tmp_path / "fake.json")
+        assert 999.999 not in out.values
+
+    def test_v21_flat(self, monkeypatch, tmp_path):
+        payload = {"metadata": {}, **_ned_inner()}
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: payload)
+        assert len(parse_solar_generation_file(tmp_path / "fake.json")) == 2
+
+    def test_missing_solar_returns_empty(self, monkeypatch, tmp_path):
+        payload = {"data": {"wind_onshore": {"forecast": {}}}}
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: payload)
+        assert parse_solar_generation_file(tmp_path / "fake.json").empty
+
+    def test_non_dict_forecast_returns_empty(self, monkeypatch, tmp_path):
+        payload = {"data": {"solar": {"forecast": ["bad"]}}}
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: payload)
+        assert parse_solar_generation_file(tmp_path / "fake.json").empty
+
+
+class TestParseGasPriceFile:
+    def _payload(self, **over):
+        ttf = {"ticker": "TTF=F", "price": 68.41, "date": "2026-08-24", "units": "EUR/MWh"}
+        ttf.update(over)
+        return {"metadata": {}, "data": {"carbon": {"price": 80.0}, "gas_ttf": ttf}}
+
+    def test_indexes_on_trade_date_not_collection_time(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: self._payload())
+        out = parse_gas_price_file(tmp_path / "260825_161500_fake.json")
+        assert len(out) == 1
+        assert out.index[0] == pd.Timestamp("2026-08-24T00:00:00+00:00")
+        assert out.iloc[0] == pytest.approx(68.41)
+
+    def test_does_not_read_carbon(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: self._payload())
+        out = parse_gas_price_file(tmp_path / "fake.json")
+        assert 80.0 not in out.values
+
+    def test_missing_gas_ttf_returns_empty(self, monkeypatch, tmp_path):
+        payload = {"data": {"carbon": {"price": 80.0}}}
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: payload)
+        assert parse_gas_price_file(tmp_path / "fake.json").empty
+
+    def test_non_numeric_price_returns_empty(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: self._payload(price=None))
+        assert parse_gas_price_file(tmp_path / "fake.json").empty
+
+    def test_unparseable_date_returns_empty(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: self._payload(date="not-a-date"))
+        assert parse_gas_price_file(tmp_path / "fake.json").empty
+
+
+class TestParseCalendarFile:
+    def _payload(self):
+        return {
+            "metadata": {},
+            "data": {
+                "2026-04-27T00:00:00+02:00": {"is_holiday_nl": True, "is_holiday_de": False},
+                "2026-04-27T01:00:00+02:00": {"is_holiday_nl": True, "is_holiday_de": False},
+                "2026-04-28T00:00:00+02:00": {"is_holiday_nl": False, "is_holiday_de": False},
+            },
+        }
+
+    def test_bools_become_floats(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: self._payload())
+        out = parse_calendar_file(tmp_path / "fake.json")
+        assert len(out) == 3
+        assert out.iloc[0] == 1.0
+        assert out.iloc[2] == 0.0
+        assert out.name == "is_holiday_nl"
+
+    def test_reads_nl_not_de(self, monkeypatch, tmp_path):
+        payload = {"data": {"2026-10-03T00:00:00+02:00": {"is_holiday_nl": False, "is_holiday_de": True}}}
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: payload)
+        out = parse_calendar_file(tmp_path / "fake.json")
+        assert out.iloc[0] == 0.0
+
+    def test_entries_without_the_flag_are_skipped(self, monkeypatch, tmp_path):
+        payload = {"data": {"2026-04-27T00:00:00+02:00": {"season": "spring"}}}
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: payload)
+        assert parse_calendar_file(tmp_path / "fake.json").empty

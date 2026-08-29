@@ -132,6 +132,84 @@ Items 1-5 are ~1 week. Items 6-8 are ~1 week. Item 9 is the polishing pass, ~3-5
 
 ## Resolved
 
+### [2026-08-29 -> resolved 2026-08-29] EXP-020: residual load and gas price carry price signal the three current exogenous columns cannot, because those are point weather proxies rather than system quantities
+
+**Position (provisional):** EXP-018 Stage 0 found the exogenous trio (`wind_speed_80m`, `solar_ghi`, `load_forecast`) worth ~nothing — wind −0.3%, solar −0.3%, load −0.4% individually. The obvious reading is "exogenous data doesn't help this model." Position: that reading is too strong, and the trio is inert for two reasons the sweep could not separate. (1) **It is not the merit-order quantity.** External EPF work puts residual load — load minus renewable generation, in MW — at ρ≈0.53 with day-ahead price, materially above load or renewables alone, because merit order is about the *residual* the dispatchable fleet must cover. LightGBM with axis-aligned splits on a ~1300-row window cannot reconstruct a three-way difference it is never given, and one of the three terms it *is* given (`wind_speed_80m`, a single offshore point's wind speed) is a nonlinear proxy for MW rather than MW. (2) **There is no fuel-cost level anchor at all.** Nothing in the 24-feature set carries the cost of the marginal generator; a trailing-56-day model can only infer level from its own price lags, which is exactly the mechanism EXP-018 blamed for the August upper-side coverage breach (Aug 2026 upper 0.774, band 0.660, against a 128 EUR/MWh monthly mean — the highest in the parquet). TTF gas is that anchor and is exogenous to the price history.
+
+Prediction: adding `residual_load_mw` and `gas_ttf_eur_mwh` to the 15-feature lean set improves quantile score by ≥3%, and does so on the full-24 base as well.
+
+**Why this is not simply re-opening a refuted bet:** the [2026-08-20] entry's "feature expansion is the highest-leverage lever" position was refuted, and per ADR-007 a refuted position is not re-run with a looser Method. This entry narrows rather than loosens: it names two specific derived columns, states the mechanism by which they differ from what Stage 0 actually tested (a *combination* and a *level anchor*, neither of which was in the ablation), and carries the same four gates. If these two also come back inert, the general claim "exogenous data does not help Augur at this window length" is then supported by a test that could have refuted it, which is worth more than the current evidence.
+
+**Alternatives (failure-mode signals):**
+
+1. **Everything exogenous really is inert at 56 days.** The trio was inert because 1300 rows cannot support any exogenous split, not because of proxy quality. **Signal:** residual load and gas both land inside ±1% QS, matching the trio. Then the lever is window length or model class, not features — open a window-length sweep, and stop proposing exogenous columns.
+2. **Gas helps and residual load does not.** The breach is a level problem, not a merit-order problem. **Signal:** gas alone clears the gates, residual load alone does not. Then ship the level anchor only, and treat renewables as adequately covered by price lags.
+3. **Residual load helps only because it re-encodes load.** The gain is the load column being made useful by rescaling, not the residual construction. **Signal:** `load_forecast` alone added to lean performs the same as `residual_load_mw`. Then keep the simpler column.
+4. **Gain is confined to the August level shift.** **Signal:** the monthly panel shows the effect concentrated in Jul/Aug 2026 and absent Dec–Jun. That is not disqualifying — the shift is the failure we care about — but it makes the fresh-vintage window a weak test if that window is calm, and Stage 2 must then be extended rather than passed.
+
+**Method (pre-committed 2026-08-29, before any column reaches `FEATURE_COLUMNS`):**
+
+*Step 0 — data plumbing, additive only, no experiment.* Extend `ml/data/consolidate.py` with parsers for four new columns, all from feeds that already start 2025-12-01, so the ablation window does not shrink:
+
+| Column | Source file | Path | Unit |
+|---|---|---|---|
+| `wind_gen_forecast_mw` | `*_wind_forecast.json` | `entsoe_wind_generation.data.NL[ts].wind_total` | MW |
+| `solar_gen_forecast_mw` | `*_ned_production.json` | `solar.forecast[ts].capacity_kw / 1000` | MW |
+| `gas_ttf_eur_mwh` | `*_market_proxies.json` | `gas_ttf.price` (one daily scalar per file) | EUR/MWh |
+| `is_holiday_nl` | `*_calendar_features.json` | `[ts].is_holiday_nl` | 0/1 |
+
+`residual_load_mw = load_forecast − wind_gen_forecast_mw − solar_gen_forecast_mw` is derived in the builder, not stored.
+
+**Invariant, enforced by test:** the five existing columns and the row index must be bit-identical before and after this change. EXP-018a Stage 1 fires ≈2026-09-09 off this same parquet, and it must not be perturbed by this work. If the invariant cannot hold, the plumbing waits until EXP-018a Stage 1 has run.
+
+*Step 1 — EXP-020 discovery sweep, offline, zero production risk.* `scripts/exp018_stage0_ablation.py` is drop-only (variants are subsets of `FEATURE_COLUMNS`); extend it to score added columns. Same production shape as EXP-018/019 — 56-day window, h+1..h+72, one t0 per vintage day, no CQR, 263 vintages 2025-12-01..2026-08-22, HAC bandwidth 71. Six arms:
+
+```
+full, lean,
+lean+residual, lean+gas, lean+residual+gas+holiday,
+full+residual+gas+holiday
+```
+
+Primary comparison: `lean+residual+gas+holiday` vs `lean`. Confirmatory: `full+residual+gas+holiday` vs `full` — the fundamentals must not degrade the full base either, or the result is base-dependent and does not travel. Gates (identical to EXP-018a, deliberately — the bar is the product requirement, not tuned to this method): (1) paired DM on per-observation quantile score, H1 treatment better, one-sided p < 0.10; (2) treatment QS ≥3% better than base; (3) lower- and upper-side coverage each not more than 0.02 worse than base; (4) mean Winkler (α=0.20) ≤ 1.05 × base.
+
+*Step 2 — fresh-vintage confirmation, pre-committed now.* This runs on the **same 263-vintage window EXP-018 and EXP-019 already explored**, so every effect size it produces carries that selection bias, and **nothing ships from Step 1 directly** — same rule as EXP-018a. Confirmation runs on vintages with `t0 ≥` the Step-1 end date, ≥14 of them, gates unchanged. Sequencing: EXP-018a Stage 1 has priority on the fresh-vintage window; EXP-020 confirmation runs after it, on a base fixed by EXP-018a's outcome (lean if it passes, full if it fails).
+
+**Addendum 2026-08-29 (data availability, gates unchanged):** Step 0 is done and the plumbing invariant holds (index and the five original columns bit-identical, verified by rebuilding the parquet from the same data directory with and without the new parsers). Measured NaN rates over 2025-12-01..2026-08-25 are `wind_gen_forecast_mw` 0.8%, `solar_gen_forecast_mw` 1.7%, `is_holiday_nl` 0.0% — but **`gas_ttf_eur_mwh` does not exist before 2026-02-05**: EDH's `market_proxies` collector only added TTF on that date (its own changelog), so the column is one contiguous leading hole, 100% complete afterwards. Consequence for Step 1: the six-arm sweep runs on **2026-02-05..2026-08-22** (~199 vintages) so all arms share one row set, and the no-gas arms (`lean`, `lean+residual`, `full`) are additionally run on the full 2025-12-01 window as a secondary check that the shorter window does not by itself change the residual-load conclusion. The four gates are unchanged. Backfilling TTF from yfinance would restore the full window but is **declined**: the daily EDH snapshot is vintage data (what was known that day) while a backfill is revised data, so the two halves would not be comparable, and Alternative 4 (effect confined to the recent level shift) is exactly the failure mode a mixed-provenance column would disguise.
+
+**Revisit trigger:** Step 0 + Step 1 immediately (runnable on existing data). Step 2 after EXP-018a Stage 1 concludes. Surface in `/curate`.
+
+**Review by:** 2026-09-30.
+
+**Domain:** EXP-020, feature engineering, augur#19 (upper-side calibration), ADR-006.
+
+**Status:** resolved 2026-08-29 — Position refuted, see Resolution below. Provenance: the mechanism claim comes from an external literature pass, not from Augur's own data — a HAN BDSD minor project on week-ahead NL price forecasting (`/home/jeroen/repos/FyE/core/sources/bdsd-minor-electricity-price-prediction-2026-01-19.pdf`, Jan 2026) and its cited sources (Aščerić 2021 for the ρ≈0.53 residual-load figure; Tschora 2022 for gas indices ranking top by SHAP). That report also independently discarded the energyDataHub feed as too gappy to train on and rebuilt from ENTSO-E + Open-Meteo — noted here as corroboration for ducroq/energyDataHub#50, not acted on in this entry.
+
+**Resolution (2026-08-29, same day): Position refuted; Alternative 1 supported, with one correction to its mechanism.**
+
+`scripts/exp020_fundamentals_ablation.py`, two runs. Main: 7 arms x 195 paired vintages (2026-02-05..2026-08-22), 14 037 paired observations, `ml/shadow/exp020_fundamentals/summary.json`. Control: 4 no-gas arms x 263 vintages (2025-12-01..2026-08-22), `ml/shadow/exp020_fundamentals_ctl/summary.json`.
+
+| variant | nfeat | MAE | dQS% vs full | cov_lo | cov_hi | Winkler | base | DM p |
+|---|---|---|---|---|---|---|---|---|
+| full | 24 | 33.70 | 0.0 | 0.768 | 0.822 | 195.6 | — | — |
+| lean | 15 | 31.60 | −7.8 | 0.792 | 0.800 | 177.6 | full | 0.0000 |
+| lean_load | 16 | 31.69 | −7.5 | 0.789 | 0.802 | 178.4 | lean | 0.8505 |
+| lean_residual | 16 | 31.52 | −7.7 | 0.795 | 0.796 | 177.9 | lean | 0.6484 |
+| lean_gas | 16 | 32.29 | −4.9 | 0.769 | 0.833 | 184.2 | lean | 0.9908 |
+| **lean_fund** | 18 | 32.56 | −4.7 | 0.772 | 0.830 | 183.4 | lean | **0.9929** |
+| full_fund | 27 | 33.55 | +0.2 | 0.760 | 0.823 | 196.9 | full | 0.6150 |
+
+**Primary gate `lean_fund` vs `lean`: FAIL** — gate 1 (DM p=0.993, decisively the wrong direction) and gate 2 (QS 3.4% *worse*, not 3% better) both fail; gates 3 and 4 pass. **Confirmatory `full_fund` vs `full`: FAIL** the same way (p=0.615, QS +0.2%). Both fail toward "no effect", not toward a bad trade-off.
+
+- **Residual load is inert, and so is plain load.** `lean_residual` p=0.648 on the gas window and **p=0.899 on the full 263-vintage control** — a tie with `lean` on both. `lean_load` p=0.851. This makes Alternative 3 moot rather than decided: there is no gain to attribute to either construction. The rho≈0.53 residual-load correlation from the literature is real but already spanned by price lags plus calendar at a 56-day window.
+- **Gas does not merely fail to help — it degrades.** `lean_gas` is +3.2% QS worse than `lean` (p=0.991). This corrects the Position's mechanism: the claim was that a trailing-56-day model lacks a fuel-cost *level anchor*. It has no use for one. This is the **second independent confirmation of EXP-019's mechanism** — EXP-019 found that re-adding `price_rolling_mean_168h` as a single explicit level column cost significantly, and read it as redundant smoothed-level columns diluting the split search. TTF gas is precisely such a column (slow-moving, level-carrying, correlated with price), and EXP-019's reading predicted this result before the sweep was run. The generalisation is now: **this model class at this window length rejects added level columns, whatever their provenance** — internal (rolling mean) or exogenous (gas).
+- **Not a regime artifact (Alternative 4 does not apply).** Monthly panel for the primary comparison: `lean_fund` worse in 5 of 7 months (Jul +16.7%, May +8.0%, Feb +4.1%, Aug +1.2%, Apr +0.7%), better in 2 (Mar −1.7%, Jun −1.2%). There is no level-shift month where fundamentals rescue anything — including August, the month whose upper-side breach motivated the entry.
+- **Free replication of EXP-018.** `lean` beats `full` at p<0.0001 on both windows: −7.8% QS on 2026-02-05.. and −7.1% on the full control window (against EXP-018's −8.1%). This is *not* the pre-committed fresh-vintage test — both windows overlap the discovery data, so EXP-018a Stage 1 is undischarged — but it makes EXP-018a's Alternative 3 (selection-bias mirage) less likely.
+
+**Consequences:** (a) nothing ships; `FEATURE_COLUMNS` is untouched and no production path changed. (b) The Step-0 plumbing stays — the four columns cost nothing, are additive-only, and are now the cheap precondition for any future test that wants them. (c) The standing answer on exogenous features is now backed by a test that could have refuted it: **at a 56-day window, this model gets nothing from added exogenous columns, and actively loses from added level columns.** The next lever is therefore window length or model class, not features — which is where the foundation-model track (Chronos-Bolt / TinyTimeMixer, GPU-shaped) becomes the interesting bet rather than more feature engineering. (d) EXP-020 Step 2 (fresh-vintage confirmation) is **cancelled** — there is no effect to confirm.
+
+
+---
+
 ### [2026-08-20 → resolved 2026-08-25] Feature expansion is the highest-leverage untried lever; calibration asymmetry has flipped to the upper side
 
 **Position (provisional):** Production LightGBM-Quantile runs on 24 features built from only 4 columns (`price_eur_mwh`, `wind_speed_80m`, `solar_ghi`, `load_forecast`) while energyDataHub already collects ~7 more series (`ned_production`, `grid_imbalance`, `cross_border_flows`, `gas_storage`, `gas_flows`, `market_proxies`, `generation_forecast`) that never reach `consolidate.py`. Expanding features — residual load, generation mix, and volatility/uncertainty signals — is the highest-leverage untried lever for both point skill and the augur#19 quantile-spread gap. Re-computing `calibration_history` coverage through 2026-08-19 shows the per-side asymmetry has **flipped to the upper side**: August lower 0.916 / upper 0.755 (band ~0.67 vs 0.80 target), versus lower 0.834 / upper 0.886 through 2026-06-11 — so augur#19's "lower-side" framing is now stale.

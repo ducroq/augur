@@ -4,6 +4,35 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
+## 2026-08-29 — EXP-020 Step 0: four fundamentals columns land in the parquet, inert by construction
+
+**Trigger**: An external literature pass (see below) put *residual load* — load minus renewable generation, in MW — at ρ≈0.53 with NL day-ahead price, materially above load or renewables alone. Augur's three exogenous columns are a single offshore point's wind *speed*, a single point's GHI, and load, and EXP-018 Stage 0 found all three inert (±0.4%). The two statements are compatible only if the trio is the wrong *shape* of exogenous rather than exogenous being useless — which the ablation could not separate, because it only ever removed columns and never tested a combination or a fuel-cost level anchor.
+
+**What was already sitting unused**: energyDataHub collects ~11 series; `consolidate.py` read 4. Two of the new columns come out of files the pipeline *already opens and parses*:
+
+| Column | File | Path | Note |
+|---|---|---|---|
+| `wind_gen_forecast_mw` | `*_wind_forecast.json` | `entsoe_wind_generation.data.NL[ts].wind_total` | same file `parse_wind_file` reads for `wind_speed_80m`; it took the `offshore_wind` sub-dataset and left the TSO's own MW forecast untouched |
+| `solar_gen_forecast_mw` | `*_ned_production.json` | `solar.forecast[ts].capacity_kw / 1000` | not previously read at all |
+| `gas_ttf_eur_mwh` | `*_market_proxies.json` | `gas_ttf.price` | one daily scalar, stamped with its own trade date |
+| `is_holiday_nl` | `*_calendar_features.json` | `[ts].is_holiday_nl` | the 24-feature set has no holiday flag |
+
+**Unit trap worth recording**: NED's `capacity_kw` is *not* installed capacity. It varies through the day and satisfies `capacity_kw == volume_kwh * 4` on the quarter-hourly blocks, i.e. it is the block's average power in kW. `utilization_pct` is measured against true installed capacity (~25 GW: 16008 MW ÷ 0.6364 ≈ 25.2 GW at the 2026-08-24 midday peak), so multiplying capacity by utilization would double-discount. The parser divides `capacity_kw` by 1000 and a test pins the `volume_kwh * 4` identity so a future NED resolution change fails loudly rather than silently rescaling the column.
+
+**Additive-only, verified not asserted**: EXP-018a Stage 1 fires ≈2026-09-09 off this same parquet, so the plumbing had to leave it undisturbed. Rebuilding from one data directory with and without the new parsers gives an identical index and bit-identical values for all five original columns. Nothing was added to `FEATURE_COLUMNS`, so no model reads the new columns yet.
+
+**Coverage over 2025-12-01..2026-08-25**: `is_holiday_nl` 0.0% NaN, `wind_gen_forecast_mw` 0.8%, `solar_gen_forecast_mw` 1.7% — and **`gas_ttf_eur_mwh` 24.6%, all of it one contiguous leading hole**. EDH's `market_proxies` collector only added TTF on 2026-02-05 (its own changelog); from that date the column is complete. So the EXP-020 sweep runs on 2026-02-05..2026-08-22 (~199 vintages) rather than the 263 EXP-018 used, with the no-gas arms replayed on the full window as a control. Backfilling TTF from yfinance was declined: the daily snapshot is vintage data and a backfill is revised data, and mixing the two would disguise exactly the failure mode (effect confined to the recent level shift) the experiment needs to be able to see.
+
+**Tests**: 20 new cases in `tests/test_consolidate.py` (38 in that file, up from 18) — envelope v2.1/v2.2 shapes, UTC normalisation, the NED unit identity, forecast-not-actual, gas indexed on trade date not collection time, TTF-not-carbon, wind-MW-not-wind-speed, and fail-soft on every malformed shape.
+
+**Result (same day) — refuted.** `scripts/exp020_fundamentals_ablation.py`, 7 arms x 195 paired vintages (14 037 paired obs) plus a 4-arm control on the full 263-vintage window. Primary gate `lean_fund` vs `lean`: **FAIL** — DM p=0.9929 (decisively the wrong direction), QS 3.4% *worse* not 3% better. Confirmatory `full_fund` vs `full`: **FAIL** (p=0.6150). Residual load is inert (p=0.648 main, p=0.899 control) and so is plain `load_forecast` (p=0.851). Gas actively degrades (+3.2% QS, p=0.991).
+
+The informative half is the gas result, which corrects the entry's own mechanism. The hypothesis was that a trailing-56-day model *lacks* a fuel-cost level anchor. It does not want one. That is the second independent confirmation of EXP-019's finding — re-adding `price_rolling_mean_168h` as a single explicit level column cost significantly there, read as redundant smoothed-level columns diluting the split search. TTF gas is exactly that kind of column, and EXP-019's reading predicted this outcome before the sweep ran. Generalised: **at a 56-day window this model rejects added level columns whatever their provenance, internal or exogenous.** The monthly panel rules out a regime artifact (worse in 5 of 7 months, Jul +16.7%, no rescue in August). Consequence: the next lever is window length or model class, not feature engineering. Full numbers and the four gate verdicts in `docs/hypothesis-log.md` [2026-08-29 -> resolved] and `experiments/registry.jsonl` EXP-020.
+
+**Status**: evidence-gathering only, no production path touched. `FEATURE_COLUMNS` untouched; the Step-0 columns are kept because they are additive-only and cost nothing. Full suite 222 passed. Pre-committed criteria and the arm design are in `docs/hypothesis-log.md` [2026-08-29]. Provenance for the mechanism claim is external — a HAN BDSD minor project on week-ahead NL price forecasting (`FyE/core/sources/bdsd-minor-electricity-price-prediction-2026-01-19.pdf`, Jan 2026) and its cited sources (Aščerić 2021, Tschora 2022). That report independently discarded the energyDataHub feed as too gappy to train on and rebuilt from ENTSO-E + Open-Meteo — corroboration for ducroq/energyDataHub#50, not acted on here.
+
+---
+
 ## 2026-08-28 — The vintage stream broke silently for three days: t0 followed a stale parquet
 
 **Trigger**: The 2026-08-27 daily commit carried `[ALARM: eval stale 3d]` while every step reported `rc=0` and `eval_log.jsonl` ended at 2026-08-24.
