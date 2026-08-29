@@ -4,6 +4,62 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
+## 2026-08-29 — EXP-022: the context ladder says it is mostly pretrained prior, and it corrects EXP-021's stated mechanism
+
+**Trigger**: EXP-021 measured a 20.3% quantile-score gap but only *asserted* why. Its Position credited Chronos with "not being recalibrated nightly to one 56-day price level" — the level-drift mechanism this project has carried since EXP-018. That was reasoning from an accumulated story rather than from evidence, and it turned out to be wrong.
+
+**Method** (exploratory, not pre-committed, no gates, nothing shipped — descriptive in the same sense EXP-018 Stage 0 was): starve the FM of context while leaving the incumbent untouched. Truncate EXP-021's *matched-information* contexts to their last 168h / 336h / 672h, re-run the identical predict path, and score every rung against the same `lean`/`full` arms with the same functions and HAC 71. If Chronos on 7 days still beats LightGBM trained on 56, the surviving margin is prior rather than information.
+
+| arm | MAE | QS | dQS% vs lean | band cov | DM p |
+|---|---|---|---|---|---|
+| lean LGBM (56d train) | 27.77 | 9.86 | 0.0 | 0.611 | — |
+| Chronos, 56d context | 23.23 | 7.86 | −20.3 | 0.811 | <0.0001 |
+| Chronos, 28d context | 23.70 | 7.97 | −19.2 | 0.804 | <0.0001 |
+| Chronos, 14d context | 24.23 | 8.19 | −16.9 | 0.813 | <0.0001 |
+| **Chronos, 7d context** | **25.37** | **8.63** | **−12.5** | **0.823** | **<0.0001** |
+
+**Chronos with one week of history beats LightGBM trained on eight weeks.** ~12 of the 20.3 points are pretrained prior; ~8 are context volume — and that second part is a critique of *our feature design*, not of gradient boosting: the incumbent predicts all 72 horizons from a single ~14-number feature row (8 lags + 6 rolling stats) while the FM reads the raw series.
+
+**The calibration half is entirely prior.** Band coverage is flat down the ladder — 0.811 / 0.804 / 0.813 / 0.823 — so it does not depend on information at all. That matches where the gain sits by quantile: p10 26.3%, p90 19.5%, p50 16.3%. Tail quantiles are exactly what a 1344-row nightly refit, split across 3 horizon groups, can least afford to estimate; pretrained heads get them for free. Two supporting probes: the bands are better **shaped**, not merely wider (lean needs 2.0x inflation to reach 0.811 coverage, ending 1.7x wider than the FM's; at matched width it reaches only 0.682), and the win is **routine rather than extremal** — the FM takes 75% of vintages with median per-vintage MAE 19.89 vs 26.62, but p95 is a tie at 48.55 vs 48.39. **It is better on ordinary days and no better on hard ones.**
+
+**What this corrects.** The level-drift story does not explain the gap. Mean signed error is +0.34 (FM) vs −0.52 (lean) EUR/MWh overall, and lean's worst month is **June (−15.5), not the August level-shift month (−4.7)**. Both models are near-unbiased; the difference is in distributional shape and spread. EXP-021's prediction was right and its stated reason was wrong — recorded because the registry's append-only correction rule exists for exactly this, and because the level-drift mechanism had begun to be reused as an explanation across EXP-018/019/020 without being tested directly.
+
+**What it does not settle**: Chronos's pretraining corpus almost certainly contains electricity-domain series, so "zero-shot" means zero-shot on *this series*, not on this *kind* of data. And the incumbent has never had a hyperparameter sweep (publishability entry item 5, never run), so this compares our production model to Chronos, not the best possible GBM to Chronos. Both caveats carry into EXP-021a.
+
+**Consequence for the roadmap**: context length demonstrably matters (−12.5% → −20.3% from 7d to 56d), which makes the untested **window-length** lever for the incumbent more interesting, not less — and it is a CPU job on the existing EXP-018 harness, needing no GPU and not blocked by the 2026-09-09 vintage gate. Registered as EXP-022 (`parked`). Runner `scripts/exp022_context_ladder.py`.
+
+---
+
+## 2026-08-29 — EXP-021: a zero-shot foundation model with no features beats the tuned LightGBM by 20%
+
+**Trigger**: EXP-020, earlier the same day, closed the feature lever with a test that could have refuted it — at a 56-day window this model gains nothing from added exogenous columns and *loses* from added level columns. Two levers were left standing: window length and model class. This is the model-class arm, and the first arm of augur#15.
+
+**Setup**: `amazon/chronos-bolt-base` (205M, Apache-2.0, revision `5d9f166d`), zero-shot, no fine-tuning, on `b650-gpu`. Everything except the estimator held fixed against EXP-020's control run: same parquet, same 260-vintage t0 grid, same 56-day context, same h+1..h+72, same scoring functions, HAC 71, exact pairing on `(t0, timestamp_utc)`. The FM gets **only the price series** — no engineered features, no exogenous, no calendar, no nightly retraining.
+
+**Result** (matched-information arm, 18 717 paired observations):
+
+| variant | MAE | QS | dQS% vs lean | cov_lo | cov_hi | cov_band | Winkler |
+|---|---|---|---|---|---|---|---|
+| **chronos_bolt_base** | **23.23** | **7.86** | **-20.3** | 0.898 | 0.913 | **0.811** | **119.8** |
+| lean (15 feat) | 27.77 | 9.86 | 0.0 | 0.814 | 0.797 | 0.611 | 155.6 |
+| full (24 feat, production) | 29.36 | 10.62 | +7.7 | 0.778 | 0.816 | 0.595 | 169.9 |
+
+All four pre-committed gates pass against **both** bases (DM p<0.0001 each). The pre-commit predicted parity; the measurement is superiority.
+
+**The calibration half may matter more than the skill half.** The FM's **raw** band coverage is 0.811 against the 0.80 nominal target *with no conformal layer at all*, where the incumbent sits at 0.611. Monthly upper-side coverage beats lean in 8 of 9 months, and the two largest gaps are precisely the months that motivated augur#19: **Jul +0.232, Aug +0.174** (August: FM upper 0.930 vs lean 0.756, at the highest monthly mean in the parquet, 128 EUR/MWh). The band is ~20% wider but Winkler is 0.77x. EXP-015 and EXP-016 both failed to close this gap by bolting a smarter conformal layer onto the incumbent's quantiles; this closes it by not needing one.
+
+**The horizon result runs the wrong way for the obvious objection.** Bolt's native `prediction_length` is 64, so h+65..h+72 is an off-distribution autoregressive rollout — pre-registered as the failure mode most likely to be contaminating the comparison. It is not: the FM is -19.9% QS on h1-64 and **-22.8% on h65-72**, its MAE barely moving across the boundary (23.15 -> 23.88) while the incumbent's climbs (27.51 -> 29.87). The advantage grows with horizon.
+
+**The code-review battery is the load-bearing part of this entry**, per ADR-007, because a result this large is more likely to be a bug than a discovery. Six checks: (1) the `lean`/`full` arms re-scored inside this harness reproduce the EXP-020 control **bit-identically**, so the join is exact; (2) zero context/target overlap, context ends exactly at t0, minimum target offset exactly +1h, and the scorer refuses to run if realised prices disagree across arms; (3) **a real defect the pre-commit missed** — `build_features` is `shift(1)`, so the incumbent's feature row stops at t0-1h while the FM's context ran through t0, a one-hour edge; a matched arm was run (context held to t0-1h, rolling out 73 steps to read the same 72 target hours) and is what is reported above, costing 0.8pp of 21; (4) batch invariance to 3e-5 despite contexts spanning 72..1343 points with NaN left-padding; (5) pretraining contamination is *impossible*, not merely unlikely — the pinned weights were last modified 2025-11-21 and the window opens 2025-12-05; (6) naive baselines confirm the incumbent is not simply broken (rMAE vs seasonal-naive: persistence 1.249, seasonal-naive 1.000, full 0.921, lean 0.871, **FM 0.729**).
+
+**A methodological note worth keeping.** The Method's own regularity tripwire fired on the first run: 19h context gaps on 125 of 260 vintages. These turned out not to be parquet holes but `dropna` losses on exogenous NaNs — *exactly the rows the incumbent also drops*, so the information sets matched all along; what did not match was the spacing. A tabular model is indifferent to row spacing; Chronos reads its context as regularly spaced, so the compressed array silently shifted every hour-of-day across each hole. Fixed by regridding onto the complete hourly grid with holes marked NaN, which adds no data and uses Bolt's own missing-value marker — and verified before being relied on: on a synthetic series with an 18h block removed, the NaN-marked context tracks the clean forecast to 0.08 MAE while the compressed one deviates by 0.92. The general lesson: **a sequence model and a tabular model do not have the same notion of "the same rows."**
+
+**Status**: evidence only — **nothing shipped**. `FEATURE_COLUMNS`, `ml/shadow/`, `dashboard.js` and `daily_update.sh` are untouched. The pre-committed decision rule makes superiority trigger a fresh-vintage confirmation before any production path moves, so **EXP-021a** was opened the same day with a raised effect-size bar (10%, not 3% — the in-sample effect is 20% and a 3% bar would let a 90%-shrunken result pass as confirmation), an operational-feasibility stage (CPU latency on sadalsuud, per-vintage tail risk), and a live-shadow stage before any ADR-006 amendment. EXP-020's standing conclusion is now half-resolved: **model class is confirmed live and large; window length remains untested and is a more interesting question than it was this morning**, given that a 2048-context pretrained model beats a 1344-row nightly refit. Full numbers in `docs/hypothesis-log.md` [2026-08-29 -> resolved] and `experiments/registry.jsonl` EXP-021.
+
+**Environment note**: `b650-gpu` has no `pip`, no `python3-venv`, no `python3-dev` and no sudo. Triton cannot JIT without `Python.h`, so torch fails at first CUDA op. Fixed with a userland `uv` install plus uv-managed CPython 3.12, which ships headers. Recorded because the next GPU arm will hit it again.
+
+---
+
 ## 2026-08-29 — EXP-020 Step 0: four fundamentals columns land in the parquet, inert by construction
 
 **Trigger**: An external literature pass (see below) put *residual load* — load minus renewable generation, in MW — at ρ≈0.53 with NL day-ahead price, materially above load or renewables alone. Augur's three exogenous columns are a single offshore point's wind *speed*, a single point's GHI, and load, and EXP-018 Stage 0 found all three inert (±0.4%). The two statements are compatible only if the trio is the wrong *shape* of exogenous rather than exogenous being useless — which the ablation could not separate, because it only ever removed columns and never tested a combination or a fuel-cost level anchor.

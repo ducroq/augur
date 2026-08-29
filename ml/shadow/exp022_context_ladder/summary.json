@@ -1,0 +1,103 @@
+{
+  "config": {
+    "purpose": "exploratory mechanism diagnostic for EXP-021 \u2014 NOT pre-committed, no gates",
+    "incumbents": "ml/shadow/exp020_fundamentals_ctl/predictions.parquet",
+    "full_context_arm": "ml/shadow/exp021_foundation_aligned/fm_predictions.parquet",
+    "hac_lags": 71,
+    "quantiles": [
+      0.1,
+      0.5,
+      0.9
+    ],
+    "cqr_applied": false,
+    "context_end_offset_h": 1,
+    "n_paired_observations": 18717
+  },
+  "arms": {
+    "lean_lgbm_56d": {
+      "n_obs": 18717,
+      "mae": 27.773706919817762,
+      "quantile_score": 9.863725633985963,
+      "coverage_lower": 0.8138056312443234,
+      "coverage_upper": 0.7969225837473954,
+      "coverage_band": 0.6107282149917188,
+      "band_width_median": 60.98758871216927,
+      "qs_delta_pct_vs_lean": 0.0
+    },
+    "full_lgbm_56d": {
+      "n_obs": 18717,
+      "mae": 29.35612448767856,
+      "quantile_score": 10.622656123022056,
+      "coverage_lower": 0.7783832879200726,
+      "coverage_upper": 0.8164769995191538,
+      "coverage_band": 0.5948602874392264,
+      "band_width_median": 65.60263963708817,
+      "qs_delta_pct_vs_lean": 7.694156520545947,
+      "dm_beats_lean": {
+        "statistic": 6.1047820155459025,
+        "p_one_sided": 0.9999999994852946,
+        "hac_lags": 71
+      }
+    },
+    "chronos_ctx_full": {
+      "n_obs": 18717,
+      "mae": 23.23477896170502,
+      "quantile_score": 7.864218944895969,
+      "coverage_lower": 0.8983811508254528,
+      "coverage_upper": 0.9130202489715232,
+      "coverage_band": 0.811401399796976,
+      "band_width_median": 73.35456848144531,
+      "qs_delta_pct_vs_lean": -20.27131292257961,
+      "dm_beats_lean": {
+        "statistic": -10.73951880678758,
+        "p_one_sided": 3.31947528506283e-27,
+        "hac_lags": 71
+      }
+    },
+    "chronos_ctx_672h": {
+      "n_obs": 18717,
+      "mae": 23.696192541239117,
+      "quantile_score": 7.9702431290274225,
+      "coverage_lower": 0.8953357909921462,
+      "coverage_upper": 0.9090131965592777,
+      "coverage_band": 0.8043489875514238,
+      "band_width_median": 74.11077117919922,
+      "qs_delta_pct_vs_lean": -19.19642308819348,
+      "dm_beats_lean": {
+        "statistic": -10.149153464211746,
+        "p_one_sided": 1.671250589815691e-24,
+        "hac_lags": 71
+      }
+    },
+    "chronos_ctx_336h": {
+      "n_obs": 18717,
+      "mae": 24.234213204334683,
+      "quantile_score": 8.193885521561024,
+      "coverage_lower": 0.9051129988780253,
+      "coverage_upper": 0.9079980766148421,
+      "coverage_band": 0.8131110754928674,
+      "band_width_median": 78.54759216308594,
+      "qs_delta_pct_vs_lean": -16.929101380024413,
+      "dm_beats_lean": {
+        "statistic": -8.80506642072208,
+        "p_one_sided": 6.538755691054098e-19,
+        "hac_lags": 71
+      }
+    },
+    "chronos_ctx_168h": {
+      "n_obs": 18717,
+      "mae": 25.37004289557678,
+      "quantile_score": 8.630165779169614,
+      "coverage_lower": 0.9112037185446386,
+      "coverage_upper": 0.9113640006411284,
+      "coverage_band": 0.822567719185767,
+      "band_width_median": 85.06819915771484,
+      "qs_delta_pct_vs_lean": -12.506023591796357,
+      "dm_beats_lean": {
+        "statistic": -6.4862282058288026,
+        "p_one_sided": 4.4005914037730065e-11,
+        "hac_lags": 71
+      }
+    }
+  }
+}

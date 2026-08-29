@@ -1,0 +1,30 @@
+{
+  "model": "amazon/chronos-bolt-base",
+  "device": "cuda:0",
+  "torch_dtype": "float32",
+  "quantile_levels": [
+    0.1,
+    0.5,
+    0.9
+  ],
+  "prediction_length": 72,
+  "native_prediction_length": 64,
+  "native_context_length": 2048,
+  "native_quantile_levels": [
+    0.1,
+    0.2,
+    0.3,
+    0.4,
+    0.5,
+    0.6,
+    0.7,
+    0.8,
+    0.9
+  ],
+  "batch_size": 32,
+  "n_vintages": 260,
+  "n_rows": 18717,
+  "n_quantile_crossings_raw": 0,
+  "torch_version": "2.13.0+cu132",
+  "cuda_device": "NVIDIA GeForce RTX 3090 Ti"
+}
