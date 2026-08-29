@@ -15,6 +15,7 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 | Changing the dashboard or chart rendering | `static/js/modules/` — modular ES6 code |
 | Changing deployment or build pipeline | `docs/RUNBOOK.md` — Netlify build, --force flag, webhook flow |
 | Making architectural decisions | `docs/decisions/` — ADR index |
+| **Starting a session — orient first** | `memory/MEMORY.md` — the memory index: current state, standing findings, open bets, deferred items. It is *not* auto-loaded; read it before reconstructing state from the deeper registers. Kept fresh at `/curate`. |
 | Stuck or debugging something weird | `memory/gotcha-log.md` — problem-fix archive |
 | Questioning ML architecture choices | `memory/ml-decisions.md` (week-ahead, River ARF, feature strategy) + `docs/river-arf-retrospective.md` (why ARF is being retired and what replaces it) |
 | Working with energyDataHub data formats | `memory/data-formats.md` — schema v2.1, units, timezone conventions |
