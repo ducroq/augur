@@ -21,8 +21,12 @@ Different from its neighbours:
 | 1 | EXP-025 transplanted calibration prior | minutes | CPU, situla | nothing |
 | 2 | EXP-023 window-length sweep | ~3h | CPU, situla | nothing |
 | 3 | EXP-024 lag richness | ~1h | CPU, situla | nothing |
-| 4 | EXP-026 model-size ladder | GPU min + bench | b650-gpu + sadalsuud | nothing |
-| 5 | EXP-027 fine-tuning dissociation | GPU hours | b650-gpu | should follow EXP-021a Stage 1 |
+| 4 | **EXP-029** FM-residual exogenous pre-screen | minutes | CPU, situla | nothing |
+| 5 | **EXP-028** Chronos-2 with covariates | GPU min | b650-gpu | screened by EXP-029 |
+| 6 | EXP-026 model-size ladder | GPU min + bench | b650-gpu + sadalsuud | nothing |
+| 7 | EXP-027 fine-tuning dissociation | GPU hours | b650-gpu | should follow EXP-021a Stage 1 |
+
+**On feeding features to the foundation model** (added 2026-08-29): EXP-021's Chronos-**Bolt** is architecturally univariate — `predict(inputs, prediction_length, limit_prediction_length)`, a 1-D series in — so *no amount of retraining* gives it covariates. **`amazon/chronos-2` (Apache-2.0, already installed) takes `past_covariates` and `future_covariates` at inference time with no retraining**, and Augur's exogenous are the favourable known-future case. EXP-028 is that test; EXP-029 is the near-free screen that should gate it. Note EXP-028 carries a contamination constraint EXP-021 did not: Chronos-2's weights were modified **2026-06-05, inside the evaluation window**, so it can only be scored on `t0 > 2026-06-05`.
 
 ---
 
@@ -173,3 +177,78 @@ The fourth arm is the load-bearing one and must not be skipped: it separates "mo
 **Gates.** The dissociation is the claim, so it is gated as a conjunction: MAE improvement ≥5% **and** coverage degradation ≥0.05 confirms the Position. Either one alone refutes it and selects among the alternatives above.
 
 **Blocked by.** Should follow EXP-021a Stage 1 — do not spend GPU hours on fine-tuning before the zero-shot advantage has been confirmed on fresh vintages. Not technically blocked, but sequencing it earlier would be investing in a refinement of an unconfirmed result.
+
+---
+
+## EXP-028 — A covariate-capable foundation model can use the exogenous data that LightGBM demonstrably cannot
+
+**Priority: inserted at 4** (before EXP-026). Added 2026-08-29 in response to a direct question: none of EXP-023..027 feeds exogenous data to the foundation model, and that was a real gap in the backlog.
+
+**Why this is not re-opening a refuted bet.** EXP-020 tested exogenous features and refuted them — residual load inert (p=0.648 main, p=0.899 control), plain load inert (p=0.851), TTF gas *degrading* (+3.2% QS). But it refuted them **for one model class**, and the mechanism it landed on is explicitly LightGBM-specific: *"redundant smoothed-level columns diluting the split search"*, generalised to *"this model class rejects added level columns."* A cross-attention transformer has no split search to dilute. So the mechanism that killed exogenous for LightGBM does not transfer, and the question genuinely re-opens with model class. This is the same "narrows rather than loosens" move EXP-020 itself made after the [2026-08-20] refutation, and it carries the same gates.
+
+**The sharper motivation.** EXP-021's foundation model wins by 20.3% **while being strictly information-poorer than the model it beats.** The incumbent receives wind speed, solar GHI and load forecast; Chronos-Bolt receives nothing but the price series. There is an entire information channel that the winning model currently cannot see, and EXP-022 localised its advantage to a *distributional prior* — spread and shape — which is precisely the part of the problem that exogenous data does *not* address. The two could be additive.
+
+**Position (provisional).** `amazon/chronos-2` with the exogenous columns supplied as covariates improves quantile score by **≥5%** over the same model run univariate, on the same vintages — and the gain sits in the **median** (pinball@p50 ≥5% better) rather than in the tails, because covariates carry conditional-mean information while the pretrained prior already supplies the spread.
+
+**Do we need to retrain? No — and for Bolt it is not a training question at all.**
+
+- **Chronos-Bolt (EXP-021's model) cannot accept features under any amount of training.** Its `predict` signature is `(inputs, prediction_length, limit_prediction_length)` — a 1-D series in, quantiles out. There is no covariate slot; adding one means changing architecture, not weights.
+- **Chronos-2 accepts covariates at inference time, zero retraining.** Its `predict` takes a list of dicts with `target` (required), `past_covariates` (past-only, or past values of known-future covariates) and `future_covariates` (known ahead, length = `prediction_length`; keys must be a subset of `past_covariates`).
+- **Augur's exogenous are the favourable case:** `wind_speed_80m`, `solar_ghi`, `temperature`, `load_forecast`, `wind_gen_forecast_mw`, `solar_gen_forecast_mw` and `is_holiday_nl` are all *forecasts or calendar*, i.e. genuinely **known-future** over the 72h horizon — they go in both dicts. `gas_ttf_eur_mwh` is a daily realised scalar with no forward curve, so it is **past-only**.
+- **The columns already exist.** All nine are in `ml/data/training_history_fundamentals.parquet` from EXP-020's Step-0 plumbing, which was kept precisely because it was additive and free. This entry is that decision paying off.
+
+**Alternatives (falsification signals).**
+
+1. **Exogenous is inert here too.** **Signal:** covariate arm lands within ±1% QS of the univariate arm, matching EXP-020's result for LightGBM. Then "exogenous does not help NL day-ahead at this horizon" is established across *two* model classes with different mechanisms, which is a far stronger claim than EXP-020 alone supports, and the feature lever closes permanently rather than provisionally.
+2. **Gas degrades here too.** **Signal:** dropping the past-only gas covariate recovers the loss. Then the level-column harm is not a split-search artifact after all but something more general about slow-moving level regressors — which would *contradict* EXP-019/020's stated mechanism and is worth knowing.
+3. **Chronos-2 univariate is already worse than Bolt.** The comparison assumes Chronos-2 is a fair vehicle. **Signal:** Chronos-2 run univariate underperforms Bolt on the same vintages. Then a covariate gain may only be recovering Chronos-2's own deficit; the honest baseline becomes Chronos-2-univariate, and any claim against Bolt must be made separately.
+4. **The gain is in the tails, not the median.** **Signal:** pinball@p50 improves <2% while p10/p90 improve. That refutes the stated mechanism even if the headline number passes, and suggests covariates are acting as a volatility proxy rather than a mean signal. Record as such rather than as a win.
+
+**Method (pre-committed 2026-08-29, before any Chronos-2 weight is downloaded).**
+
+**Contamination control, and it is stricter than EXP-021's.** Chronos-Bolt's weights were frozen **2025-11-21**, before the evaluation window opens, which is why EXP-021 could call contamination impossible. **`amazon/chronos-2` was last modified 2026-06-05 — inside the window.** So the Bolt guarantee does not transfer. Every Chronos-2 arm is therefore evaluated **only on vintages with `t0 > 2026-06-05`** (82 days available, 2026-06-05..2026-08-25), and the Bolt and LightGBM comparators are **re-scored on that same restricted subset** so all arms share an evaluation period. Results on the full 260-vintage window may be computed for curiosity but must not be reported as evidence, and must be labelled contaminated in the registry.
+
+Arms, all on the restricted subset, same 56-day context, same h+1..h+72, same scoring functions, HAC 71, no CQR:
+
+```
+chronos2_univariate            target only                          (base)
+chronos2_known_future          target + the 7 known-future covariates
+chronos2_all                   + gas as past_covariates only
+chronos2_gasdrop               = chronos2_all minus gas   (Alternative 2)
+bolt_base_univariate           EXP-021's model, re-scored here      (reference)
+lean_lgbm / full_lgbm          re-scored here                       (reference)
+```
+
+Covariates are supplied at their **parquet values**, which for the forecast columns are the vintage-overwritten values the EXP-018 harness already uses — carrying the same documented backtest optimism (`consolidate.py` overwrites with later vintages, ratio 1.84). That bias favours *this* entry, so a null result is strong and a positive result must be read as an upper bound. State this in the resolution regardless of outcome.
+
+**Gates.** Primary `chronos2_known_future` vs `chronos2_univariate`: (1) paired DM on QS, one-sided p<0.10; (2) QS ≥5% better; (3) per-side coverage not >0.02 worse; (4) Winkler ≤1.05×. **Mechanism requirement:** pinball@p50 must improve ≥5%, or the Position's mechanism is refuted even if the gates pass (Alternative 4).
+
+**Cost.** GPU minutes on `b650-gpu`; `chronos-forecasting` 2.3.1 is already installed and exposes `Chronos2Pipeline`. No training, no new dependency. The restricted subset (~82 vintages) is the binding constraint on power, not compute — note that a 5% effect on 82 vintages is a weaker test than EXP-021's 260, and do not over-read a marginal p-value.
+
+---
+
+## EXP-029 — Cheap pre-screen: are the foundation model's residuals correlated with the exogenous at all?
+
+**Priority: run immediately before EXP-028.** Minutes of CPU, and it can save the GPU work entirely.
+
+**Question.** EXP-028 is worth running only if the exogenous carry information the FM's residuals do not already contain. That is directly measurable on prediction files that already exist, with no new model of any kind.
+
+**Position (provisional).** The FM's residuals `(y − p50_FM)` carry **little exploitable exogenous signal**: a gradient-boosted regression of residual on the nine exogenous columns plus horizon achieves out-of-sample R² **< 0.05**, and correcting the median by its prediction improves MAE by **<2%**.
+
+**Mechanism.** EXP-020 found exogenous inert for a model that *had* price lags and calendar; EXP-022 found the FM's advantage is a distributional prior rather than a conditional-mean gain. If price history plus calendar already spans what wind/solar/load contribute at this horizon — which is EXP-020's standing conclusion — then the FM's residuals should be close to exogenous-orthogonal, and EXP-028 should be expected to return Alternative 1.
+
+Stating it this way makes the pre-screen honest: **this entry expects EXP-028 to fail**, and a surprise here is the thing that would justify the GPU work.
+
+**Alternatives (falsification signals).**
+
+1. **Real exploitable signal.** **Signal:** R² ≥0.05, or a residual correction that improves MAE ≥2%. Then EXP-028 is well motivated and should run at higher priority — and a residual-regression hybrid is itself a candidate needing no covariate-capable model at all.
+2. **Signal exists but only linearly / only in one column.** **Signal:** most of the R² traces to a single covariate. Then the finding is about that column, not about "exogenous", and should be tested as such.
+3. **Screen is too weak.** A tree on residuals could miss interactions the covariate model would find. **Signal:** near-zero R² *and* EXP-028 later shows a gain. Recorded here in advance so a negative screen is treated as *evidence against* rather than as *proof of absence* — a null here lowers EXP-028's priority, it does not cancel it.
+
+**Method (pre-committed 2026-08-29).** No new models, no GPU. Take `ml/shadow/exp021_foundation_aligned/fm_predictions.parquet`, join the nine parquet columns on `timestamp_utc`, and:
+
+1. Report Pearson and Spearman correlation of the signed residual against each covariate, pooled and by horizon group.
+2. Fit LightGBM on `(y − p50_FM)` from the nine covariates plus `horizon_h`, using a **temporal** split (fit on the first 70% of vintages, score the last 30% — never random, per the project's hard constraint), and report out-of-sample R².
+3. Apply the fitted correction to the FM median on the held-out vintages and report ΔMAE and ΔQS against the uncorrected FM.
+
+**Gates.** Advisory rather than decisive: R² ≥0.05 **or** ΔMAE ≥2% promotes EXP-028 ahead of EXP-026; below both, EXP-028 drops to lowest priority but stays open on Alternative 3.
