@@ -4,6 +4,58 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
+## 2026-08-29 (overnight) — Five backlog experiments run: a longer window works, covariates work in the right model class, and the calibration claim needed correcting
+
+**Setup**: EXP-023..029 were pre-committed in `docs/experiment-backlog.md` at commit `4024420` *before* any of them ran, so the Methods below are fixed-before-data by git rather than by assertion. Compute moved to `b650-gpu` (jwasys): a second venv (`~/augur-run`) pinned to `requirements.lock` exactly. **Before any sweep result was trusted, a 56-day validation rung on that box reproduced situla's EXP-020 `lean` predictions bit-identically across 14 901 overlapping cells** — environment parity verified, not assumed.
+
+### EXP-023 — a 112-day window beats production's 56 (all four gates pass)
+
+| window | ntrain | MAE | QS | dQS% | cov_lo | cov_hi | Winkler | DM p |
+|---|---|---|---|---|---|---|---|---|
+| 28 | 654 | 33.22 | 11.80 | +5.2 | 0.817 | 0.751 | 184.9 | 0.9999 |
+| **56 (production)** | 1308 | 32.37 | 11.22 | 0.0 | 0.857 | 0.761 | 173.2 | — |
+| 84 | 1963 | 31.63 | 11.07 | −1.4 | 0.864 | 0.771 | 173.0 | 0.0456 |
+| **112** | 2634 | **31.26** | **10.88** | **−3.0** | 0.877 | 0.776 | 169.4 | **0.0000** |
+| 168 | 3943 | 31.34 | 10.94 | −2.5 | 0.876 | 0.799 | 171.3 | 0.0139 |
+
+An inverted U with a genuine interior optimum, so Alternative 2 (monotone to the data limit) is refuted. All four gates pass at 112d. But the Position's stronger 5% claim is **not** met, and its *mechanism* is **not** supported: the gain is near-uniform across quantiles (p10 −3.6%, p50 −3.5%, p90 −1.8%), not tail-concentrated, so "the quantile heads are sample-starved" is not what the window buys. Parked, not shipped: 112d is the best of five rungs picked on the discovery window — the exact selection bias EXP-018a exists to guard against.
+
+**The confound control cost more than the pre-commit predicted** — it estimated ~150 usable vintages, actual is **95**, because the parquet starts 2025-09-28 and a 168d window needs 168 days of pre-history. The evaluation window is therefore Mar–Aug 2026, the high-price half of the year. The rule was pre-committed and followed unchanged, but the result should not be assumed to hold in calm months.
+
+### EXP-025 — the transplant fails, and it forces a correction to last night's calibration claim
+
+Transplanting Chronos's spread onto the incumbent's median reaches band coverage **0.733**, below the 0.76 gate, at 20% worse QS than the full FM. Position refuted; the prior is not cleanly separable from the median it was fitted alongside.
+
+**The important result is Alternative 3.** Production CQR on the incumbent reaches band coverage **0.788** — better than the transplant and close to the FM's 0.811. **This materially deflates the calibration framing in EXP-021/022 and in CLAUDE.md**, which quoted the incumbent at 0.611. That figure is *pre-conformal*, and production does not ship a pre-conformal band. The honest live comparison is **FM 0.811 vs lean+CQR 0.788**, a gap of 0.023 rather than 0.200. The FM's remaining calibration edge is one of **efficiency, not coverage**: it reaches 0.811 at median width 73.4 where CQR needs 89.2 for 0.788 (Winkler 119.8 vs 148.9). Arm D used the *charitable* one-shot CQR rather than production's widened-band feedback loop, so this refutes Alternative 3's optimistic reading more strongly than a faithful replication would. This discharges EXP-021a's Alternative 4.
+
+Alternative 2 also fires: a median blend at **w=0.80** toward the FM scores QS 7.756 vs the FM's 7.864 (−1.4%, DM p=0.0042), so ensembling does beat the FM alone once the weight is not fixed at the 50/50 EXP-021 tried. `w` was chosen in-sample and means nothing until confirmed out-of-sample.
+
+### EXP-029 → EXP-028 — the pre-screen was wrong, and its own pre-commit is why we found out
+
+EXP-029 predicted a null and got one: residual OOS R² = **−2.00**, correction makes MAE 79% worse, gates say *do not promote EXP-028*. Its failure is cleanly monotone in level columns — R² −2.00 (all covariates) → −0.41 (no levels) → −0.058 (wind only), with `gas_ttf` and `temperature` the top features of the worst model. That is a **third independent confirmation** of the EXP-019/020 mechanism, now in a third estimator.
+
+EXP-028 was run anyway, because the pre-commit's Alternative 3 said in advance that a null here is *evidence against, not proof of absence*. It found the opposite:
+
+| arm | MAE | QS | dQS% vs c2-univariate | band cov | DM p |
+|---|---|---|---|---|---|
+| c2_univariate | 23.10 | 7.96 | 0.0 | 0.803 | — |
+| **c2_known_future** | **21.14** | **7.30** | **−8.3** | 0.742 | **0.0051** |
+| c2_all (+gas) | 21.24 | 7.37 | −7.4 | 0.749 | 0.0177 |
+| bolt_base | 24.41 | 8.40 | +5.5 | 0.870 | 0.9980 |
+| lean / full LGBM | 32.89 / 34.58 | 11.31 / 12.46 | +42 / +57 | 0.619 / 0.618 | 1.0000 |
+
+**Augur's first positive exogenous result.** It qualifies EXP-020's standing conclusion precisely: exogenous data is not useless, it was *unusable by LightGBM at this window*. Gate 3 fails — covariates buy skill and sharpness (Winkler 123.3→113.3) at a coverage cost on both sides — so ALL_PASS is False and this is a trade, not a free win. Two caveats that matter: chronos-2 **univariate** already beats bolt-base by 5.5% here, so part of the headline is the newer model rather than the covariates; and **chronos-2's weights were modified 2026-06-05, inside EXP-021's window**, so unlike bolt-base contamination cannot be ruled out by construction — all arms were restricted to `t0 > 2026-06-05`, and the internally valid comparison is covariate-vs-univariate (same weights), not c2-vs-bolt. Gas is unhelpful even here (7.37 vs 7.30), a fourth strike against added level columns.
+
+**Methodological lesson worth keeping:** a cheap pre-screen must be validated against the expensive test it replaces at least once before it is trusted to veto. Here they disagreed on the first try, and only the pre-registered Alternative 3 kept the real finding from being discarded unseen.
+
+### EXP-026 — the prior is cheap
+
+`chronos-bolt-tiny` retains **93.5%** of base's advantage over lean (−18.9% QS vs −20.3%), mini 97.1%, small 98.3%, all at DM p<0.0001, with band coverage essentially flat across the ladder (0.815/0.819/0.829/0.811). Alternative 1 (skill scales strongly with size) refuted; Alternative 3 (skill and calibration scale differently) does not fire. The "205M-parameter model in the nightly path" objection to EXP-021a Stage 3 largely dissolves — tiny would likely do. **Half the pre-committed Method is outstanding**: the CPU latency benchmark must run on sadalsuud and was not run, so EXP-021a Stage 2 is *not* discharged.
+
+**Status**: nothing shipped. No production path touched. EXP-024 (lag richness) and EXP-027 (fine-tuning dissociation) were not run. Full numbers in `experiments/registry.jsonl` EXP-023/025/026/028/029.
+
+---
+
 ## 2026-08-29 — EXP-022: the context ladder says it is mostly pretrained prior, and it corrects EXP-021's stated mechanism
 
 **Trigger**: EXP-021 measured a 20.3% quantile-score gap but only *asserted* why. Its Position credited Chronos with "not being recalibrated nightly to one 56-day price level" — the level-drift mechanism this project has carried since EXP-018. That was reasoning from an accumulated story rather than from evidence, and it turned out to be wrong.

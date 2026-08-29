@@ -1,0 +1,231 @@
+{
+  "config": {
+    "fm": "ml/shadow/exp021_foundation_aligned/fm_predictions.parquet",
+    "parquet": "ml/data/training_history_fundamentals.parquet",
+    "covariates": [
+      "wind_speed_80m",
+      "solar_ghi",
+      "temperature",
+      "load_forecast",
+      "wind_gen_forecast_mw",
+      "solar_gen_forecast_mw",
+      "gas_ttf_eur_mwh",
+      "is_holiday_nl",
+      "residual_load_mw"
+    ],
+    "split": "temporal 70/30 by vintage (never random)",
+    "train_vintages": 182,
+    "test_vintages": 78,
+    "cut_vintage": "2026-06-05 23:00:00+00:00",
+    "n_train_rows": 7041,
+    "n_test_rows": 5364,
+    "purpose": "pre-screen for EXP-028 \u2014 advisory gates, not a promotion decision"
+  },
+  "marginal_correlations": {
+    "wind_speed_80m": {
+      "n": 18717,
+      "pearson": -0.25236734659287324,
+      "spearman": -0.327683051570956
+    },
+    "solar_ghi": {
+      "n": 18717,
+      "pearson": -0.10236560191037118,
+      "spearman": -0.10580810444173282
+    },
+    "temperature": {
+      "n": 17133,
+      "pearson": -0.00032145774935534886,
+      "spearman": -0.03998119034773044
+    },
+    "load_forecast": {
+      "n": 18612,
+      "pearson": 0.023504885403581876,
+      "spearman": -0.001157043506927944
+    },
+    "wind_gen_forecast_mw": {
+      "n": 18558,
+      "pearson": -0.3298428917323781,
+      "spearman": -0.37989175379123097
+    },
+    "solar_gen_forecast_mw": {
+      "n": 18468,
+      "pearson": -0.11800187312607034,
+      "spearman": -0.10627539381701147
+    },
+    "gas_ttf_eur_mwh": {
+      "n": 14397,
+      "pearson": 0.040747886521564185,
+      "spearman": 0.07997757683963953
+    },
+    "is_holiday_nl": {
+      "n": 18717,
+      "pearson": -0.07142762045245707,
+      "spearman": -0.08017972166096085
+    },
+    "residual_load_mw": {
+      "n": 18309,
+      "pearson": 0.16953119510471842,
+      "spearman": 0.2070072529507973
+    }
+  },
+  "correlations_by_horizon_group": {
+    "h1_6": {
+      "wind_speed_80m": -0.2348582486732303,
+      "solar_ghi": -0.07425291165849804,
+      "temperature": -0.11668867415423059,
+      "load_forecast": 0.10809864604694913,
+      "wind_gen_forecast_mw": -0.21811850186432694,
+      "solar_gen_forecast_mw": -0.08251235060736335,
+      "gas_ttf_eur_mwh": 0.006347562122195969,
+      "is_holiday_nl": -0.06179314342109541,
+      "residual_load_mw": 0.2765464964935448
+    },
+    "h7_24": {
+      "wind_speed_80m": -0.22584607779554763,
+      "solar_ghi": -0.10621828563394232,
+      "temperature": -0.0003387563506057931,
+      "load_forecast": 0.051841157465528157,
+      "wind_gen_forecast_mw": -0.2717272229576205,
+      "solar_gen_forecast_mw": -0.1300958216987944,
+      "gas_ttf_eur_mwh": 0.0294680793540665,
+      "is_holiday_nl": -0.09707895859058664,
+      "residual_load_mw": 0.16858999991791426
+    },
+    "h25_72": {
+      "wind_speed_80m": -0.2677844013953332,
+      "solar_ghi": -0.10421563556299746,
+      "temperature": 0.005312308464794051,
+      "load_forecast": 0.011040770630529025,
+      "wind_gen_forecast_mw": -0.3650586928106896,
+      "solar_gen_forecast_mw": -0.11752292501835707,
+      "gas_ttf_eur_mwh": 0.04685716565648151,
+      "is_holiday_nl": -0.06451183842933325,
+      "residual_load_mw": 0.17139762109131143
+    }
+  },
+  "residual_model": {
+    "oos_r2": -2.0030821727586257,
+    "feature_importance": {
+      "gas_ttf_eur_mwh": 1682,
+      "temperature": 1200,
+      "solar_gen_forecast_mw": 1032,
+      "wind_gen_forecast_mw": 983,
+      "residual_load_mw": 884,
+      "wind_speed_80m": 835,
+      "solar_ghi": 773,
+      "horizon_h": 769,
+      "load_forecast": 762,
+      "is_holiday_nl": 80
+    },
+    "base_mae": 24.37891732363093,
+    "corrected_mae": 43.567872599337775,
+    "base_qs": 8.385051115525767,
+    "corrected_qs": 15.57824078165402
+  },
+  "gates": {
+    "oos_r2": -2.0030821727586257,
+    "delta_mae_pct": -78.71126933560188,
+    "delta_qs_pct": -85.78587735511043,
+    "signal_r2_ge_0.05": false,
+    "signal_mae_ge_2pct": false,
+    "promotes_exp028": false
+  },
+  "covariate_sets": {
+    "all": {
+      "cols": [
+        "wind_speed_80m",
+        "solar_ghi",
+        "temperature",
+        "load_forecast",
+        "wind_gen_forecast_mw",
+        "solar_gen_forecast_mw",
+        "gas_ttf_eur_mwh",
+        "is_holiday_nl",
+        "residual_load_mw"
+      ],
+      "oos_r2": -2.0030821727586257,
+      "base_mae": 24.37891732363093,
+      "corrected_mae": 43.567872599337775,
+      "delta_mae_pct": -78.71126933560188,
+      "n_test": 5364,
+      "feature_importance": {
+        "gas_ttf_eur_mwh": 1682,
+        "temperature": 1200,
+        "solar_gen_forecast_mw": 1032,
+        "wind_gen_forecast_mw": 983,
+        "residual_load_mw": 884,
+        "wind_speed_80m": 835,
+        "solar_ghi": 773,
+        "horizon_h": 769,
+        "load_forecast": 762,
+        "is_holiday_nl": 80
+      }
+    },
+    "no_gas": {
+      "cols": [
+        "wind_speed_80m",
+        "solar_ghi",
+        "temperature",
+        "load_forecast",
+        "wind_gen_forecast_mw",
+        "solar_gen_forecast_mw",
+        "is_holiday_nl",
+        "residual_load_mw"
+      ],
+      "oos_r2": -2.2157961268329935,
+      "base_mae": 24.37891732363093,
+      "corrected_mae": 46.75520556615819,
+      "delta_mae_pct": -91.78540599437332,
+      "n_test": 5364,
+      "feature_importance": {
+        "temperature": 1752,
+        "wind_gen_forecast_mw": 1250,
+        "solar_gen_forecast_mw": 1249,
+        "load_forecast": 1204,
+        "wind_speed_80m": 1030,
+        "residual_load_mw": 950,
+        "solar_ghi": 903,
+        "horizon_h": 593,
+        "is_holiday_nl": 69
+      }
+    },
+    "no_levels": {
+      "cols": [
+        "wind_speed_80m",
+        "solar_ghi",
+        "wind_gen_forecast_mw",
+        "solar_gen_forecast_mw",
+        "is_holiday_nl"
+      ],
+      "oos_r2": -0.40726863058009144,
+      "base_mae": 24.37891732363093,
+      "corrected_mae": 30.17605992565416,
+      "delta_mae_pct": -23.779327543819818,
+      "n_test": 5364,
+      "feature_importance": {
+        "wind_gen_forecast_mw": 2060,
+        "solar_ghi": 1976,
+        "solar_gen_forecast_mw": 1975,
+        "wind_speed_80m": 1968,
+        "horizon_h": 856,
+        "is_holiday_nl": 165
+      }
+    },
+    "wind_only": {
+      "cols": [
+        "wind_gen_forecast_mw",
+        "wind_speed_80m"
+      ],
+      "oos_r2": -0.05759536534970788,
+      "base_mae": 24.52343105830633,
+      "corrected_mae": 26.99473111064837,
+      "delta_mae_pct": -10.077301363199688,
+      "n_test": 5613,
+      "feature_importance": {
+        "wind_gen_forecast_mw": 3836,
+        "wind_speed_80m": 3601,
+        "horizon_h": 1563
+      }
+    }
+  }
+}

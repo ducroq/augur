@@ -1,0 +1,129 @@
+{
+  "config": {
+    "model": "amazon/chronos-2",
+    "start": "2026-06-06",
+    "end": "2026-08-22",
+    "offset_h": 1,
+    "window_days": 56,
+    "hac_lags": 71,
+    "quantiles": [
+      0.1,
+      0.5,
+      0.9
+    ],
+    "known_future": [
+      "wind_speed_80m",
+      "solar_ghi",
+      "temperature",
+      "load_forecast",
+      "wind_gen_forecast_mw",
+      "solar_gen_forecast_mw",
+      "is_holiday_nl"
+    ],
+    "past_only": [
+      "gas_ttf_eur_mwh"
+    ],
+    "n_paired_vintages": 77,
+    "contamination_note": "chronos-2 weights modified 2026-06-05; all arms restricted to t0 > 2026-06-05"
+  },
+  "arms": {
+    "c2_univariate": {
+      "n_obs": 5541,
+      "mae": 23.097779178808707,
+      "quantile_score": 7.958374359028968,
+      "coverage_lower": 0.9234795163327919,
+      "coverage_upper": 0.8796246164952175,
+      "coverage_band": 0.8031041328280094,
+      "band_width_median": 61.916290283203125,
+      "winkler": 123.26233487682552,
+      "pinball_p50": 11.548889589404354,
+      "qs_delta_pct_vs_c2_univariate": 0.0
+    },
+    "c2_known_future": {
+      "n_obs": 5541,
+      "mae": 21.138345186914737,
+      "quantile_score": 7.299938788564027,
+      "coverage_lower": 0.8855802201768633,
+      "coverage_upper": 0.8561631474463093,
+      "coverage_band": 0.7417433676231727,
+      "band_width_median": 47.12187957763672,
+      "winkler": 113.30643772234708,
+      "pinball_p50": 10.569172593457369,
+      "qs_delta_pct_vs_c2_univariate": -8.27349331359275,
+      "dm_beats_c2_univariate_p": 0.005094741312235691
+    },
+    "c2_all": {
+      "n_obs": 5541,
+      "mae": 21.239523349328927,
+      "quantile_score": 7.369813025060963,
+      "coverage_lower": 0.8834145461108103,
+      "coverage_upper": 0.8659086807435481,
+      "coverage_band": 0.7493232268543584,
+      "band_width_median": 47.88098907470703,
+      "winkler": 114.89677400518423,
+      "pinball_p50": 10.619761674664463,
+      "qs_delta_pct_vs_c2_univariate": -7.395496962269288,
+      "dm_beats_c2_univariate_p": 0.017701912872330566
+    },
+    "c2_gasdrop": {
+      "n_obs": 5541,
+      "mae": 21.138345186914737,
+      "quantile_score": 7.299938788564027,
+      "coverage_lower": 0.8855802201768633,
+      "coverage_upper": 0.8561631474463093,
+      "coverage_band": 0.7417433676231727,
+      "band_width_median": 47.12187957763672,
+      "winkler": 113.30643772234708,
+      "pinball_p50": 10.569172593457369,
+      "qs_delta_pct_vs_c2_univariate": -8.27349331359275,
+      "dm_beats_c2_univariate_p": 0.005094741312235691
+    },
+    "bolt_base": {
+      "n_obs": 5541,
+      "mae": 24.408454943568977,
+      "quantile_score": 8.3966326421235,
+      "coverage_lower": 0.9297960656921134,
+      "coverage_upper": 0.9397220718281899,
+      "coverage_band": 0.8695181375203032,
+      "band_width_median": 84.04996871948242,
+      "winkler": 129.85670454586008,
+      "pinball_p50": 12.204227471784488,
+      "qs_delta_pct_vs_c2_univariate": 5.506881975177724,
+      "dm_beats_c2_univariate_p": 0.9979820285829315
+    },
+    "full": {
+      "n_obs": 5541,
+      "mae": 34.58416389220395,
+      "quantile_score": 12.457999816603955,
+      "coverage_lower": 0.8220537809059737,
+      "coverage_upper": 0.7958852192744992,
+      "coverage_band": 0.6179390001804729,
+      "band_width_median": 93.26806265086572,
+      "winkler": 199.39702161851545,
+      "pinball_p50": 17.31110320164955,
+      "qs_delta_pct_vs_c2_univariate": 56.53950486094001,
+      "dm_beats_c2_univariate_p": 1.0
+    },
+    "lean": {
+      "n_obs": 5541,
+      "mae": 32.89168037146497,
+      "quantile_score": 11.307013962662793,
+      "coverage_lower": 0.8776394152680022,
+      "coverage_upper": 0.7417433676231727,
+      "coverage_band": 0.6193827828911749,
+      "band_width_median": 86.46343255103439,
+      "winkler": 173.5521053096514,
+      "pinball_p50": 16.522450058042043,
+      "qs_delta_pct_vs_c2_univariate": 42.076929942793065,
+      "dm_beats_c2_univariate_p": 1.0
+    }
+  },
+  "gates_primary": {
+    "gate_1_dm_p_lt_0.10": true,
+    "gate_2_qs_ge_5pct_better": true,
+    "gate_3_coverage": false,
+    "gate_4_winkler": true,
+    "mechanism_pinball_p50_ge_5pct": true,
+    "ALL_PASS": false
+  }
+}

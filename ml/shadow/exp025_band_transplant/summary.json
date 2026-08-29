@@ -1,0 +1,235 @@
+{
+  "config": {
+    "fm": "ml/shadow/exp021_foundation_aligned/fm_predictions.parquet",
+    "incumbents": "ml/shadow/exp020_fundamentals_ctl/predictions.parquet",
+    "hac_lags": 71,
+    "quantiles": [
+      0.1,
+      0.5,
+      0.9
+    ],
+    "n_paired_observations": 18717,
+    "n_paired_vintages": 260,
+    "cqr_note": "applied once to raw quantiles \u2014 charitable vs production's widened-band feedback loop"
+  },
+  "arms": {
+    "lean": {
+      "mae": 27.773706919817762,
+      "quantile_score": 9.81467899648545,
+      "coverage_lower": 0.8138056312443234,
+      "coverage_upper": 0.7969225837473954,
+      "coverage_band": 0.6107282149917188,
+      "band_width_median": 60.98758871216927,
+      "winkler": 155.57183529547467,
+      "qs_delta_pct_vs_lean": 0.0,
+      "qs_delta_pct_vs_fm": 24.80170078244537,
+      "coverage_side_gap": 0.016883047496927928
+    },
+    "fm": {
+      "mae": 23.23477896170502,
+      "quantile_score": 7.864218944895969,
+      "coverage_lower": 0.8983811508254528,
+      "coverage_upper": 0.9130202489715232,
+      "coverage_band": 0.811401399796976,
+      "band_width_median": 73.35456848144531,
+      "winkler": 119.75267353835393,
+      "dm_beats_lean_p": 6.303795753796663e-26,
+      "qs_delta_pct_vs_lean": -19.872886849258375,
+      "qs_delta_pct_vs_fm": 0.0,
+      "coverage_side_gap": 0.01463909814607045
+    },
+    "A_lean_fmspread": {
+      "mae": 27.773706919817762,
+      "quantile_score": 9.438214381337803,
+      "coverage_lower": 0.8570283699310787,
+      "coverage_upper": 0.8759950846823743,
+      "coverage_band": 0.733023454613453,
+      "band_width_median": 73.35456848144531,
+      "winkler": 144.2778968410453,
+      "dm_beats_lean_p": 4.185862544448518e-08,
+      "qs_delta_pct_vs_lean": -3.8357302901343537,
+      "qs_delta_pct_vs_fm": 20.014644142930283,
+      "coverage_side_gap": 0.018966714751295632
+    },
+    "B_fm_leanspread": {
+      "mae": 23.23477896170502,
+      "quantile_score": 8.475121962337663,
+      "coverage_lower": 0.8274296094459582,
+      "coverage_upper": 0.8261473526740396,
+      "coverage_band": 0.6535769621199978,
+      "band_width_median": 60.98758871216927,
+      "winkler": 138.07976406160475,
+      "dm_beats_lean_p": 3.402544643932117e-12,
+      "qs_delta_pct_vs_lean": -13.648505821000057,
+      "qs_delta_pct_vs_fm": 7.768133386446241,
+      "coverage_side_gap": 0.0012822567719186218
+    },
+    "C_blend_w0.00_fmspread": {
+      "mae": 27.773706919817762,
+      "quantile_score": 9.438214381337803,
+      "coverage_lower": 0.8570283699310787,
+      "coverage_upper": 0.8759950846823743,
+      "coverage_band": 0.733023454613453,
+      "band_width_median": 73.35456848144531,
+      "winkler": 144.2778968410453,
+      "dm_beats_lean_p": 4.185862544448518e-08,
+      "qs_delta_pct_vs_lean": -3.8357302901343537,
+      "qs_delta_pct_vs_fm": 20.014644142930283,
+      "coverage_side_gap": 0.018966714751295632
+    },
+    "C_blend_w0.00_ownspread": {
+      "mae": 27.773706919817762,
+      "quantile_score": 9.81467899648545,
+      "coverage_lower": 0.8138056312443234,
+      "coverage_upper": 0.7969225837473954,
+      "coverage_band": 0.6107282149917188,
+      "band_width_median": 60.98758871216927,
+      "winkler": 155.57183529547467,
+      "dm_beats_lean_p": 0.49999999967755065,
+      "qs_delta_pct_vs_lean": 0.0,
+      "qs_delta_pct_vs_fm": 24.80170078244537,
+      "coverage_side_gap": 0.016883047496927928
+    },
+    "C_blend_w0.25_fmspread": {
+      "mae": 25.337730763131212,
+      "quantile_score": 8.583713872743424,
+      "coverage_lower": 0.8742319816209863,
+      "coverage_upper": 0.8993962707698884,
+      "coverage_band": 0.7736282523908746,
+      "band_width_median": 73.35456848144531,
+      "winkler": 130.82276236664663,
+      "dm_beats_lean_p": 8.77399773783122e-54,
+      "qs_delta_pct_vs_lean": -12.542082366451556,
+      "qs_delta_pct_vs_fm": 9.148968675578661,
+      "coverage_side_gap": 0.02516428914890212
+    },
+    "C_blend_w0.25_ownspread": {
+      "mae": 25.337730763131212,
+      "quantile_score": 8.686913585486398,
+      "coverage_lower": 0.8483197093551317,
+      "coverage_upper": 0.8593791740129294,
+      "coverage_band": 0.7076988833680611,
+      "band_width_median": 65.09465405629005,
+      "winkler": 133.91875374893593,
+      "dm_beats_lean_p": 3.904821510313964e-93,
+      "qs_delta_pct_vs_lean": -11.49059904458306,
+      "qs_delta_pct_vs_fm": 10.46123774471428,
+      "coverage_side_gap": 0.011059464657797724
+    },
+    "C_blend_w0.50_fmspread": {
+      "mae": 23.68645710125771,
+      "quantile_score": 8.024848251641291,
+      "coverage_lower": 0.8891916439600364,
+      "coverage_upper": 0.9142490783779452,
+      "coverage_band": 0.8034407223379815,
+      "band_width_median": 73.35456848144531,
+      "winkler": 122.31316204295022,
+      "dm_beats_lean_p": 6.184474545648252e-59,
+      "qs_delta_pct_vs_lean": -18.23626371769348,
+      "qs_delta_pct_vs_fm": 2.0425335035919145,
+      "coverage_side_gap": 0.025057434417908864
+    },
+    "C_blend_w0.50_ownspread": {
+      "mae": 23.68645710125771,
+      "quantile_score": 8.023807400185934,
+      "coverage_lower": 0.8769567772613133,
+      "coverage_upper": 0.8977934498049901,
+      "coverage_band": 0.7747502270663034,
+      "band_width_median": 69.41236718617436,
+      "winkler": 122.28193649928942,
+      "dm_beats_lean_p": 1.3577431944192757e-69,
+      "qs_delta_pct_vs_lean": -18.24686876606776,
+      "qs_delta_pct_vs_fm": 2.029298222852005,
+      "coverage_side_gap": 0.020836672543676826
+    },
+    "C_blend_w0.75_fmspread": {
+      "mae": 22.94071109265872,
+      "quantile_score": 7.78027467761609,
+      "coverage_lower": 0.8996099802318748,
+      "coverage_upper": 0.9176684297697281,
+      "coverage_band": 0.8172784100016028,
+      "band_width_median": 73.35456848144531,
+      "winkler": 118.70468486518908,
+      "dm_beats_lean_p": 1.258934652885731e-43,
+      "qs_delta_pct_vs_lean": -20.728179898678935,
+      "qs_delta_pct_vs_fm": -1.067420272350894,
+      "coverage_side_gap": 0.018058449537853294
+    },
+    "C_blend_w0.75_ownspread": {
+      "mae": 22.94071109265872,
+      "quantile_score": 7.7650185490590475,
+      "coverage_lower": 0.8931452690067853,
+      "coverage_upper": 0.9118448469305979,
+      "coverage_band": 0.8049901159373831,
+      "band_width_median": 72.36495365708456,
+      "winkler": 118.24700100847785,
+      "dm_beats_lean_p": 3.886632780081461e-46,
+      "qs_delta_pct_vs_lean": -20.88362185009176,
+      "qs_delta_pct_vs_fm": -1.2614144714435227,
+      "coverage_side_gap": 0.018699577923812605
+    },
+    "C_blend_w1.00_fmspread": {
+      "mae": 23.23477896170502,
+      "quantile_score": 7.864218944895969,
+      "coverage_lower": 0.8983811508254528,
+      "coverage_upper": 0.9130202489715232,
+      "coverage_band": 0.811401399796976,
+      "band_width_median": 73.35456848144531,
+      "winkler": 119.75267353835393,
+      "dm_beats_lean_p": 6.303795753796663e-26,
+      "qs_delta_pct_vs_lean": -19.872886849258375,
+      "qs_delta_pct_vs_fm": 0.0,
+      "coverage_side_gap": 0.01463909814607045
+    },
+    "C_blend_w1.00_ownspread": {
+      "mae": 23.23477896170502,
+      "quantile_score": 7.864218944895969,
+      "coverage_lower": 0.8983811508254528,
+      "coverage_upper": 0.9130202489715232,
+      "coverage_band": 0.811401399796976,
+      "band_width_median": 73.35456848144531,
+      "winkler": 119.75267353835393,
+      "dm_beats_lean_p": 6.303795753796663e-26,
+      "qs_delta_pct_vs_lean": -19.872886849258375,
+      "qs_delta_pct_vs_fm": 0.0,
+      "coverage_side_gap": 0.01463909814607045
+    },
+    "D_lean_cqr": {
+      "mae": 27.773706919817762,
+      "quantile_score": 9.59133359690822,
+      "coverage_lower": 0.8862531388577229,
+      "coverage_upper": 0.9015333653897526,
+      "coverage_band": 0.7877865042474755,
+      "band_width_median": 89.18034222978278,
+      "winkler": 148.87147330815773,
+      "dm_beats_lean_p": 6.30566312576217e-08,
+      "qs_delta_pct_vs_lean": -2.2756261275300838,
+      "qs_delta_pct_vs_fm": 21.961680671838124,
+      "coverage_side_gap": 0.01528022653202965
+    }
+  },
+  "gates_primary_arm_A": {
+    "gate_1_band_coverage_ge_0.76": false,
+    "gate_2_side_gap_le_0.08": true,
+    "gate_3_qs_within_3pct_of_fm": false,
+    "gate_4_winkler_le_incumbent": true,
+    "observed": {
+      "coverage_band": 0.733023454613453,
+      "coverage_side_gap": 0.018966714751295632,
+      "qs_delta_pct_vs_fm": 20.014644142930283,
+      "winkler": 144.2778968410453
+    },
+    "incumbent_winkler": 155.57183529547467,
+    "ALL_PASS": false
+  },
+  "alternative_2_weighted_blend": {
+    "best_blend_arm": "C_blend_w0.75_ownspread",
+    "best_blend_qs": 7.7650185490590475,
+    "beats_fm_alone": true
+  },
+  "alternative_3_cqr_comparator": {
+    "cqr_band_coverage": 0.7877865042474755,
+    "transplant_band_coverage": 0.733023454613453,
+    "cqr_reaches_transplant": true
+  }
+}

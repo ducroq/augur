@@ -1,0 +1,242 @@
+{
+  "config": {
+    "parquet": "ml/data/training_history_fundamentals.parquet",
+    "windows": [
+      28,
+      56,
+      84,
+      112,
+      168
+    ],
+    "base_window": 56,
+    "n_vintages": 95,
+    "n_vintages_dropped_for_confound_control": 168,
+    "hac_lags": 71,
+    "cqr_applied": false,
+    "feature_set": "lean (15)",
+    "max_horizon": 72
+  },
+  "rungs": {
+    "w28": {
+      "n_obs": 6837,
+      "n_vintages": 95,
+      "mae": 33.22393343996626,
+      "quantile_score": 11.804796986820048,
+      "coverage_lower": 0.8173175369314026,
+      "coverage_upper": 0.7507678806494076,
+      "coverage_band": 0.5680854175808103,
+      "band_width_median": 75.67734651199405,
+      "winkler": 184.9240938618046,
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 570,
+          "mae": 12.184887791630498,
+          "quantile_score": 4.432646186015632,
+          "coverage_lower": 0.7982456140350878,
+          "coverage_upper": 0.7105263157894737
+        },
+        "h7_24": {
+          "n_obs": 1709,
+          "mae": 29.81915789516054,
+          "quantile_score": 11.10223623699336,
+          "coverage_lower": 0.7858396723229959,
+          "coverage_upper": 0.7758923346986542
+        },
+        "h25_72": {
+          "n_obs": 4558,
+          "mae": 37.13157219065174,
+          "quantile_score": 12.990141935901296,
+          "coverage_lower": 0.8315050460728389,
+          "coverage_upper": 0.7463799912242212
+        }
+      },
+      "pinball_p10": 9.085644599817535,
+      "pinball_p50": 16.700171065917694,
+      "pinball_p90": 9.628575294724914,
+      "n_train_median": 654.0,
+      "qs_delta_pct_vs_56d": 5.216693370538583,
+      "dm_beats_56d": {
+        "statistic": 3.7352773062017697,
+        "p_one_sided": 0.9999062457757666
+      }
+    },
+    "w56": {
+      "n_obs": 6837,
+      "n_vintages": 95,
+      "mae": 32.37156760614125,
+      "quantile_score": 11.219509574633214,
+      "coverage_lower": 0.8566622787772414,
+      "coverage_upper": 0.7608600263273365,
+      "coverage_band": 0.6175223051045781,
+      "band_width_median": 83.58939800247603,
+      "winkler": 173.23986262635916,
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 570,
+          "mae": 10.683453213847326,
+          "quantile_score": 3.8523380302126675,
+          "coverage_lower": 0.8385964912280702,
+          "coverage_upper": 0.7298245614035088
+        },
+        "h7_24": {
+          "n_obs": 1709,
+          "mae": 29.743688807568848,
+          "quantile_score": 10.66456040597134,
+          "coverage_lower": 0.8408425980105325,
+          "coverage_upper": 0.7975424224692803
+        },
+        "h25_72": {
+          "n_obs": 4558,
+          "mae": 36.06908188222018,
+          "quantile_score": 12.348885596915542,
+          "coverage_lower": 0.8648530057042563,
+          "coverage_upper": 0.750987275120667
+        }
+      },
+      "pinball_p10": 8.33434399614922,
+      "pinball_p50": 16.23222363400005,
+      "pinball_p90": 9.091961093750367,
+      "n_train_median": 1308.0,
+      "qs_delta_pct_vs_56d": 0.0
+    },
+    "w84": {
+      "n_obs": 6837,
+      "n_vintages": 95,
+      "mae": 31.633333370560624,
+      "quantile_score": 11.06685248224801,
+      "coverage_lower": 0.863975427819219,
+      "coverage_upper": 0.7709521720052654,
+      "coverage_band": 0.6349275998244844,
+      "band_width_median": 86.55337667575834,
+      "winkler": 172.95243668387266,
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 570,
+          "mae": 9.8077277828859,
+          "quantile_score": 3.5281699735865915,
+          "coverage_lower": 0.8614035087719298,
+          "coverage_upper": 0.7333333333333333
+        },
+        "h7_24": {
+          "n_obs": 1709,
+          "mae": 29.70304057487295,
+          "quantile_score": 10.485777688945083,
+          "coverage_lower": 0.8484493856056173,
+          "coverage_upper": 0.8139262726740784
+        },
+        "h25_72": {
+          "n_obs": 4558,
+          "mae": 35.08648509781047,
+          "quantile_score": 12.227472458485769,
+          "coverage_lower": 0.8701184730144801,
+          "coverage_upper": 0.7595436594997806
+        }
+      },
+      "pinball_p10": 8.444411629266243,
+      "pinball_p50": 15.842691391630908,
+      "pinball_p90": 8.913454425846872,
+      "n_train_median": 1963.0,
+      "qs_delta_pct_vs_56d": -1.3606396194924208,
+      "dm_beats_56d": {
+        "statistic": -1.6894512716419479,
+        "p_one_sided": 0.045566491261272275
+      }
+    },
+    "w112": {
+      "n_obs": 6837,
+      "n_vintages": 95,
+      "mae": 31.258184235691058,
+      "quantile_score": 10.877724963641228,
+      "coverage_lower": 0.8769928331139388,
+      "coverage_upper": 0.7757788503729706,
+      "coverage_band": 0.6527716834869095,
+      "band_width_median": 88.44141718915942,
+      "winkler": 169.44721915420635,
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 570,
+          "mae": 9.792251132967916,
+          "quantile_score": 3.475357407694334,
+          "coverage_lower": 0.8666666666666667,
+          "coverage_upper": 0.7684210526315789
+        },
+        "h7_24": {
+          "n_obs": 1709,
+          "mae": 29.506524818749,
+          "quantile_score": 10.44364802740622,
+          "coverage_lower": 0.8554710356933879,
+          "coverage_upper": 0.81275599765945
+        },
+        "h25_72": {
+          "n_obs": 4558,
+          "mae": 34.599379455547606,
+          "quantile_score": 11.966181960331742,
+          "coverage_lower": 0.88635366388767,
+          "coverage_upper": 0.7628345765686705
+        }
+      },
+      "pinball_p10": 8.033760956811538,
+      "pinball_p50": 15.667132377533258,
+      "pinball_p90": 8.93228155657889,
+      "n_train_median": 2634.0,
+      "qs_delta_pct_vs_56d": -3.0463418094917927,
+      "dm_beats_56d": {
+        "statistic": -4.162464599268089,
+        "p_one_sided": 1.5741548122834065e-05
+      }
+    },
+    "w168": {
+      "n_obs": 6837,
+      "n_vintages": 95,
+      "mae": 31.343642826016147,
+      "quantile_score": 10.94226511217784,
+      "coverage_lower": 0.8762615182097411,
+      "coverage_upper": 0.7991809273072985,
+      "coverage_band": 0.6754424455170397,
+      "band_width_median": 91.3408875139944,
+      "winkler": 171.3071201835642,
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 570,
+          "mae": 10.71295851952053,
+          "quantile_score": 3.7242426988299275,
+          "coverage_lower": 0.8719298245614036,
+          "coverage_upper": 0.756140350877193
+        },
+        "h7_24": {
+          "n_obs": 1709,
+          "mae": 29.838580906948433,
+          "quantile_score": 10.469054294637466,
+          "coverage_lower": 0.8619075482738443,
+          "coverage_upper": 0.8601521357519017
+        },
+        "h25_72": {
+          "n_obs": 4558,
+          "mae": 34.48792559793129,
+          "quantile_score": 12.02234191401742,
+          "coverage_lower": 0.8821851689337429,
+          "coverage_upper": 0.7817025010969724
+        }
+      },
+      "pinball_p10": 8.325706991302454,
+      "pinball_p50": 15.677630024696851,
+      "pinball_p90": 8.823458320534218,
+      "n_train_median": 3943.0,
+      "qs_delta_pct_vs_56d": -2.4710925251332894,
+      "dm_beats_56d": {
+        "statistic": -2.1990389713269196,
+        "p_one_sided": 0.01393757567438138
+      }
+    }
+  },
+  "gates": {
+    "best_window": 112,
+    "gate_1_dm_p_lt_0.10": true,
+    "gate_2_qs_ge_3pct_better": true,
+    "gate_3_coverage": true,
+    "gate_4_winkler": true,
+    "position_5pct_met": false,
+    "monotone_to_112d": true,
+    "ALL_PASS": true
+  }
+}

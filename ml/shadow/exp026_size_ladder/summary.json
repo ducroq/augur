@@ -1,0 +1,65 @@
+{
+  "config": {
+    "purpose": "EXP-026 skill ladder; latency half NOT run (needs sadalsuud)",
+    "hac_lags": 71,
+    "n_obs": 18717,
+    "contexts": "ml/shadow/exp021_foundation_aligned (matched-information)"
+  },
+  "arms": {
+    "lean_lgbm": {
+      "mae": 27.773706919817762,
+      "quantile_score": 9.863725633985963,
+      "coverage_band": 0.6107282149917188,
+      "coverage_lower": 0.8138056312443234,
+      "coverage_upper": 0.7969225837473954,
+      "winkler": 155.57183529547467,
+      "qs_delta_pct_vs_lean": 0.0,
+      "retention_pct_of_base_advantage": 0.0
+    },
+    "bolt_tiny": {
+      "mae": 23.571275447473102,
+      "quantile_score": 7.994938645636382,
+      "coverage_band": 0.8150878880162419,
+      "coverage_lower": 0.9034033231821339,
+      "coverage_upper": 0.911684564834108,
+      "winkler": 121.99178213172601,
+      "qs_delta_pct_vs_lean": -18.94605606131806,
+      "retention_pct_of_base_advantage": 93.4624024288758
+    },
+    "bolt_mini": {
+      "mae": 23.52802337360336,
+      "quantile_score": 7.921613845480078,
+      "coverage_band": 0.8185072394080248,
+      "coverage_lower": 0.9110968638136453,
+      "coverage_upper": 0.9074103755943794,
+      "winkler": 120.00829849638554,
+      "qs_delta_pct_vs_lean": -19.68943440411848,
+      "retention_pct_of_base_advantage": 97.12954695789338
+    },
+    "bolt_small": {
+      "mae": 23.34386533877913,
+      "quantile_score": 7.898519770608716,
+      "coverage_band": 0.8289790030453599,
+      "coverage_lower": 0.9092269060212641,
+      "coverage_upper": 0.9197520970240958,
+      "winkler": 120.23626642436585,
+      "qs_delta_pct_vs_lean": -19.923565763082784,
+      "retention_pct_of_base_advantage": 98.284535585707
+    },
+    "bolt_base": {
+      "mae": 23.23477896170502,
+      "quantile_score": 7.864218944895969,
+      "coverage_band": 0.811401399796976,
+      "coverage_lower": 0.8983811508254528,
+      "coverage_upper": 0.9130202489715232,
+      "winkler": 119.75267353835393,
+      "qs_delta_pct_vs_lean": -20.27131292257961,
+      "retention_pct_of_base_advantage": 100.00000000000001
+    }
+  },
+  "gates": {
+    "small_retains_ge_80pct": true,
+    "tiny_retains_ge_90pct": true,
+    "latency_benchmark_run": false
+  }
+}
