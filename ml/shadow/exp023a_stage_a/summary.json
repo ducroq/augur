@@ -1,0 +1,110 @@
+{
+  "config": {
+    "parquet": "ml/data/training_history_fundamentals.parquet",
+    "windows": [
+      56,
+      112
+    ],
+    "base_window": 56,
+    "n_vintages": 56,
+    "n_vintages_dropped_for_confound_control": 0,
+    "hac_lags": 71,
+    "cqr_applied": false,
+    "feature_set": "lean (15)",
+    "max_horizon": 72
+  },
+  "rungs": {
+    "w56": {
+      "n_obs": 4032,
+      "n_vintages": 56,
+      "mae": 34.33237073895757,
+      "quantile_score": 12.322288868462667,
+      "coverage_lower": 0.785218253968254,
+      "coverage_upper": 0.8375496031746031,
+      "coverage_band": 0.6227678571428571,
+      "band_width_median": 78.46853317488268,
+      "winkler": 197.02933140334932,
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 336,
+          "mae": 13.881452630276664,
+          "quantile_score": 4.842370204305514,
+          "coverage_lower": 0.8303571428571429,
+          "coverage_upper": 0.7440476190476191
+        },
+        "h7_24": {
+          "n_obs": 1008,
+          "mae": 32.09349361693455,
+          "quantile_score": 11.889070829750798,
+          "coverage_lower": 0.7648809523809523,
+          "coverage_upper": 0.8621031746031746
+        },
+        "h25_72": {
+          "n_obs": 2688,
+          "mae": 37.72831442330132,
+          "quantile_score": 13.419735465999262,
+          "coverage_lower": 0.7872023809523809,
+          "coverage_upper": 0.8400297619047619
+        }
+      },
+      "pinball_p10": 12.691891082447311,
+      "pinball_p50": 17.168113332446204,
+      "pinball_p90": 7.1068621904944855,
+      "n_train_median": 1291.0,
+      "qs_delta_pct_vs_56d": 0.0
+    },
+    "w112": {
+      "n_obs": 4032,
+      "n_vintages": 56,
+      "mae": 34.260113225410585,
+      "quantile_score": 12.500695745354749,
+      "coverage_lower": 0.7743055555555556,
+      "coverage_upper": 0.8311011904761905,
+      "coverage_band": 0.605406746031746,
+      "band_width_median": 69.36696243746913,
+      "winkler": 201.7966147601436,
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 336,
+          "mae": 14.045525715637146,
+          "quantile_score": 4.861820445833865,
+          "coverage_lower": 0.8869047619047619,
+          "coverage_upper": 0.7053571428571429
+        },
+        "h7_24": {
+          "n_obs": 1008,
+          "mae": 32.945792840003215,
+          "quantile_score": 12.090620156818478,
+          "coverage_lower": 0.7589285714285714,
+          "coverage_upper": 0.875
+        },
+        "h25_72": {
+          "n_obs": 2688,
+          "mae": 37.27980680866003,
+          "quantile_score": 13.60933350349596,
+          "coverage_lower": 0.7659970238095238,
+          "coverage_upper": 0.8303571428571429
+        }
+      },
+      "pinball_p10": 13.13639856389548,
+      "pinball_p50": 17.187763182736017,
+      "pinball_p90": 7.177925489432753,
+      "n_train_median": 2635.0,
+      "qs_delta_pct_vs_56d": 1.447838780575017,
+      "dm_beats_56d": {
+        "statistic": 1.2453732417347,
+        "p_one_sided": 0.8935027077596935
+      }
+    }
+  },
+  "gates": {
+    "best_window": 56,
+    "gate_1_dm_p_lt_0.10": false,
+    "gate_2_qs_ge_3pct_better": false,
+    "gate_3_coverage": true,
+    "gate_4_winkler": true,
+    "position_5pct_met": false,
+    "monotone_to_112d": false,
+    "ALL_PASS": false
+  }
+}

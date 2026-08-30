@@ -21,6 +21,104 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 
 ## Open
 
+### [2026-08-30] EXP-023a: the 112-day window's 3.0% gain is real and survives on vintages the sweep never scored
+
+**Position (provisional):** EXP-023 found a 112-day training window beats production's 56 by 3.0% quantile score (DM p<0.0001), with better coverage on both sides and better Winkler — all four pre-committed gates passing. Position: this is a real generalisation gain, and it reproduces both on historical vintages the discovery sweep never touched and on vintages that did not exist when it was measured.
+
+**Why this needs its own pre-commit:** EXP-023's 112d rung is the **best of five** compared on one window, so its effect size is upward-biased by selection — the same objection that produced EXP-018a. Worse, the confound control (fix the vintage set so the 168d rung is available throughout) left only **95 vintages, all 2026-03-15..2026-08-21** — the high-price half of the year. A 3.0% effect measured on a best-of-five over one regime is exactly the kind of result that evaporates. Per ADR-007 the confirming test is fixed here, before the confirming data is looked at, and before `WINDOW_DAYS` changes anywhere.
+
+**The power problem, stated up front because it drives the design.** EXP-018a could demand 14 fresh vintages because its in-sample effect was 8.1%. Here it is 3.0%. Power scales roughly with the square of the effect, so matching EXP-018a's power at this effect size needs on the order of **7× the vintages** — ~98, i.e. late November. Demanding "≥3% on 14 fresh vintages" would be demanding *zero shrinkage* on an underpowered sample, which is not a test, it is a coin flip dressed as one. The design below therefore splits into a cheap quasi-holdout available now and a properly-powered fresh-vintage stage later, with the bar lowered honestly rather than the sample pretended larger.
+
+**Alternatives (failure-mode signals):**
+
+1. **Regime artifact.** 112d wins only because Mar–Aug 2026 was a rising, high-price regime where a longer window damps over-reaction. **Signal:** Stage A (Dec 2025–Mar 2026, a calmer stretch) shows no gain or a loss. Then the finding is regime-conditional, not a window-length law, and the right answer is an adaptive window rather than a new constant.
+2. **Selection mirage.** **Signal:** Stage A or B lands under 1.0% against 3.0% in-sample. Do not ship on a shrunken effect; the curve's *shape* (inverted U peaking interior) may still be worth keeping as evidence while the point estimate is not.
+3. **The optimum moves with the feature set.** EXP-023 ran on `lean`, but production is `full` and EXP-018a has not concluded. **Signal:** re-running the two rungs on `full` gives a different winner. Then window and feature set are not separable and both must be settled together.
+4. **Longer is simply better and 168 was a fluke of the confound control.** **Signal:** Stage B shows 168d ≥ 112d. Then re-open the sweep at 140/168/196 on the then-available history rather than shipping 112.
+
+**Method (pre-committed 2026-08-30, before either stage is run):**
+
+*Stage A — quasi-holdout on unscored history, runnable immediately.* EXP-023's sweep scored only `t0 ∈ [2026-03-15, 2026-08-21]`, because the 168d rung needed 168 days of pre-history. A **56-vs-112 comparison needs only 112 days**, so vintages from `2026-01-20` to `2026-03-14` are available *and were never scored by the discovery run*. Run exactly two rungs — **56 and 112, treatment fixed here so it cannot be chosen on the holdout** — on `t0 ∈ [2026-01-20, 2026-03-14]`, feature set `lean`, everything else identical to EXP-023:
+
+```
+PYTHONPATH=.:scripts .venv/bin/python scripts/exp023_window_sweep.py \
+    --start 2026-01-20 --end 2026-03-15 --windows 56,112 \
+    --jobs 14 --out ml/shadow/exp023a_stage_a
+```
+
+This is a **quasi**-holdout, not a true one: the data existed when 112 was chosen, even though these rows were not scored. It is therefore evidence about Alternative 1 (regime) and Alternative 2 (shrinkage), and **cannot on its own justify shipping**.
+
+*Stage B — fresh-vintage confirmation.* When **≥45 vintages with `t0 ≥ 2026-08-26`** exist (≈2026-10-09; 45 rather than 14 for the power reason above, and ≥ the EXP-023 discovery end so there is no overlap), run the same two rungs on that range. Incumbent = 56d. Treatment = 112d.
+
+*Gates.* IMPLEMENT iff **all four** hold **on Stage B** (Stage A informs but does not gate):
+
+1. **Skill:** paired DM on per-observation quantile score, H1 112d better, one-sided **p < 0.10**, HAC bandwidth 71.
+2. **Effect size:** 112d QS at least **1.5%** better than 56d. Deliberately below the in-sample 3.0% — half the discovery effect is the most that can be honestly demanded of a properly-powered replication of a small effect, and pretending otherwise would make the gate unpassable by design.
+3. **Calibration:** 112d lower- and upper-side coverage each **not more than 0.02 worse** than 56d (raw quantiles, no CQR).
+4. **Sharpness:** 112d mean Winkler (α=0.20) **≤ 1.05 ×** 56d.
+
+*If it passes.* The change is one constant (`WINDOW_DAYS` in `ml/shadow/update_shadow.py` and its siblings), and the revert is the same one constant. Deploy behind the same live-shadow discipline ADR-006 was earned with: 14 evaluable post-deploy vintages in `shadow_state.json:calibration_history`, `lightgbm_mae` not worse than the pre-deploy trailing-14 mean, no new alarm classes. **Note the interaction with EXP-018a**: if that ships the lean feature set, re-derive the optimum before changing the window, per Alternative 3.
+
+**Addendum 2026-08-30 (feasibility defect found before Stage A was run; gates unchanged).** The Stage A range above is **wrong and unrunnable**, and finding out why also corrects a factual error in EXP-023's own record. `load_frame_ext` drops rows on the EXP-020 fundamentals columns, which begin 2025-12-01, so the *feature frame* starts **2025-12-02** — not the parquet's 2025-09-28. Consequences:
+
+- The earliest usable `t0` for a 112-day window is **2026-03-24**, not 2026-01-18, so the pre-committed Stage A range (2026-01-20..2026-03-14) yields **zero** vintages.
+- **EXP-023's discovery window was `2026-05-19..2026-08-21`, not "2026-03-15..2026-08-21" / "Mar–Aug 2026"** as recorded in `experiments/registry.jsonl` EXP-023 notes, `docs/model-progress-log.md`, CLAUDE.md and `memory/MEMORY.md`. The real window is **three months, May–August**, narrower and later than recorded — which makes Alternative 1 (regime artifact) *more* live, not less, since May–Aug 2026 is squarely the rising-price stretch.
+
+**Corrected Stage A range: `t0 ∈ [2026-03-24, 2026-05-18]`** — the vintages that a 112d window can reach and that the discovery sweep never scored, ~56 of them. Everything else about Stage A is unchanged: two rungs only (56 and 112, treatment still fixed in advance), `lean`, quasi-holdout status, informs but does not gate. **Stage B and all four gates are untouched.** Recorded here rather than edited into the text above, per ADR-007: this is a defect in the data the Method reads, found *before* any Stage A number was seen, not a Method loosened after a peek.
+
+**Revisit trigger:** Stage A immediately (corrected range). Stage B at ≥45 vintages with `t0 ≥ 2026-08-26`, ≈2026-10-09, and **after** EXP-018a Stage 1 has claimed the fresh window. Surface in `/curate`.
+
+**Review by:** 2026-11-15.
+
+**Domain:** EXP-023a, window length, ADR-006, augur#19, `scripts/exp023_window_sweep.py`.
+
+**Status:** open — pre-committed 2026-08-30, before either stage was run.
+
+### [2026-08-30] EXP-028a: Chronos-2's covariate gain survives on uncontaminated fresh vintages, and the coverage cost is a real trade rather than a fixable artifact
+
+**Position (provisional):** EXP-028 found `amazon/chronos-2` gains **8.3% quantile score** (DM p=0.0051) from exogenous covariates supplied at inference time with no retraining — Augur's first positive exogenous result, and a genuine qualification of EXP-020's "exogenous is inert" conclusion, which held for LightGBM and for a LightGBM-specific mechanism. Position: the gain reproduces on fresh vintages, and the coverage cost that failed gate 3 (lower 0.923→0.886, upper 0.880→0.856) persists rather than vanishing — i.e. it is a real skill-for-calibration trade that a conformal layer must be asked to absorb, not a small-sample wobble.
+
+**Why this needs its own pre-commit, and why it is more urgent than EXP-023a's:** EXP-028 carries a contamination exposure that none of the Bolt experiments do. `chronos-bolt-base`'s weights were frozen **2025-11-21**, before the evaluation window, so EXP-021 could call contamination *impossible*. **`amazon/chronos-2` was last modified 2026-06-05 — inside the window.** Restricting to `t0 > 2026-06-05` removes overlap with the freeze date but does **not** prove the pretraining corpus excludes NL day-ahead prices. Fresh vintages from September onward are the only thing that resolves this by construction, and they are the reason this entry exists. Additionally the discovery ran on only **77 vintages**, and its covariates carry the harness's vintage-overwrite optimism (ratio 1.84), which biases *toward* the result.
+
+**Alternatives (failure-mode signals):**
+
+1. **It was contamination.** **Signal:** the gain collapses to under 2% on vintages strictly after the weight-modification date by a wide margin. Then the exogenous question is *not* re-opened, EXP-020's conclusion stands unqualified across model classes, and this is the most important negative available — it would also cast doubt on the c2-vs-bolt comparison generally.
+2. **It was the model, not the covariates.** chronos-2 univariate already beat bolt-base by 5.5% on the discovery subset. **Signal:** the covariate-vs-univariate delta shrinks while chronos-2 univariate keeps beating bolt. Then the headline belongs to the newer checkpoint and the covariate story is separate and smaller. *(The covariate-vs-univariate comparison is the internally valid one precisely because both arms share weights; this alternative is why the two must never be conflated.)*
+3. **The coverage cost is fixable, not intrinsic.** **Signal:** applying CQR to the covariate arm restores coverage to ≥0.80 without giving back the skill. Then gate 3's failure was an artifact of comparing raw bands, and the arm becomes shippable on a conformal layer we already run.
+4. **Exogenous freshness is doing the work.** The harness feeds vintage-overwritten covariates, fresher than the live cron sees. **Signal:** re-running with covariates lagged to what was genuinely known at t0 erases the gain. Then the result is a backtest artifact and cannot survive deployment — **this arm is mandatory, not optional**, because it is the failure mode most likely to produce a real-looking gain that dies in production.
+
+**Method (pre-committed 2026-08-30, before any fresh vintage is scored):**
+
+*Stage 1 — fresh, uncontaminated confirmation.* When **≥28 vintages with `t0 ≥ 2026-08-26`** exist (≈2026-09-23; 28 rather than 14 because the discovery subset was small and the effect must clear a raised bar), re-run four arms on that range with `scripts/exp028_chronos2_covariates.py`:
+
+```
+c2_univariate            base
+c2_known_future          treatment  — PRIMARY
+c2_known_future_lagged   Alternative 4: covariates as known at t0, not overwritten
+bolt_base                reference  (frozen weights, contamination-free anchor)
+```
+
+*Gates.* IMPLEMENT-as-candidate iff **all four** hold for `c2_known_future` vs `c2_univariate`:
+
+1. **Skill:** paired DM on per-observation quantile score, one-sided **p < 0.10**, HAC bandwidth 71.
+2. **Effect size:** QS at least **5%** better — the same bar the discovery cleared (8.3%), not lowered, because unlike EXP-023a this effect is large enough that a properly-powered replication can be held to it.
+3. **Calibration:** lower- and upper-side coverage each not more than **0.02** worse than the univariate base. **This gate FAILED in discovery and is expected to fail again**; the Position predicts it. Failing it again is *not* a reason to loosen it — it routes to Stage 2 rather than to shipping.
+4. **Sharpness:** mean Winkler (α=0.20) ≤ 1.05 × base.
+
+*Mandatory regardless of gate outcome:* report `c2_known_future_lagged`. If the lagged arm loses more than half the gain, record Alternative 4 as confirmed and **stop** — no Stage 2, whatever the primary arm did.
+
+*Stage 2 — only if skill passes and calibration fails, which is what the Position predicts.* Apply the production CQR layer to both arms and re-score. Ship-worthy iff the covariate arm's CQR-corrected band coverage is within 0.02 of the univariate arm's **and** it keeps ≥5% QS advantage. That tests Alternative 3 directly. If CQR cannot absorb the cost, the honest conclusion is that covariates buy point skill at a calibration price Augur should not pay while augur#19 is open, and the entry parks.
+
+**What does not happen in this entry, whatever the numbers.** No production path is touched. Chronos-2 is not in the nightly job, and EXP-021a — the confirmation ladder for the foundation model as *forecaster* — is a separate and earlier question than whether that forecaster gets covariates. If EXP-021a fails, this entry is moot regardless of its own result.
+
+**Revisit trigger:** ≥28 vintages with `t0 ≥ 2026-08-26`, ≈2026-09-23, after EXP-018a Stage 1. Surface in `/curate`.
+
+**Review by:** 2026-10-31.
+
+**Domain:** EXP-028a, foundation models (augur#15), exogenous features (augur#3, augur#22), augur#19, ADR-006, ADR-007.
+
+**Status:** open — pre-committed 2026-08-30, before any fresh vintage was scored.
+
 ### [2026-08-29] EXP-021a: Chronos-Bolt's 20% zero-shot win survives on fresh vintages, and survives contact with production constraints
 
 **Position (provisional):** EXP-021 (resolved same day) measured `chronos-bolt-base` zero-shot at **-20.3% quantile score and -16% MAE against the lean LightGBM incumbent**, with raw band coverage 0.811 against a 0.80 target where the incumbent sits at 0.611, on 260 paired vintages. Position: this reproduces on vintages that did not exist when it was measured, and the operational objections to running it in production (latency, dependency weight, the loss of a nightly-refit story, no CPU path on sadalsuud) are surmountable rather than disqualifying.

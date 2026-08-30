@@ -1,0 +1,42 @@
+{
+  "proxy_host": "sadalsuud (AMD Ryzen 3 5300U) \u2014 MEASURED ON TARGET, not a proxy",
+  "target_host": "sadalsuud (AMD Ryzen 3 5300U, Zen 2 low-power mobile, 4c/8t)",
+  "threads_pinned": 4,
+  "context_points": 1343,
+  "prediction_length": 73,
+  "IS_A_LOWER_BOUND": false,
+  "interpretation": "Measured on the production host itself. This is the pre-committed EXP-021a Stage 2 latency measurement, not a proxy.",
+  "gate_median_s": 10.0,
+  "gate_max_s": 30.0,
+  "stage2_gate_median_s": 60.0,
+  "results": {
+    "chronos-bolt-tiny": {
+      "n_params_millions": 8.7,
+      "median_s": 0.1115141148911789,
+      "max_s": 0.13640735601074994,
+      "min_s": 0.10677207517437637,
+      "runs": 10
+    },
+    "chronos-bolt-mini": {
+      "n_params_millions": 21.2,
+      "median_s": 0.2186223149765283,
+      "max_s": 0.3056613060180098,
+      "min_s": 0.20180529193021357,
+      "runs": 10
+    },
+    "chronos-bolt-small": {
+      "n_params_millions": 47.7,
+      "median_s": 0.4585528160678223,
+      "max_s": 0.48933991813100874,
+      "min_s": 0.4421833560336381,
+      "runs": 10
+    },
+    "chronos-bolt-base": {
+      "n_params_millions": 205.3,
+      "median_s": 1.1582221689168364,
+      "max_s": 1.1718987389467657,
+      "min_s": 1.144154611043632,
+      "runs": 10
+    }
+  }
+}

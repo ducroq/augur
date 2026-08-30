@@ -2,7 +2,7 @@
 
 **Generated file — do not edit.** Rendered from `experiments/registry.jsonl` and the `summary.json` artifacts it references, by `scripts/render_results.py`. Regenerate after appending to the registry; `--check` fails if this file is stale.
 
-Registry state: **30 entries**, rendered at `721f566`. Integrity of the underlying record is verified separately by `scripts/audit_registry.py` (schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed).
+Registry state: **32 entries**, rendered at `acfcd96`. Integrity of the underlying record is verified separately by `scripts/audit_registry.py` (schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed).
 
 Decision values: `kept` (evidence stands / in production) · `parked` (works, not adopted, revisit) · `rejected` (does not work) · `rolled_back` · `superseded`.
 
@@ -39,6 +39,7 @@ The registry records *what was found*; the **revisit trigger and review-by date 
 | EXP-022 | Context ladder | Diagnostic, nothing to adopt |
 | EXP-023 | Window-length sweep | All four pre-committed gates PASS at 112 days: DM p<0.0001, QS 3.0% better than 56d, coverage better on both sides (lower 0.857->0.877, upper 0.761->0.776), Winkler better (173.2->169.4) |
 | EXP-028 | Covariates DO help a covariate-capable foundation model | The Position's skill claim is CONFIRMED and the exogenous question genuinely re-opens with model class. chronos-2 with the seven known-future covariates scores QS 7.30 vs 7.96 univariate — 8.3%… |
+| EXP-032 | EXP-023a Stage A | The advantage does NOT reproduce |
 
 ### Standing evidence — `kept`
 
@@ -57,6 +58,7 @@ The registry records *what was found*; the **revisit trigger and review-by date 
 | EXP-026 | Model-size ladder |
 | EXP-030 | EXP-026 part (b) completed by proxy |
 | EXP-031 | Documentation-integrity audit of EXP-021..030 |
+| EXP-033 | EXP-021a Stage 2 latency gate discharged on the real host |
 | EXP-001 | Initial ARF warmup baseline (pre-backfill) |
 
 ## Summary
@@ -93,6 +95,8 @@ The registry records *what was found*; the **revisit trigger and review-by date 
 | EXP-029 | 2026-08-29 | rejected | `oos_r2_all`=-2.0031<br>`oos_r2_wind_only`=-0.0576 | Residual pre-screen: null as predicted, but the screen is invalid as a gate |
 | EXP-030 | 2026-08-30 | **kept** | `chronos-bolt-base_median_s`=0.521586<br>`chronos-bolt-tiny_median_s`=0.0291883 | EXP-026 part (b) completed by proxy: CPU inference latency is a non-issue |
 | EXP-031 | 2026-08-30 | **kept** | `untraceable_before`=19<br>`untraceable_after`=0<br>`numeric_metrics_checked`=241 | Documentation-integrity audit of EXP-021..030: 19 registry numbers were untraceable to any artifact; all now regenerable, and the check is automated |
+| EXP-032 | 2026-08-30 | parked | — | EXP-023a Stage A: the 112-day window's advantage does NOT reproduce on unscored vintages |
+| EXP-033 | 2026-08-30 | **kept** | — | EXP-021a Stage 2 latency gate discharged on the real host: chronos-bolt-base runs a 72h forecast in 1.16s on sadalsuud |
 
 ## EXP-001 — Initial ARF warmup baseline (pre-backfill)
 
@@ -1282,5 +1286,79 @@ The registry records *what was found*; the **revisit trigger and review-by date 
 **Artifacts.** `scripts/audit_registry.py` · `scripts/posthoc_diagnostics.py` · `ml/shadow/exp022_context_ladder/diagnostics.json` · `ml/shadow/exp025_band_transplant/diagnostics.json`
 
 **Commits.** `f60773c`
+
+---
+
+## EXP-032 — EXP-023a Stage A: the 112-day window's advantage does NOT reproduce on unscored vintages — Alternative 1 (regime artifact) fires
+
+**parked** · 2026-08-30 · model: MultiHorizonLightGBMQuantileForecaster, lean 15-feature set, production shape (h+1..h+72, one t0 per vintage day, no CQR)
+
+**Hypothesis.** Pre-committed in docs/hypothesis-log.md [2026-08-30] EXP-023a, hours before this ran. EXP-023 found 112d beats 56d by 3.0% QS with all four gates passing, but on a best-of-five selection over one window. Stage A is the quasi-holdout: run ONLY the two rungs (56 and 112, treatment fixed in advance) on vintages a 112d window can reach that the discovery sweep never scored. Position: the gain is real and reproduces off the discovery window.
+
+**Outcome.** The advantage does NOT reproduce. On 56 vintages (2026-03-24..2026-05-18) that a 112d window can reach and that EXP-023 never scored, 112d is 1.4% WORSE than 56d (QS 12.50 vs 12.32, DM p=0.8935 — decisively the wrong direction), and 56d wins on coverage on both sides and on Winkler. Against a discovery estimate of 3.0% BETTER, the sign has flipped. EXP-023a's Alternative 1 (regime artifact) is the reading this supports: 112d wins in the May-August rising-price stretch and loses in the calmer March-May one, which is consistent with a longer window damping over-reaction only when the level is trending. Note the two windows are genuinely different regimes, not just different dates: Stage A's 56d rung has MAE 34.33 and upper coverage 0.838 against the discovery window's 32.37 and 0.761. IMPORTANT SCOPE LIMIT, pre-committed before this ran: Stage A is a QUASI-holdout — the data existed when 112 was chosen, even though these rows were never scored — so per the pre-commit it 'informs but does not gate' and this does NOT formally refute EXP-023. What it does is remove the basis for treating 112d as a cheap near-certain win: it drops from the top of the live-decisions list to a regime-conditional hypothesis, and Stage B (>=45 fresh vintages, ~2026-10-09) is now the test that matters rather than a formality.
+
+<details><summary>All recorded metrics (16)</summary>
+
+| metric | value |
+|---|---|
+| `w56_qs` | 12.322 |
+| `w112_qs` | 12.501 |
+| `w56_mae` | 34.33 |
+| `w112_mae` | 34.26 |
+| `w112_dqs_pct_vs_56d` | 1.45 |
+| `w112_dm_p_beats_56d` | 0.893503 |
+| `w56_coverage_lower` | 0.785 |
+| `w112_coverage_lower` | 0.774 |
+| `w56_coverage_upper` | 0.838 |
+| `w112_coverage_upper` | 0.831 |
+| `w56_winkler` | 197 |
+| `w112_winkler` | 201.8 |
+| `discovery_w112_dqs_pct` | -3.05 |
+| `stage_a_w112_dqs_pct` | 1.45 |
+| `best_window` | 56 |
+| `gate_ALL_PASS` | no |
+
+</details>
+
+**Caveats.** CORRECTS A FACTUAL ERROR IN EXP-023, per this registry's append-only correction rule. EXP-023's notes state 'the parquet begins 2025-09-28 and a 168d window needs 168 days of pre-history, so the first usable t0 is 2026-03-15. The evaluation window is therefore Mar-Aug 2026'. Both claims are WRONG. `load_frame_ext` drops rows on the EXP-020 fundamentals columns, which start 2025-12-01, so the FEATURE FRAME begins 2026-12-02 -- the binding constraint is the feature frame, not the parquet. EXP-023's actual discovery window was 2026-05-19..2026-08-21: three months, May-August, narrower and later than recorded, and squarely inside the rising-price stretch. That makes the regime-artifact reading this entry supports more plausible, not less. The same error made EXP-023a's own pre-committed Stage A range (2026-01-20..2026-03-14) unrunnable -- zero vintages -- and it was corrected to 2026-03-24..2026-05-18 in a dated addendum BEFORE any Stage A number was seen; the four Stage B gates were not touched. docs/experiment-results.md regenerates from this registry, so it carried the wrong window until this entry landed.
+
+**Artifacts.** `scripts/exp023_window_sweep.py` · `ml/shadow/exp023a_stage_a/summary.json`
+
+**Commits.** `acfcd96`
+
+---
+
+## EXP-033 — EXP-021a Stage 2 latency gate discharged on the real host: chronos-bolt-base runs a 72h forecast in 1.16s on sadalsuud
+
+****kept**** · 2026-08-30 · model: amazon/chronos-bolt-{tiny,mini,small,base}, CPU-only, torch.set_num_threads(4), 1343-point context, prediction_length 73, 10 timed runs after warm-up
+
+**Hypothesis.** EXP-030 measured CPU latency by proxy on b650-gpu (Zen 5 desktop) pinned to 4 threads, explicitly a LOWER BOUND, and stated that EXP-021a Stage 2 stayed undischarged until measured on sadalsuud itself (AMD Ryzen 3 5300U, Zen 2 low-power mobile, 4c/8t). This is that measurement. Prediction implicit in EXP-030: the proxy understates sadalsuud by roughly 3-5x (per-core Zen2-mobile vs Zen5-desktop), so the 19-115x headroom survives.
+
+**Outcome.** Gate discharged, decisively. On sadalsuud itself: tiny 0.11s, mini 0.22s, small 0.46s, base 1.16s median (max 1.17s) for one 1343-point / 72h forecast on 4 threads. Against EXP-021a Stage 2's 60s median gate that is ~52x headroom even for the 205M base model, and ~8.6x against EXP-026's stricter 10s gate. EXP-030's proxy understated the real host by 2.2x, inside the 3-5x band it predicted, so the proxy was a valid lower bound and its conclusion holds. LATENCY IS NOT A CONSTRAINT ON DEPLOYING A FOUNDATION MODEL IN THE NIGHTLY JOB; the remaining deployment cost is the torch dependency footprint, and Stage 2's other half (per-vintage MAE tail risk) is still unmeasured.
+
+<details><summary>All recorded metrics (12)</summary>
+
+| metric | value |
+|---|---|
+| `chronos-bolt-tiny_median_s` | 0.112 |
+| `chronos-bolt-mini_median_s` | 0.219 |
+| `chronos-bolt-small_median_s` | 0.459 |
+| `chronos-bolt-base_median_s` | 1.158 |
+| `chronos-bolt-tiny_max_s` | 0.136 |
+| `chronos-bolt-mini_max_s` | 0.306 |
+| `chronos-bolt-small_max_s` | 0.489 |
+| `chronos-bolt-base_max_s` | 1.172 |
+| `base_headroom_vs_60s_stage2_gate_x` | 51.8 |
+| `base_headroom_vs_10s_exp026_gate_x` | 8.6 |
+| `proxy_understated_by_x` | 2.22 |
+| `stage2_latency_gate_passed` | yes |
+
+</details>
+
+**Caveats.** Production safety: torch was installed into an ISOLATED venv at ~/augur-latency/.venv (uv managed CPython 3.12, torch 2.13.0+cpu), never into the venv the nightly job uses. No production dependency, unit, timer or data path was touched, and the daily timer was verified active before and is unaffected. Only the LATENCY half of Stage 2 is discharged; the per-vintage MAE tail check (p95 ratio <= 1.5) and the venv-footprint assessment remain open. scripts/exp026_cpu_latency.py gained --on-target-host so its output no longer claims 'proxy only' when it is in fact the pre-committed measurement.
+
+**Artifacts.** `scripts/exp026_cpu_latency.py` · `ml/shadow/exp026_size_ladder/cpu_latency_sadalsuud.json`
+
+**Commits.** `acfcd96`
 
 ---

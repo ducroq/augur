@@ -51,6 +51,9 @@ def main() -> None:
     ap.add_argument("--runs", type=int, default=10)
     ap.add_argument("--models", default=",".join(MODELS))
     ap.add_argument("--out", default="ml/shadow/exp026_size_ladder")
+    ap.add_argument("--on-target-host", action="store_true",
+                    help="set when running ON sadalsuud itself; the result is then the "
+                         "pre-committed measurement, not a proxy, and discharges the gate")
     args = ap.parse_args()
 
     import torch
@@ -96,7 +99,7 @@ def main() -> None:
         "threads_pinned": args.threads,
         "context_points": int(len(series)),
         "prediction_length": PRED_LEN,
-        "IS_A_LOWER_BOUND": True,
+        "IS_A_LOWER_BOUND": not args.on_target_host,
         "interpretation": ("Proxy above the gate => sadalsuud certainly fails (conclusive). "
                            "Proxy below the gate => suggestive only; EXP-021a Stage 2 still "
                            "requires the real measurement on sadalsuud."),
@@ -106,7 +109,10 @@ def main() -> None:
     }
     (out / "cpu_latency_proxy.json").write_text(json.dumps(payload, indent=2))
     print(f"\nwrote {out/'cpu_latency_proxy.json'}")
-    print("NOTE: proxy only — EXP-021a Stage 2 is NOT discharged by this file.")
+    if args.on_target_host:
+        print("Measured ON the target host — this IS the pre-committed measurement.")
+    else:
+        print("NOTE: proxy only — EXP-021a Stage 2 is NOT discharged by this file.")
 
 
 if __name__ == "__main__":

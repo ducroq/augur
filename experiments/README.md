@@ -43,7 +43,9 @@ wc -l experiments/registry.jsonl
 
 ### Decision values
 
-- `kept` — merged to `main`, in production
+- `kept` — merged to `main` and in production, **or** a finding that stands as established evidence and is not awaiting a trigger
+
+  *Clarified 2026-08-30.* The original definition was production-only, but the registry has used `kept` since EXP-018 for offline findings that stand on their own (EXP-021, EXP-026, EXP-030, EXP-031 ship nothing). Rather than relabel committed entries — which append-only forbids — the definition is widened to match twelve entries of actual practice. The distinction that matters in review is **`kept` = settled, nothing pending** vs **`parked` = works, waiting on a named trigger**; whether it reached production is answered by the entry's `commits` and `artifacts`, not by this field.
 - `parked` — works but not adopted; revisit later
 - `rejected` — does not work; abandoned
 - `rolled_back` — was deployed, then reverted

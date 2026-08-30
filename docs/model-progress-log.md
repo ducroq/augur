@@ -4,6 +4,22 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
+## 2026-08-30 (later) — Follow-through: two confirmations pre-committed, one already fails, and the latency gate is discharged for real
+
+**EXP-023a and EXP-028a pre-committed** before the fresh-vintage windows open, because writing confirmation gates after the data lands is not a pre-commitment. EXP-023a's design states its power problem openly: the discovery effect is 3.0%, so matching EXP-018a's power needs ~7× the vintages, and the fresh-vintage bar is therefore set at **1.5%**, not the in-sample 3.0% — demanding zero shrinkage on an underpowered sample is a coin flip dressed as a test.
+
+**A feasibility defect, caught before it could contaminate anything.** EXP-023a's Stage A range turned out to be unrunnable: `load_frame_ext` drops rows on the EXP-020 fundamentals columns (which start 2025-12-01), so the *feature frame* begins 2025-12-02, not the parquet's 2025-09-28. The earliest 112d-usable `t0` is 2026-03-24, and the pre-committed range yielded zero vintages. Corrected in a dated addendum with the four Stage B gates untouched. **The same error means EXP-023's discovery window was `2026-05-19..2026-08-21` — three months, May–August — not the "Mar–Aug" recorded** in the registry, CLAUDE.md, memory and this log. Corrected everywhere; the registry correction rides in EXP-032 since that file is append-only.
+
+**EXP-032 — Stage A does not reproduce.** On the 56 vintages a 112d window can reach that the discovery sweep never scored: **112d is 1.4% *worse* than 56d** (QS 12.50 vs 12.32, DM p=0.8935), with 56d also better on coverage both sides and on Winkler. Against a discovery estimate of −3.0%, **the sign flipped**. EXP-023a's Alternative 1 (regime artifact) is the reading this supports — 112d wins in the May–Aug rising-price stretch and loses in calmer Mar–May, consistent with a longer window helping only when the level trends. Stage A is a *quasi*-holdout and the pre-commit says it informs rather than gates, so EXP-023 is **not** formally refuted — but the 112-day window is no longer a cheap near-certain win, and it drops off the top of the live-decisions list. Stage B (≥45 fresh vintages, ≈2026-10-09) is now the test that decides it.
+
+This is the pre-commit doing its job inside an hour: had the confirmation gates been written after Stage A, the temptation to reframe a sign flip as "regime-conditional, still promising" would have been considerable.
+
+**EXP-033 — the latency gate is discharged on the real host.** torch installed into an **isolated** venv on sadalsuud (`~/augur-latency/.venv`, uv managed CPython, torch 2.13.0+cpu), never the one the nightly job uses; no production dependency, unit, timer or data path touched. Measured: tiny 0.11s, mini 0.22s, small 0.46s, **base 1.16s** median (max 1.17s) for one 1343-point / 72h forecast on 4 threads. That is ~52× headroom on EXP-021a Stage 2's 60s gate. EXP-030's proxy understated by 2.2×, inside the 3–5× band it predicted, so the proxy was sound. Stage 2's *other* half — per-vintage MAE tail risk and the torch footprint — remains open.
+
+**Status**: nothing shipped, no production model path touched. `experiments/registry.jsonl` EXP-032, EXP-033.
+
+---
+
 ## 2026-08-30 — EXP-031: documentation audit found 19 untraceable numbers; the check is now automated
 
 **Trigger**: a direct question — was the experiment documentation actually done right, and can that be shown rather than asserted?
@@ -87,7 +103,7 @@ One 1343-point / 72h forecast on 4 pinned threads. Against EXP-026's own 10s gat
 
 An inverted U with a genuine interior optimum, so Alternative 2 (monotone to the data limit) is refuted. All four gates pass at 112d. But the Position's stronger 5% claim is **not** met, and its *mechanism* is **not** supported: the gain is near-uniform across quantiles (p10 −3.6%, p50 −3.5%, p90 −1.8%), not tail-concentrated, so "the quantile heads are sample-starved" is not what the window buys. Parked, not shipped: 112d is the best of five rungs picked on the discovery window — the exact selection bias EXP-018a exists to guard against.
 
-**The confound control cost more than the pre-commit predicted** — it estimated ~150 usable vintages, actual is **95**, because the parquet starts 2025-09-28 and a 168d window needs 168 days of pre-history. The evaluation window is therefore Mar–Aug 2026, the high-price half of the year. The rule was pre-committed and followed unchanged, but the result should not be assumed to hold in calm months.
+**The confound control cost more than the pre-commit predicted** — it estimated ~150 usable vintages, actual is **95**, because the parquet starts 2025-09-28 and a 168d window needs 168 days of pre-history. The evaluation window is therefore **2026-05-19..2026-08-21** — three months, May–August. (Corrected 2026-08-30: this entry originally said "Mar–Aug". The feature frame starts 2025-12-02, not the parquet's 2025-09-28, because `load_frame_ext` drops rows on the EXP-020 fundamentals columns, pushing the earliest 168d-usable t0 to 2026-05-19.) The rule was pre-committed and followed unchanged, but the result should not be assumed to hold in calm months.
 
 ### EXP-025 — the transplant fails, and it forces a correction to last night's calibration claim
 
