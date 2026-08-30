@@ -119,3 +119,6 @@ ml/shadow/exp021_foundation*/fm_predictions.parquet
 ml/shadow/exp022_context_ladder/ctx*/
 ml/shadow/exp023_window_sweep/predictions.parquet
 ml/shadow/exp028_chronos2/c2_predictions.parquet
+ml/shadow/exp024_lag_richness/predictions.parquet
+ml/shadow/exp027_finetune/ft_predictions.parquet
+ml/shadow/exp027_finetune/ckpt_*/
