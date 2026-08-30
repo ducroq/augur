@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -51,6 +52,12 @@ HEADLINE = {
 }
 
 
+def first_sentence(s: str, limit: int = 200) -> str:
+    """First sentence, without splitting inside a decimal like '-2.0031'."""
+    out = re.split(r"(?<=[a-zA-Z)\]])\.\s+(?=[A-Z(])", s.strip(), maxsplit=1)[0].rstrip(".")
+    return (out[:limit].rsplit(" ", 1)[0] + "…") if len(out) > limit else out
+
+
 def fmt(v):
     if isinstance(v, bool):
         return "yes" if v else "no"
@@ -78,6 +85,46 @@ def render(entries, since=None) -> str:
     L.append("Decision values: `kept` (evidence stands / in production) · `parked` "
              "(works, not adopted, revisit) · `rejected` (does not work) · "
              "`rolled_back` · `superseded`.\n")
+
+    # Decision state, derived mechanically from `decision` so it cannot drift
+    # into wishful thinking. This is the section a future session reads FIRST:
+    # what is settled, what is waiting on a trigger, what must not be re-run.
+    by = {}
+    for e in scope:
+        by.setdefault(e["decision"], []).append(e)
+
+    L.append("## Decision state — read this before proposing new work\n")
+    L.append("Derived from each entry's `decision` field, so it cannot drift from the record.\n")
+
+    L.append("### Closed — refuted, do not re-run as-is\n")
+    L.append("Per ADR-007 a refuted position is **not** re-run with a looser Method. "
+             "Re-opening one of these needs a *new* entry with a new Position and a "
+             "mechanism that says why the earlier test could not have seen the effect "
+             "— the way EXP-020 narrowed EXP-018, and EXP-028 narrowed EXP-020.\n")
+    L.append("| id | what is closed | why |")
+    L.append("|---|---|---|")
+    for e in by.get("rejected", []) + by.get("rolled_back", []):
+        why = first_sentence(e["decision_rationale"])
+        L.append(f"| {e['id']} | {e['title'].split(':')[0].strip()} | {why} |")
+    L.append("")
+
+    L.append("### Open — works, not adopted. **These are the live decisions.**\n")
+    L.append("The registry records *what was found*; the **revisit trigger and review-by "
+             "date live in `docs/hypothesis-log.md`**, which is the file to check for what "
+             "each of these is actually waiting on.\n")
+    L.append("| id | finding | why it did not ship |")
+    L.append("|---|---|---|")
+    for e in by.get("parked", []):
+        L.append(f"| {e['id']} | {e['title'].split(':')[0].strip()} "
+                 f"| {first_sentence(e['decision_rationale'])} |")
+    L.append("")
+
+    L.append("### Standing evidence — `kept`\n")
+    L.append("| id | finding |")
+    L.append("|---|---|")
+    for e in by.get("kept", []) + by.get("superseded", []):
+        L.append(f"| {e['id']} | {e['title'].split(':')[0].strip()} |")
+    L.append("")
 
     L.append("## Summary\n")
     L.append("| id | date | decision | headline | outcome |")

@@ -20,6 +20,7 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 | Questioning ML architecture choices | `memory/ml-decisions.md` (week-ahead, River ARF, feature strategy) + `docs/river-arf-retrospective.md` (why ARF is being retired and what replaces it) |
 | Working with energyDataHub data formats | `memory/data-formats.md` — schema v2.1, units, timezone conventions |
 | Changing ML pipeline, model, or forecast logic | `docs/model-progress-log.md` — add dated entry with rationale, evidence, and outcome |
+| **Before proposing model work** | `docs/experiment-results.md` **Decision state** section — what is closed (do not re-run), what is live, what is standing evidence. Derived from the registry, so it cannot drift. Then `memory/MEMORY.md` → *Standing conclusions* for the judgement layer |
 | **Reading experiment results** | `docs/experiment-results.md` — every experiment's hypothesis, outcome, full metrics and caveats in one readable page. **Generated** from `experiments/registry.jsonl` by `scripts/render_results.py`; never hand-edit, regenerate after appending |
 | **Verifying the experiment record** | `scripts/audit_registry.py` — schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed. Exits non-zero on failure; run it at `/curate` |
 | Logging or citing an experiment (A/B, warmup, ablation) | `experiments/registry.jsonl` — append one line per experiment; schema in `experiments/README.md` |

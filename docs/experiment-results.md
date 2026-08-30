@@ -2,9 +2,62 @@
 
 **Generated file — do not edit.** Rendered from `experiments/registry.jsonl` and the `summary.json` artifacts it references, by `scripts/render_results.py`. Regenerate after appending to the registry; `--check` fails if this file is stale.
 
-Registry state: **30 entries**, rendered at `c929b11`. Integrity of the underlying record is verified separately by `scripts/audit_registry.py` (schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed).
+Registry state: **30 entries**, rendered at `721f566`. Integrity of the underlying record is verified separately by `scripts/audit_registry.py` (schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed).
 
 Decision values: `kept` (evidence stands / in production) · `parked` (works, not adopted, revisit) · `rejected` (does not work) · `rolled_back` · `superseded`.
+
+## Decision state — read this before proposing new work
+
+Derived from each entry's `decision` field, so it cannot drift from the record.
+
+### Closed — refuted, do not re-run as-is
+
+Per ADR-007 a refuted position is **not** re-run with a looser Method. Re-opening one of these needs a *new* entry with a new Position and a mechanism that says why the earlier test could not have seen the effect — the way EXP-020 narrowed EXP-018, and EXP-028 narrowed EXP-020.
+
+| id | what is closed | why |
+|---|---|---|
+| EXP-008 | River ARF retirement decision | Three independent failure modes confirmed in postmortem: (1) trees can't extrapolate to negative prices, (2) lower-band clamp at 0 in update.py:337 makes uncertainty channel also blind, (3) regime… |
+| EXP-019 | Stationary reparameterisation (anchor + spreads) | Hypothesis refuted |
+| EXP-020 | Market fundamentals (residual load, TTF gas, holiday) | Position refuted on both bases |
+| EXP-024 | Lag richness refuted | Position REFUTED: adding raw lags does not recover the FM's context advantage, it costs. lean (15 feat) QS 9.51; lean_lag24 (33) +1.6% worse; lean_lag168 (37) +2.5% worse (DM p=1.0000, decisively the… |
+| EXP-025 | Band transplant refuted — but production CQR already reaches most of the foundation model's calibration, and a weighted blend beats the FM alone | Position REFUTED |
+| EXP-027 | Fine-tuning destroys the calibration prior — and point skill too | Position REFUTED, Alternative 2 confirmed decisively, and the mechanism half was right for the wrong overall outcome |
+| EXP-029 | Residual pre-screen | The Position's NUMBER was confirmed (OOS R^2 = -2.00, far below the 0.05 bar; the correction makes MAE 79% worse) but the INFERENCE it existed to support was wrong, and that is the finding |
+| EXP-004 | ENTSO-E contamination rollback (Energy Zero consumer-price leak) | Model rolled back to pre-contamination checkpoint bbaa2c8 (4119 samples) |
+
+### Open — works, not adopted. **These are the live decisions.**
+
+The registry records *what was found*; the **revisit trigger and review-by date live in `docs/hypothesis-log.md`**, which is the file to check for what each of these is actually waiting on.
+
+| id | finding | why it did not ship |
+|---|---|---|
+| EXP-006 | Long-history mini-warmup leakage probe (ADR-005 Phase A paused) | Calibrated noise improved rather than degraded the model (noisy beat clean by ~1.7 EUR/MWh) |
+| EXP-007 | Phase 1 A/B | Direction is positive across MAE/MAPE/RMSE but the 1.28 EUR/MWh MAE delta is below the >=2 EUR/MWh decision gate |
+| EXP-011 | LightGBM-Quantile shadow 14-day promotion decision (M4) | Criterion (a) failed (ratio 1.61, threshold <=0.75) and (b) failed both guards (mean cov 0.696, 3 days <0.60); (c) crushed it (0.450). n_low=69 >= 50 rules out Path C (extend window) - failure isn't… |
+| EXP-015 | Per-side CQR on raw quantiles (offline replay) | Pre-committed Stage-1 verdict IMPLEMENT=False: lower-side 0.826 < 0.86 bar despite +0.048 over incumbent on same rows and Winkler within guardrail |
+| EXP-016 | Per-side ACI (offline replay) | Pre-committed verdict IMPLEMENT=False: lower 0.852 in the Alternative-1 near-miss zone AND Winkler guardrail tripped (+12%, Alternative 3) |
+| EXP-022 | Context ladder | Diagnostic, nothing to adopt |
+| EXP-023 | Window-length sweep | All four pre-committed gates PASS at 112 days: DM p<0.0001, QS 3.0% better than 56d, coverage better on both sides (lower 0.857->0.877, upper 0.761->0.776), Winkler better (173.2->169.4) |
+| EXP-028 | Covariates DO help a covariate-capable foundation model | The Position's skill claim is CONFIRMED and the exogenous question genuinely re-opens with model class. chronos-2 with the seven known-future covariates scores QS 7.30 vs 7.96 univariate — 8.3%… |
+
+### Standing evidence — `kept`
+
+| id | finding |
+|---|---|
+| EXP-002 | Re-warmup after ENTSO-E historical backfill |
+| EXP-003 | Extend forecast horizon 48h -> 72h |
+| EXP-005 | Variance-preserving recursion + frozen-metrics fix |
+| EXP-009 | LightGBM-Quantile beats River ARF on April 2026 next-hour MAE (shadow milestone 2) |
+| EXP-010 | Split-conformal correction fixes LightGBM band under-coverage (shadow milestone 2.5) |
+| EXP-012 | Metric-redesign validation on M4 window (no retraining) |
+| EXP-013 | EXP-012 corrections following code-review battery (no new experiment) |
+| EXP-014 | LightGBM-Quantile promoted to production (redesigned-criterion pass) |
+| EXP-018 | Stage-0 per-feature-group ablation |
+| EXP-021 | Zero-shot foundation model (Chronos-Bolt) beats the tuned LightGBM incumbent by 20% quantile score with no features at all — model class confirmed as the live lever |
+| EXP-026 | Model-size ladder |
+| EXP-030 | EXP-026 part (b) completed by proxy |
+| EXP-031 | Documentation-integrity audit of EXP-021..030 |
+| EXP-001 | Initial ARF warmup baseline (pre-backfill) |
 
 ## Summary
 
