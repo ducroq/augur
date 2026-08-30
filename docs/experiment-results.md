@@ -1,0 +1,1233 @@
+# Experiment Results
+
+**Generated file — do not edit.** Rendered from `experiments/registry.jsonl` and the `summary.json` artifacts it references, by `scripts/render_results.py`. Regenerate after appending to the registry; `--check` fails if this file is stale.
+
+Registry state: **30 entries**, rendered at `c929b11`. Integrity of the underlying record is verified separately by `scripts/audit_registry.py` (schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed).
+
+Decision values: `kept` (evidence stands / in production) · `parked` (works, not adopted, revisit) · `rejected` (does not work) · `rolled_back` · `superseded`.
+
+## Summary
+
+| id | date | decision | headline | outcome |
+|---|---|---|---|---|
+| EXP-001 | 2026-03-26 | superseded | — | Initial ARF warmup baseline (pre-backfill) |
+| EXP-002 | 2026-03-28 | **kept** | — | Re-warmup after ENTSO-E historical backfill |
+| EXP-003 | 2026-04-01 | **kept** | — | Extend forecast horizon 48h -> 72h |
+| EXP-004 | 2026-04-02 | rolled back | — | ENTSO-E contamination rollback (Energy Zero consumer-price leak) |
+| EXP-005 | 2026-04-14 | **kept** | — | Variance-preserving recursion + frozen-metrics fix |
+| EXP-006 | 2026-04-19 | parked | — | Long-history mini-warmup leakage probe (ADR-005 Phase A paused) |
+| EXP-007 | 2026-04-23 | parked | — | Phase 1 A/B: TTF gas + NL generation-mix lag24h features |
+| EXP-008 | 2026-04-28 | rejected | — | River ARF retirement decision |
+| EXP-009 | 2026-04-29 | **kept** | — | LightGBM-Quantile beats River ARF on April 2026 next-hour MAE (shadow milestone 2) |
+| EXP-010 | 2026-04-29 | **kept** | — | Split-conformal correction fixes LightGBM band under-coverage (shadow milestone 2.5) |
+| EXP-011 | 2026-05-29 | parked | — | LightGBM-Quantile shadow 14-day promotion decision (M4) |
+| EXP-012 | 2026-05-29 | **kept** | — | Metric-redesign validation on M4 window (no retraining) |
+| EXP-013 | 2026-05-29 | **kept** | — | EXP-012 corrections following code-review battery (no new experiment) |
+| EXP-014 | 2026-05-29 | **kept** | — | LightGBM-Quantile promoted to production (redesigned-criterion pass) |
+| EXP-015 | 2026-06-12 | parked | — | Per-side CQR on raw quantiles (offline replay): improves lower-side, fails implement bar |
+| EXP-016 | 2026-06-12 | parked | — | Per-side ACI (offline replay): post-shift adaptation works, first-shift-day ceiling + Winkler trip |
+| EXP-018 | 2026-08-25 | **kept** | — | Stage-0 per-feature-group ablation: rolling stats are harmful, exogenous trio is inert |
+| EXP-019 | 2026-08-25 | rejected | — | Stationary reparameterisation (anchor + spreads): refuted |
+| EXP-020 | 2026-08-29 | rejected | — | Market fundamentals (residual load, TTF gas, holiday): refuted |
+| EXP-021 | 2026-08-29 | **kept** | `fm_qs_delta_pct_vs_lean`=-20.3<br>`fm_mae`=23.23<br>`lean_mae`=27.77<br>`fm_coverage_band`=0.811 | Zero-shot foundation model (Chronos-Bolt) beats the tuned LightGBM incumbent by 20% quantile score with no features at all |
+| EXP-022 | 2026-08-29 | parked | `prior_share_of_gap_pct_points`=12.5<br>`context_share_of_gap_pct_points`=7.8 | Context ladder: most of Chronos-Bolt's win is pretrained prior, not context volume |
+| EXP-023 | 2026-08-29 | parked | `w112_dqs_pct_vs_56d`=-3.05<br>`w112_dm_p_beats_56d`=1.57415e-05 | Window-length sweep: 112 days beats the production 56-day window by 3.0% quantile score, all four gates pass |
+| EXP-024 | 2026-08-30 | rejected | `lean_lag168_dqs_pct_vs_lean`=2.52<br>`lean_lag168_derived_dqs_pct_vs_lean`=12.21 | Lag richness refuted: more raw lags do not recover the foundation model's context advantage |
+| EXP-025 | 2026-08-29 | rejected | `transplant_band_coverage`=0.733<br>`lean_cqr_band_coverage`=0.788<br>`fm_band_coverage`=0.811 | Band transplant refuted |
+| EXP-026 | 2026-08-29 | **kept** | `bolt_tiny_retention_pct`=93.5<br>`bolt_small_retention_pct`=98.3 | Model-size ladder: chronos-bolt-tiny retains 93.5% of base's advantage |
+| EXP-027 | 2026-08-30 | rejected | `final_mae_delta_pct`=19<br>`final_coverage_delta`=-0.431 | Fine-tuning destroys the calibration prior |
+| EXP-028 | 2026-08-29 | parked | `known_future_dqs_pct_vs_univariate`=-8.3<br>`known_future_dm_p`=0.00509474 | Covariates DO help a covariate-capable foundation model: Chronos-2 gains 8.3% quantile score from exogenous that LightGBM cannot use |
+| EXP-029 | 2026-08-29 | rejected | `oos_r2_all`=-2.0031<br>`oos_r2_wind_only`=-0.0576 | Residual pre-screen: null as predicted, but the screen is invalid as a gate |
+| EXP-030 | 2026-08-30 | **kept** | `chronos-bolt-base_median_s`=0.521586<br>`chronos-bolt-tiny_median_s`=0.0291883 | EXP-026 part (b) completed by proxy: CPU inference latency is a non-issue |
+| EXP-031 | 2026-08-30 | **kept** | `untraceable_before`=19<br>`untraceable_after`=0<br>`numeric_metrics_checked`=241 | Documentation-integrity audit of EXP-021..030: 19 registry numbers were untraceable to any artifact; all now regenerable, and the check is automated |
+
+## EXP-001 — Initial ARF warmup baseline (pre-backfill)
+
+**superseded** · 2026-03-26 · model: River ARFRegressor 10-tree
+
+**Hypothesis.** River ARF with Lasso-selected features can learn NL day-ahead prices from the available 6-month corpus and deliver sub-20 EUR/MWh MAE.
+
+**Outcome.** Superseded by EXP-002 once ENTSO-E backfill restored 100 missing files; baseline MAE was held back by data gaps, not by model capacity.
+
+<details><summary>All recorded metrics (3)</summary>
+
+| metric | value |
+|---|---|
+| `n_samples` | 3848 |
+| `mae_initial` | 20.69 |
+| `mae_after_lasso_refit` | 17.15 |
+
+</details>
+
+**Caveats.** Earliest recoverable ML commit is 7c1b797 (2026-03-26). Pre-March 2026 modeling work referenced in ADR-004 was deleted before the current repo history begins.
+
+**Artifacts.** `ml/models/river_model.pkl@7c1b797`
+
+**Commits.** `7c1b797` `bf8b807` `e2c3b28`
+
+---
+
+## EXP-002 — Re-warmup after ENTSO-E historical backfill
+
+****kept**** · 2026-03-28 · model: River ARFRegressor 10-tree
+
+**Hypothesis.** Backfilling 100 missing ENTSO-E price files in energyDataHub will restore enough of the day-ahead training signal to push MAE below 15 EUR/MWh.
+
+**Outcome.** MAE dropped 17.15 -> 13.80 with no architectural change, confirming the prior gap was upstream data, not model. Promoted to production baseline.
+
+<details><summary>All recorded metrics (2)</summary>
+
+| metric | value |
+|---|---|
+| `n_samples` | 4192 |
+| `mae` | 13.8 |
+
+</details>
+
+**Caveats.** 26 early files (Sep-Oct 2025) remained degraded due to malformed timestamps but were judged low-impact.
+
+**Artifacts.** `ml/models/river_model.pkl@ab203fa`
+
+**Commits.** `ab203fa`
+
+---
+
+## EXP-003 — Extend forecast horizon 48h -> 72h
+
+****kept**** · 2026-04-01 · model: River ARFRegressor 10-tree
+
+**Hypothesis.** Users want a 3-day planning horizon for thermal storage and EV charging decisions; ARF's recursive lag feeding can be pushed to 72h without significant additional cost.
+
+**Outcome.** Operational extension only; no model change. The recursive-mean-collapse risk this introduced was not yet visible and surfaced later as EXP-005.
+
+**Caveats.** In hindsight this exposed the recursive-feed problem that EXP-005 had to fix.
+
+**Artifacts.** 
+
+**Commits.** `f248f66`
+
+---
+
+## EXP-004 — ENTSO-E contamination rollback (Energy Zero consumer-price leak)
+
+**rolled back** · 2026-04-02 · model: River ARFRegressor 10-tree
+
+**Hypothesis.** When ENTSO-E was absent, parse_price_file() silently fell back to Energy Zero consumer prices (incl. VAT + ~110 EUR/MWh surcharge). Removing energy_zero from the wholesale merge and rolling back the model should restore the wholesale target.
+
+**Outcome.** Model rolled back to pre-contamination checkpoint bbaa2c8 (4119 samples). Guard added so a missing wholesale source fails loudly instead of silently substituting consumer prices.
+
+<details><summary>All recorded metrics (4)</summary>
+
+| metric | value |
+|---|---|
+| `n_samples` | 4119 |
+| `mae_vs_exchange_post_rollback` | 16.1 |
+| `last_week_mae_pre_fix` | 21 |
+| `last_week_mae_pre_contamination` | 17 |
+
+</details>
+
+**Caveats.** Contamination window was approximately 2026-03-26 -> 2026-03-31 (5 days).
+
+**Artifacts.** `ml/models/river_model.pkl@27b9876`
+
+**Commits.** `27b9876`
+
+---
+
+## EXP-005 — Variance-preserving recursion + frozen-metrics fix
+
+****kept**** · 2026-04-14 · model: River ARFRegressor 10-tree
+
+**Hypothesis.** The 72h forecast collapses to a near-flat mean because (a) recursive lag feeding plus MSE tree splits drive predictions toward the mean, and (b) frozen mae/last_week_mae values in state.json hide the degradation. Restoring rolling-stats variance, injecting calibrated noise on recursive lags, and recomputing aggregate metrics each update should fix both.
+
+**Outcome.** Forecast range recovered ~4x and metrics unfroze, both verified on sadalsuud by 2026-04-18. Treated as new baseline.
+
+<details><summary>All recorded metrics (5)</summary>
+
+| metric | value |
+|---|---|
+| `forecast_range_pre` | 24 |
+| `forecast_range_post` | 96.34 |
+| `forecast_std_pre` | 5.12 |
+| `forecast_std_post` | 28.5 |
+| `update_mae_apr18` | 11.89 |
+
+</details>
+
+**Caveats.** Did not change the model itself, the feature builder, or the exchange-horizon (first ~24h) forecast path.
+
+**Artifacts.** `docs/model-progress-log.md#2026-04-14-fix`
+
+**Commits.** `fb12e77`
+
+---
+
+## EXP-006 — Long-history mini-warmup leakage probe (ADR-005 Phase A paused)
+
+**parked** · 2026-04-19 · model: River ARFRegressor 10-tree (parallel pickle, parallel state)
+
+**Hypothesis.** Replaying ~9 months of ENTSO-E history (Jan-Sep 2025) plus calibrated-noise weather should beat a perfect-knowledge weather control by a measurable margin if weather leakage is the dominant risk.
+
+**Outcome.** Calibrated noise improved rather than degraded the model (noisy beat clean by ~1.7 EUR/MWh). Project premise that 'more history dominates short-history training' was not cleanly validated by the data; revisit when seasonal regime change exposes a clear gap.
+
+<details><summary>All recorded metrics (4)</summary>
+
+| metric | value |
+|---|---|
+| `backtest_mae_noisy` | 16.36 |
+| `backtest_mae_clean` | 18.06 |
+| `training_mae_noisy` | 14.98 |
+| `training_mae_clean` | 16.4 |
+
+</details>
+
+**Caveats.** Plumbing banked on feat/long-history-warmup branch (consolidate_historical.py, warmup_mini.py, backtest.py). Surprising finding: calibrated noise acts as regularization, not leakage simulation. Downgrades the weather-leakage FMEA risk.
+
+**Artifacts.** `docs/long-history-mini-results.md@feat/long-history-warmup` · `docs/decisions/005-long-history-warmup.md@feat/long-history-warmup`
+
+**Commits.** `0642117`
+
+---
+
+## EXP-007 — Phase 1 A/B: TTF gas + NL generation-mix lag24h features
+
+**parked** · 2026-04-23 · model: River ARFRegressor 10-tree (parallel models: river_baseline, river_p1)
+
+**Hypothesis.** Adding daily TTF gas (marginal-cost anchor) and 24h-lagged NL generation mix (fossil-gas, wind, solar, renewable share) will improve MAE by at least 2 EUR/MWh on the holdout, sufficient to clear the ADR-005 decision gate.
+
+**Outcome.** Direction is positive across MAE/MAPE/RMSE but the 1.28 EUR/MWh MAE delta is below the >=2 EUR/MWh decision gate. April holdout is an 'easy' period (baseline 15.15 vs training rolling ~20), so the gap could be noise at n=166. Genmix history is also data-limited at ~26 days.
+
+<details><summary>All recorded metrics (10)</summary>
+
+| metric | value |
+|---|---|
+| `baseline_mae` | 15.15 |
+| `phase1_mae` | 13.87 |
+| `delta_mae` | -1.28 |
+| `baseline_mape` | 139.2 |
+| `phase1_mape` | 131 |
+| `baseline_rmse` | 20.12 |
+| `phase1_rmse` | 18.51 |
+| `spike_recall` | 1 |
+| `n_holdout` | 166 |
+| `n_train` | 480 |
+
+</details>
+
+**Caveats.** Genmix uses _actual fields shifted +24h (collector runs yesterday->today, no forecasts). Revisit when ~60 days of genmix history accumulates (late May 2026) or in a harder holdout period. Plumbing fully banked on branch.
+
+**Artifacts.** `ml/models/river_baseline/backtest_report.json@feat/new-features-ttf-genmix` · `ml/models/river_p1/backtest_report.json@feat/new-features-ttf-genmix` · `docs/model-progress-log.md#2026-04-23`
+
+**Commits.** `ffc5ad4` `95343bb` `3248a9e` `849da57`
+
+---
+
+## EXP-008 — River ARF retirement decision
+
+**rejected** · 2026-04-28 · model: River ARFRegressor 10-tree
+
+**Hypothesis.** ARF's tree-based predictions cannot extrapolate below the training-corpus price floor (~0 EUR/MWh). With NL spring-summer regime now producing ~20% negative quarter-hourly prices and the lower confidence band hard-clamped at 0 in update.py, ARF has a structural ceiling no parameter tuning can lift.
+
+**Outcome.** Three independent failure modes confirmed in postmortem: (1) trees can't extrapolate to negative prices, (2) lower-band clamp at 0 in update.py:337 makes uncertainty channel also blind, (3) regime adaptation rate at N=6471 samples is too slow for spring solar onset. Replacement architecture (LightGBM-Quantile shadow) to be drafted as separate experiment.
+
+<details><summary>All recorded metrics (7)</summary>
+
+| metric | value |
+|---|---|
+| `mae_apr21` | 12.16 |
+| `mae_apr28` | 35.58 |
+| `update_mae_peak_apr26` | 69.05 |
+| `ewm_std_peak_apr26` | 104 |
+| `negative_price_share_last_50h` | 0.205 |
+| `midday_bias_eur_mwh` | 70.3 |
+| `midday_window_utc` | 09-13 |
+
+</details>
+
+**Caveats.** Daily cron continues running ARF until replacement is shadow-validated; do not remove infrastructure prematurely. Historical state.json snapshots in git history are the primary artifact for the retrospective.
+
+**Artifacts.** `docs/river-arf-retrospective.md` · `docs/figures/arf-retrospective/`
+
+---
+
+## EXP-009 — LightGBM-Quantile beats River ARF on April 2026 next-hour MAE (shadow milestone 2)
+
+****kept**** · 2026-04-29 · model: LightGBM-Quantile (3 indep. LGBMRegressor at alpha=0.10/0.50/0.90, post-hoc per-row sort, n_estimators=300, lr=0.05, num_leaves=31)
+
+**Hypothesis.** Per-quantile LightGBM (P10/P50/P90 with pinball loss) trained nightly on a rolling 28-day window will beat River ARF on next-hour wholesale-price MAE in April 2026, particularly during the negative-price regime shift, justifying continued shadow validation.
+
+**Outcome.** LightGBM beats ARF 14/14 days on the apples-to-apples 14-day window 2026-04-14 to 04-28, mean MAE improvement 46%; even on extreme regime-shift days (04-25/-26 with min realised -413 EUR/MWh) LGBM still wins by 12-21%. Validates the shadow architecture; design moves forward to milestone 3 cron-wiring. Raw P80 band coverage 0.563 fails plan section 6 (b) and was addressed in EXP-010.
+
+<details><summary>All recorded metrics (11)</summary>
+
+| metric | value |
+|---|---|
+| `n_hours` | 672 |
+| `n_eval_days` | 28 |
+| `mae_overall` | 12.83 |
+| `mae_low_price_lt30` | 26.47 |
+| `mae_evening_peak` | 13.26 |
+| `p80_band_coverage_raw` | 0.563 |
+| `vs_arf_window_lgbm_mean_mae` | 13.21 |
+| `vs_arf_window_arf_mean_update_mae` | 21.95 |
+| `vs_arf_window_days` | 14 |
+| `vs_arf_window_lgbm_wins` | 14 |
+| `vs_arf_window_pct_improvement` | 46 |
+
+</details>
+
+**Caveats.** Single-horizon perfect-lag eval (next-hour given realised lag_1h), apples-to-apples with ARF's update_mae. Iterated 72h-ahead behaviour and renewable_pressure feature deferred to milestone 3. ARF cron continues to drive the dashboard.
+
+**Artifacts.** `ml/shadow/backtest_results/summary.md` · `ml/shadow/backtest_results/predictions.parquet` · `ml/shadow/backtest_results/comparison.csv` · `ml/shadow/backtest_results/per_day_metrics.csv`
+
+**Commits.** `cb5d2f2` `461ee44`
+
+---
+
+## EXP-010 — Split-conformal correction fixes LightGBM band under-coverage (shadow milestone 2.5)
+
+****kept**** · 2026-04-29 · model: LightGBM-Quantile + CQR (Romano/Patterson/Candes 2019 split-conformal quantile regression)
+
+**Hypothesis.** The chronic raw-band under-coverage (56% empirical vs 80% target, 24/28 days under, bilateral) reflects systematic narrowness from finite-sample pinball-loss minimization, not a regime-shift artefact. Adding a CQR layer with 7-day rolling calibration plus a small longer-window check (56d vs 28d) will pull aggregate coverage into the [75%, 85%] target on the same backtest harness without degrading point predictions.
+
+**Outcome.** Both CQR variants land in [75%, 85%] target; 56d marginally improves point predictions (MAE 12.20 vs 28d's 12.83, peak 11.42 vs 13.26). Final design baked for milestone 3: window_days=56 + CQR(7-day calibration, target 0.80). Plan section 6 (b) PASSES on the 14-day apples-to-apples window at 0.775 aggregate coverage.
+
+<details><summary>All recorded metrics (12)</summary>
+
+| metric | value |
+|---|---|
+| `matrix_28d_raw_p80_cov` | 0.563 |
+| `matrix_28d_cqr_p80_cov` | 0.768 |
+| `matrix_56d_raw_p80_cov` | 0.601 |
+| `matrix_56d_cqr_p80_cov` | 0.765 |
+| `matrix_56d_cqr_mae_overall` | 12.2 |
+| `matrix_56d_cqr_mae_low_lt30` | 25.24 |
+| `matrix_56d_cqr_mae_evening_peak` | 11.42 |
+| `vs_arf_window_56d_cqr_p80_cov` | 0.775 |
+| `rolling_14d_cov_min` | 0.762 |
+| `rolling_14d_cov_max` | 0.881 |
+| `mean_cqr_q_56d_eur_mwh` | 5.28 |
+| `nonzero_cqr_days_56d` | 25 |
+
+</details>
+
+**Caveats.** Per-day coverage is bimodal (over-cover calm days, under-cover volatile days); 14-day aggregate is stable, which is what plan section 6 measures. CQR borrows residuals across daily-different fits - exchangeability is approximate but practical. ACI (Gibbs & Candes 2021 Adaptive Conformal Inference) is the principled refinement if per-day stability becomes a criterion. Not in production - milestone 3 cron-wiring next.
+
+**Artifacts.** `ml/shadow/backtest_results/milestone_2_5_summary.md` · `ml/shadow/backtest_results/matrix_summary.csv` · `ml/shadow/backtest_results/matrix_per_day.csv` · `ml/shadow/backtest_results/predictions_28d.parquet` · `ml/shadow/backtest_results/predictions_56d.parquet` · `ml/shadow/conformal.py`
+
+**Commits.** `8253bb4`
+
+---
+
+## EXP-011 — LightGBM-Quantile shadow 14-day promotion decision (M4)
+
+**parked** · 2026-05-29 · model: LightGBM-Quantile multi-horizon (3 horizon groups x 3 quantiles = 9 LGBMRegressor) + CQR (7-day calibration, target 0.80)
+
+**Hypothesis.** Per docs/hypothesis-log.md: LightGBM-Quantile multi-horizon model will pass plan section 6 criteria (a)/(b)/(c) over a 14-contiguous-day shadow window, justifying promotion to production.
+
+**Outcome.** Criterion (a) failed (ratio 1.61, threshold <=0.75) and (b) failed both guards (mean cov 0.696, 3 days <0.60); (c) crushed it (0.450). n_low=69 >= 50 rules out Path C (extend window) - failure isn't sample size, it's structural per the 2026-05-18 mid-window preview: 72h aggregation forces the low-price slice into long-horizon (h>24) midday hours where LGBM cannot extrapolate. Shadow infrastructure validated and remains in tree; cron disabled pending next-bet experiment.
+
+<details><summary>All recorded metrics (16)</summary>
+
+| metric | value |
+|---|---|
+| `n_eval_days` | 14 |
+| `lgbm_mae_overall` | 24.32 |
+| `arf_mae_overall` | 39.04 |
+| `overall_lgbm_arf_ratio` | 0.623 |
+| `lgbm_mae_at_low_price_mean` | 43.341 |
+| `arf_mae_at_low_price_mean` | 26.924 |
+| `ratio_a` | 1.61 |
+| `n_low_price_hours_sum` | 69 |
+| `mean_band_coverage_p80` | 0.696 |
+| `n_days_low_coverage` | 3 |
+| `mean_peak_hour_ratio` | 0.45 |
+| `pass_a` | no |
+| `pass_b` | no |
+| `pass_c` | yes |
+| `promote` | no |
+| `companion_live_vs_backtest_ratio` | 1.84 |
+
+</details>
+
+**Caveats.** 14-day window cron-effective 2026-05-08 (after the 2026-05-01..07 silent-failure recovery). Method evaluated trailing 14 of 20 collected rows per pre-committed 'most-recent 14, ignore cron-shake-out' clause: 2026-05-14..2026-05-27. Per-day low-price MAEs are unweighted in (a) ratio (matches pre-committed Method exactly); hours-weighted spot check gives 1.55, same direction. Companion hypothesis (live MAE vs backtest h+1 of 13.21) refuted at ratio 1.84 > 1.20 threshold - freshness skew material, argues prioritising augur#12. Next bet (postmortem section 6): metric redesign before model redesign - promote pinball-at-p10 / CRPS over MAE on low-price slice.
+
+**Artifacts.** `docs/lightgbm-shadow-postmortem.md` · `ml/shadow/eval_log.jsonl` · `scripts/m4_method_run.py`
+
+---
+
+## EXP-012 — Metric-redesign validation on M4 window (no retraining)
+
+****kept**** · 2026-05-29 · model: LGBM 3-quantile (existing M4 calibration_history) vs ARF (point + lower/upper band) — no new training
+
+**Hypothesis.** The literature-recommended replacement metrics (pinball-at-p10, twCRPS, mean quantile score, Diebold-Mariano) will discriminate LGBM's structural tail-skill advantage over ARF on the same M4 window data where MAE-on-slice wrongly favoured ARF. Specifically: LGBM should win pinball-at-p10 because ARF's lower band is hard-clamped at 0 (per ml/update.py:337).
+
+**Outcome.** Mixed outcome — Hypothesis refuted with valuable nuance. The literature-review prediction 'LGBM wins pinball-at-p10 because ARF lower band clamped at 0' was wrong on this window: ARF's lower band wasn't actually clamped (sample lower 10.52 EUR/MWh on 2026-05-14), and ARF wins both twCRPS (p=0.94) and pinball-at-p10 (p=0.92) at the aggregate. LGBM wins decisively on overall skill (MQS 10.22 vs MAE 35.13, DM p<0.0001) — the old MAE-on-slice criterion hid this. Per-horizon: LGBM wins p10 pinball at h<=48, loses at h>48. Conclusion: the next-bet criterion design SHOULD use CRPS / mean quantile score as primary skill metric (validated), but should treat tail metrics as descriptive rather than promotion-gating until the long-horizon mechanism is understood. EXP-013 candidate: 9-quantile backtest on a longer window to confirm overall-skill picture at finer resolution and characterise tail behaviour.
+
+<details><summary>All recorded metrics (22)</summary>
+
+| metric | value |
+|---|---|
+| `n_paired_observations` | 842 |
+| `n_distinct_eval_days` | 14 |
+| `old_criterion_a_n_low` | 195 |
+| `old_criterion_a_lgbm_mae` | 71.01 |
+| `old_criterion_a_arf_mae` | 28.78 |
+| `old_criterion_a_ratio` | 2.467 |
+| `lgbm_mqs_3q` | 10.22 |
+| `arf_mae_as_crps_equiv` | 35.13 |
+| `dm_overall_stat` | -13.14 |
+| `dm_overall_p_one_sided` | 1.5e-05 |
+| `lgbm_twcrps` | 0.109 |
+| `arf_twcrps_equiv` | 0.023 |
+| `dm_twcrps_stat` | 1.52 |
+| `dm_twcrps_p_one_sided` | 0.94 |
+| `lgbm_p10_pinball` | 7.97 |
+| `arf_p10_pinball` | 7.14 |
+| `dm_p10_stat` | 1.4 |
+| `dm_p10_p_one_sided` | 0.92 |
+| `lgbm_lower_coverage` | 0.809 |
+| `arf_lower_coverage` | 0.824 |
+| `lgbm_winkler_alpha20` | 149.7 |
+| `arf_winkler_alpha20` | 192.6 |
+
+</details>
+
+**Caveats.** No retraining or new data collection — uses ml/models/shadow/shadow_state.json:calibration_history (the LGBM predictions that were already collected during M4) paired with ml/forecasts/{YYYYMMDD_1445}_forecast.json (ARF predictions pulled from sadalsuud). 842 paired observations across 14 distinct eval days. Honest caveat: 3-quantile output gives biased CRPS estimator — labeled 'mean quantile score (3-point estimator)' not CRPS. Manual Newey-West HAC implementation in ml/shadow/metrics.py (scipy 1.17 broke statsmodels.api on the dev env). The 'clamp at 0' note in CLAUDE.md / arf-retired.md may reflect a different regime than the M4 window; worth checking ml/update.py:337 and the ARF metrics_history for clamp incidence as a follow-up question.
+
+**Artifacts.** `docs/exp-012-results.md` · `ml/shadow/metrics.py` · `scripts/exp012_evaluate.py`
+
+---
+
+## EXP-013 — EXP-012 corrections following code-review battery (no new experiment)
+
+****kept**** · 2026-05-29 · model: Same as EXP-012: LGBM 3-quantile from calibration_history vs ARF point + EWM-band
+
+**Hypothesis.** Not a new experiment — this entry records the corrections to EXP-012's numbers and conclusions identified by a code-review battery (code-reviewer + data-analyzer + adversarial general-purpose) run against ml/shadow/metrics.py, scripts/exp012_evaluate.py, and scripts/m4_method_run.py on 2026-05-29 after EXP-012 was logged. Appended per experiments/README.md policy 'to correct an error, append a follow-up entry referencing the original.'
+
+**Outcome.** Three bugs in EXP-012's first run were caught and fixed: (1) vintage mismatch — build_paired joined LGBM eval_day=D with ARF archive {D}_1445_forecast.json instead of {D-1}_1445_forecast.json (the production pipeline's selection). ARF had ~15 hours fresher data than LGBM in the comparison. Fixed by routing build_paired through evaluate_shadow.find_arf_archive_for_day. (2) LGBM 'p10' in calibration_history is post-sort min(q0.10, q0.50, q0.90), not raw tau=0.10 prediction — biases pinball-at-p10 favourably for LGBM. Cannot retro-fix past data; update_shadow.py extended to store raw quantiles alongside sorted-CQR going forward. (3) ARF twCRPS-equivalent in exp012_evaluate.py was ad-hoc divided by len(LGBM_TAUS)=3 with no statistical justification; removed. Net effect of (1): MQS/MAE ratio strengthens (3.4x -> 4.1x), pinball-at-p10 conclusion REVERSES (ARF wins -> LGBM modestly wins), vindicating the literature review's original directional prediction. EXP-012's headline conclusion (LGBM wins overall skill decisively) survives; tail-skill conclusions need the corrected numbers.
+
+<details><summary>All recorded metrics (18)</summary>
+
+| metric | value |
+|---|---|
+| `n_paired_observations_corrected` | 546 |
+| `n_paired_observations_original` | 842 |
+| `lgbm_mqs_3q_corrected` | 9.29 |
+| `arf_mae_as_crps_equiv_corrected` | 38.42 |
+| `mqs_arf_mae_ratio_corrected` | 0.242 |
+| `mqs_arf_mae_ratio_original` | 0.291 |
+| `dm_overall_p_corrected` | 1.5e-05 |
+| `lgbm_p10_pinball_corrected` | 6.9 |
+| `arf_p10_pinball_corrected` | 7.38 |
+| `dm_p10_p_corrected` | 0.243 |
+| `dm_p10_p_original` | 0.919 |
+| `lgbm_twcrps_corrected` | 0.0377 |
+| `arf_twcrps_equiv_corrected` | 0 |
+| `lgbm_lower_coverage_corrected` | 0.811 |
+| `arf_lower_coverage_corrected` | 0.824 |
+| `lgbm_winkler_corrected` | 134.12 |
+| `arf_winkler_corrected` | 208.19 |
+| `headline_direction_changes` | ['pinball-at-p10: ARF wins (p=0.92) -> LGBM modestly wins (p=0.24)'] |
+
+</details>
+
+**Caveats.** Not a new experiment — supersedes EXP-012's reported metrics with corrected values. The EXP-012 registry entry's metrics field is preserved as-recorded-at-time (per append-only policy); use this EXP-013 entry's values when citing EXP-012's results. Per-horizon pinball-at-p10 with corrected vintage: h<=24 LGBM 1.83 / ARF 4.48, 24<h<=48 LGBM 5.85 / ARF 7.51, 48<h<=72 LGBM 10.18 / ARF 7.86. ARF still wins at h>48 — ARF's prior may genuinely be better at long horizons (Reading B in article §4). Code-review battery also surfaced: HAC default lag (floor(n^(1/3))=8) too short for 72h-ahead hourly data — should be max_horizon-1=71; reported test statistic of -12.4 with proper bandwidth would be roughly -6 to -8, still highly significant but the standard error doubles. MQS-vs-MAE has ~2x structural asymmetry (degenerate quantile predictor has MQS=0.5*MAE) — the apples-to-apples LGBM MAE / ARF MAE ratio is 1.6x, not 4.1x. None of these caveats reverse the overall-skill conclusion.
+
+**Artifacts.** `docs/exp-012-results.md` · `docs/articles/m4-metric-redesign-story.md` · `ml/shadow/metrics.py` · `scripts/exp012_evaluate.py` · `tests/test_metrics.py` · `ml/shadow/lightgbm_quantile.py` · `ml/shadow/update_shadow.py`
+
+---
+
+## EXP-014 — LightGBM-Quantile promoted to production (redesigned-criterion pass)
+
+****kept**** · 2026-05-29 · model: LightGBM-Quantile multi-horizon (3 horizon groups x 3 quantiles, horizon-as-feature stacking) + CQR (7-day calibration, target 0.80); same model as the M4 shadow
+
+**Hypothesis.** Per docs/hypothesis-log.md iteration-5 entry: LightGBM passes the redesigned promotion criterion (skill DM p<0.10 AND calibration not >0.02 worse than ARF on either side) when applied to the EXP-013 vintage-corrected M4 paired data. Promotion entails swapping the dashboard's forecast source from augur_forecast.json (ARF) to augur_forecast_shadow.json (LGBM), with ARF cron continuing as a backup signal.
+
+**Outcome.** Both pre-committed gates passed. LGBM is 25% more accurate than ARF on MAE (DM p=0.029); LGBM's lower-side calibration only 0.013 worse than ARF's (within 0.02 tolerance) and upper-side calibration 0.25 BETTER than ARF's (ARF severely under-covers upper tail). Swap executed: dashboard.js loads augur_forecast_shadow.json; ARF cron continues running as backup. update_shadow.py extended to generate consumer_forecast fields (read_arf_surcharge reads cached surcharge from ARF state.json). model-viz.js Model-tab metrics still read from augur_forecast.json. ARF infrastructure not removed; retire after at least one rolling-window cycle of clean LGBM operation.
+
+<details><summary>All recorded metrics (19)</summary>
+
+| metric | value |
+|---|---|
+| `n_paired_observations` | 546 |
+| `n_distinct_eval_days` | 14 |
+| `lgbm_mae` | 28.94 |
+| `arf_mae` | 38.42 |
+| `mae_ratio_lgbm_arf` | 0.753 |
+| `dm_overall_stat` | -1.903 |
+| `dm_overall_p_one_sided` | 0.0285 |
+| `skill_gate_pass` | yes |
+| `lgbm_lower_coverage` | 0.811 |
+| `arf_lower_coverage` | 0.824 |
+| `lower_degradation` | 0.013 |
+| `lgbm_upper_coverage` | 0.87 |
+| `arf_upper_coverage` | 0.621 |
+| `upper_degradation` | -0.249 |
+| `calibration_gate_pass` | yes |
+| `absolute_floor_warning` | LGBM lower-side 0.811 below 0.85 absolute floor — same problem as ARF, not a swap-blocker, queued as follow-up experiment |
+| `lgbm_p10_pinball_descriptive` | 6.901 |
+| `arf_p10_pinball_descriptive` | 7.382 |
+| `promote` | yes |
+
+</details>
+
+**Caveats.** Iteration-5 of the criterion redesign — see docs/hypothesis-log.md '[2026-05-29] Iteration-5 redesign of the calibration guardrail' entry. Iteration-4 absolute-target gate blocked promotion because both models share the lower-side calibration weakness (~0.81); iteration-5 reframed the gate as 'not worse than incumbent' and re-ran. Per the method's 'don't loosen Method when the answer arrives; open a new entry' rule, this is a new pre-committed entry, not a loosening. The dashboard's Model-tab metrics still come from ARF (model-viz.js unchanged) — LGBM doesn't yet expose ARF-equivalent metadata (n_training_samples, metrics_history, error_history). Future work: extend update_shadow.py metadata schema to match, then update model-viz.js. augur#13 Path A checklist mostly complete: dashboard load swapped, ARF kept as backup, retrospective addendum, hypothesis-log resolved, registry entry logged. Healthchecks.io shadow endpoint was deleted by user 2026-05-29 — re-create for sub-day alerting on shadow cron failures.
+
+**Artifacts.** `scripts/exp014_evaluate_promotion.py` · `static/js/dashboard.js` · `scripts/daily_update.sh` · `ml/shadow/update_shadow.py` · `docs/river-arf-retrospective.md (closing addendum)` · `CLAUDE.md (ML Pipeline section updated)`
+
+---
+
+## EXP-015 — Per-side CQR on raw quantiles (offline replay): improves lower-side, fails implement bar
+
+**parked** · 2026-06-12 · model: LightGBM-Quantile multi-horizon + CQR variants (offline replay, no production change)
+
+**Hypothesis.** Lower-side coverage deficit (augur#19) is caused by symmetric CQR widening, not horizon effects; per-side split-conformal on raw sorted quantiles at 0.90/side lifts offline lower-side coverage to >=0.86 without >5% Winkler cost.
+
+**Outcome.** Pre-committed Stage-1 verdict IMPLEMENT=False: lower-side 0.826 < 0.86 bar despite +0.048 over incumbent on same rows and Winkler within guardrail. Residual gap concentrated in regime-shift vintages 06-02/06-03 (0.375/0.708; all later vintages >=0.847) — the pre-identified ACI failure mode. Per-side scores carry into EXP-016.
+
+<details><summary>All recorded metrics (10)</summary>
+
+| metric | value |
+|---|---|
+| `incumbent_lower` | 0.778 |
+| `treatment_lower` | 0.826 |
+| `incumbent_upper` | 0.903 |
+| `treatment_upper` | 0.862 |
+| `incumbent_winkler` | 146.4 |
+| `treatment_winkler` | 150 |
+| `n_rows` | 528 |
+| `n_vintages` | 8 |
+| `neg_q_frequency` | 0.27 |
+| `grouped_h1_6_lower` | 0.646 |
+
+</details>
+
+**Caveats.** Baseline finding that redirected the design: lower-side deficit flat across horizon groups (0.828/0.837/0.833) but asymmetric across sides (0.834 vs 0.886) over 30 vintages. Also documented: production compute_cqr_q conformalizes already-CQR-widened bands (feedback loop), not raw quantiles. Evaluable window is the hard recent stretch (incumbent 0.778 there vs 0.834 over 30 vintages). Vintages 2026-06-08/06-10 permanently missing (EDH v2.2 break, see augur#14). Horizon-grouped companion was worse at short horizons — thin per-group calibration sets.
+
+**Artifacts.** `scripts/exp015_replay_cqr.py` · `docs/hypothesis-log.md (EXP-015 entry, resolved 2026-06-12)`
+
+**Commits.** `bcc3e78`
+
+---
+
+## EXP-016 — Per-side ACI (offline replay): post-shift adaptation works, first-shift-day ceiling + Winkler trip
+
+**parked** · 2026-06-12 · model: LightGBM-Quantile multi-horizon + per-side ACI (offline replay, no production change)
+
+**Hypothesis.** ACI (Gibbs & Candes 2021) layered on EXP-015 per-side scores recovers the regime-shift deficit static CQR cannot: day-after level adjustment lifts offline lower-side to >=0.86 within the 5% Winkler guardrail.
+
+**Outcome.** Pre-committed verdict IMPLEMENT=False: lower 0.852 in the Alternative-1 near-miss zone AND Winkler guardrail tripped (+12%, Alternative 3). Gamma-independent ceiling ~0.85: the 69 hours missed on the first shift days 06-02/06-03 cap any day-granularity calibration layer; post-shift vintages all >=0.903. Gap lives in the raw quantiles -> EXP-017 (9-quantile training) is next; per-side scores and adaptive layer may return on top of better raws.
+
+<details><summary>All recorded metrics (11)</summary>
+
+| metric | value |
+|---|---|
+| `incumbent_lower` | 0.778 |
+| `treatment_lower` | 0.852 |
+| `treatment_upper` | 0.86 |
+| `incumbent_winkler` | 146.4 |
+| `treatment_winkler` | 163.9 |
+| `med_width_incumbent` | 84.4 |
+| `med_width_treatment` | 109.4 |
+| `gamma_sensitivity_lower` | {'0.05': 0.848, '0.10': 0.852, '0.20': 0.847} |
+| `lag1_err_autocorr` | 0.96 |
+| `n_rows` | 528 |
+| `n_vintages` | 8 |
+
+</details>
+
+**Caveats.** ACI state trace shows alpha_lo drifting NARROWER (0.10->0.126) during the calm warm-up before 06-02, then pegging at the 0.005 clip by 06-05 with q_lo ~55-61 EUR/MWh. No oscillation (err autocorr +0.96), so gamma retune (Alternative 2) ruled out. Same evaluable window and criteria as EXP-015 for direct comparability.
+
+**Artifacts.** `scripts/exp016_replay_aci.py` · `docs/hypothesis-log.md (EXP-016 entry, resolved 2026-06-12)`
+
+**Commits.** `440b0b6`
+
+---
+
+## EXP-018 — Stage-0 per-feature-group ablation: rolling stats are harmful, exogenous trio is inert
+
+****kept**** · 2026-08-25 · model: MultiHorizonLightGBMQuantileForecaster (3 horizon groups x 3 quantiles, horizon-as-feature) — production shape, 56-day rolling window, h+1..h+72 from one t0 per vintage day, no CQR
+
+**Hypothesis.** Per docs/hypothesis-log.md [2026-08-20]: feature expansion is the highest-leverage untried lever, and a per-feature-group ablation of the existing 24 features will show which groups carry signal before new fundamentals are plumbed in. Stage 0 was pre-committed as descriptive (measure MAE + quantile score + coverage per dropped group), no gates.
+
+**Outcome.** Findings kept as evidence, no production change made. The pre-committed Position (feature expansion is the highest-leverage lever) is REFUTED: the three exogenous series already fed contribute ~0.4% combined despite sensible correlations (load 0.59, solar -0.53 over the last 120d), while the six rolling-stat features actively hurt (-6.0% MAE / -7.8% QS when removed, DM p<0.0001 both on QS and |error|, 7 of 9 months, all three horizon groups). Mechanism sweep shows diffuse damage (no single sub-group above -2.2%), consistent with redundant absolute-level features diluting the split search. Best variant is a 15-feature lean set. Because this is a best-of-eight selection on one window, no change ships off this entry — confirmation is pre-committed in docs/hypothesis-log.md [2026-08-25] EXP-018a on fresh vintages (t0 >= 2026-08-25).
+
+<details><summary>All recorded metrics (36)</summary>
+
+| metric | value |
+|---|---|
+| `n_paired_observations` | 18715 |
+| `full_mae` | 28.97 |
+| `full_quantile_score` | 10.54 |
+| `full_coverage_lower` | 0.778 |
+| `full_coverage_upper` | 0.805 |
+| `drop_lags_mae` | 28.75 |
+| `drop_lags_qs_pct` | -0.1 |
+| `drop_rolling_mae` | 27.24 |
+| `drop_rolling_qs` | 9.72 |
+| `drop_rolling_mae_pct` | -6 |
+| `drop_rolling_qs_pct` | -7.8 |
+| `drop_rolling_coverage_lower` | 0.805 |
+| `drop_calendar_mae` | 31.08 |
+| `drop_calendar_mae_pct` | 7.3 |
+| `drop_calendar_dm_p_full_better` | 0 |
+| `drop_wind_mae_pct` | -0.3 |
+| `drop_solar_mae_pct` | -0.3 |
+| `drop_load_mae_pct` | -0.4 |
+| `drop_exog_mae_pct` | 0.1 |
+| `drop_exog_qs_pct` | 0.8 |
+| `drop_exog_dm_p_full_better` | 0.041 |
+| `dm_drop_rolling_beats_full_stat_qs` | -6.48 |
+| `dm_drop_rolling_beats_full_p_qs` | 1.5e-05 |
+| `dm_drop_rolling_beats_full_stat_abs_err` | -5.02 |
+| `dm_drop_rolling_beats_full_p_abs_err` | 2.6e-07 |
+| `mech_drop_rolling_mean_mae_pct` | -1.6 |
+| `mech_drop_rolling_std_mae_pct` | -1.8 |
+| `mech_drop_rolling_168h_mae_pct` | -2.2 |
+| `mech_drop_rolling_short_mae_pct` | -0.8 |
+| `lean_15_feature_mae` | 27.08 |
+| `lean_15_feature_qs` | 9.69 |
+| `lean_15_feature_mae_pct` | -6.5 |
+| `lean_15_feature_qs_pct` | -8.1 |
+| `lean_15_feature_coverage_lower` | 0.81 |
+| `months_rolling_removal_wins` | 7 |
+| `months_rolling_removal_loses` | 2 |
+
+</details>
+
+**Caveats.** Harness mirrors production (t0 = last clean feature row of the vintage day, 56-day window, h+1..h+72) with two deliberate deltas: no CQR (raw quantiles, so coverage is NOT comparable to calibration_history) and a row set fixed to complete full-feature vectors so every variant sees identical timestamps. Backtest exogenous is fresher than live because consolidate.py overwrites rows with later vintages — that bias favours the exogenous-keeping variants, so the lean set's advantage is if anything understated. Per-hour predictions (~9 MB per sweep) are gitignored and regenerable; summary.json is the record. Second sweep (mech) shares the same window and vintages. Wall clock ~45 min for 2104 fits on 14 cores; LightGBM patched to n_jobs=1 inside the harness only (LGBMRegressor defaults to n_jobs=-1 and ignores OMP_NUM_THREADS, oversubscribing badly under process-level fan-out). EXP-017 (9-quantile training) remains unrun and its premise is now stale — the live breach is upper-side (Aug 2026: lower 0.887 / upper 0.774 / band 0.660), not the high-biased q10 that EXP-015/016 diagnosed.
+
+**Artifacts.** `scripts/exp018_stage0_ablation.py` · `ml/shadow/exp018_stage0/summary.json` · `ml/shadow/exp018_stage0_mech/summary.json` · `docs/hypothesis-log.md (EXP-018 Stage-0 resolution + EXP-018a pre-commit)`
+
+---
+
+## EXP-019 — Stationary reparameterisation (anchor + spreads): refuted — ties plain removal, and the anchor itself is the cost
+
+**rejected** · 2026-08-25 · model: MultiHorizonLightGBMQuantileForecaster, production shape (56-day window, h+1..h+72, one t0 per vintage day, no CQR)
+
+**Hypothesis.** Per docs/hypothesis-log.md [2026-08-25] EXP-018a Alternative 2: EXP-018's lean set wins because absolute-level features drift, not because their information is worthless. If so, expressing the same information as anchor-relative deviations (spread_lag_H = price_lag_Hh - price_rolling_mean_168h, spread_mean_W likewise, anchor kept as an explicit level column) should beat BOTH the 24-feature incumbent and the 15-feature lean set.
+
+**Outcome.** Hypothesis refuted. Anchor-relative spreads tie plain deletion (lean vs stat_lean_noanchor: QS p=0.405, |error| p=0.160) — the reparameterisation buys nothing over removing the rolling features. The informative half of the result is the anchor: adding price_rolling_mean_168h back as the single explicit level column costs significantly (stat_lean_noanchor -> stat_lean, QS p=0.0001, |error| p=0.002, MAE -5.7% -> -2.5% vs incumbent). Since raw price lags are ALSO absolute levels and are harmless (dropping them is free per EXP-018), the drift story is at most half the mechanism; the better-fitting reading is that smoothed-level columns duplicate information the lags already carry and the redundant splits dilute the tree search. Consequence: EXP-018a Alternative 2 is pre-emptively refuted and the treatment for the fresh-vintage gate stays the plain 15-feature lean set.
+
+<details><summary>All recorded metrics (26)</summary>
+
+| metric | value |
+|---|---|
+| `n_paired_observations` | 18715 |
+| `full_mae` | 28.97 |
+| `full_qs` | 10.54 |
+| `full_winkler` | 169.3 |
+| `full_coverage_lower` | 0.778 |
+| `lean_mae` | 27.08 |
+| `lean_qs` | 9.69 |
+| `lean_winkler` | 153.7 |
+| `lean_coverage_lower` | 0.81 |
+| `lean_dm_p_beats_full` | 1.2e-05 |
+| `stat_full_mae` | 29.11 |
+| `stat_full_qs` | 10.64 |
+| `stat_full_dm_p_beats_full` | 0.9647 |
+| `stat_lean_mae` | 28.26 |
+| `stat_lean_qs` | 10.35 |
+| `stat_lean_dm_p_beats_full` | 0.0225 |
+| `stat_lean_noanchor_mae` | 27.33 |
+| `stat_lean_noanchor_qs` | 9.71 |
+| `stat_lean_noanchor_winkler` | 152.4 |
+| `stat_lean_noanchor_coverage_lower` | 0.812 |
+| `stat_lean_noanchor_dm_p_beats_full` | 2e-06 |
+| `dm_lean_vs_stat_lean_noanchor_qs_p` | 0.405 |
+| `dm_lean_vs_stat_lean_noanchor_abserr_p` | 0.16 |
+| `dm_stat_lean_noanchor_vs_stat_lean_qs_p` | 0.0001 |
+| `dm_stat_lean_noanchor_vs_stat_lean_abserr_p` | 0.002 |
+| `dm_lean_vs_stat_lean_qs_p` | 0.0001 |
+
+</details>
+
+**Caveats.** Discovery run on the SAME 263-vintage window EXP-018 explored, so every effect size here carries that selection bias — nothing from this entry ships without clearing the EXP-018a fresh-vintage gates. Spreads are pure column algebra over the existing builder output (same rows, same inputs, no leakage). Monthly pattern is identical for lean and stat_lean_noanchor: both lose in Dec 2025 (+4.4% / +2.9%) and Jan 2026, both win hard Mar/May/Jul/Aug (-10 to -13%) — consistent with EXP-018a Alternative 1 (regime-dependence), which remains live and is what the fresh-vintage window will test. Winkler is the one metric where stat_lean_noanchor edges lean (152.4 vs 153.7), not enough to matter.
+
+**Artifacts.** `scripts/exp019_stationary_ablation.py` · `ml/shadow/exp019_stationary/summary.json`
+
+---
+
+## EXP-020 — Market fundamentals (residual load, TTF gas, holiday): refuted — residual load is inert and an added level column actively degrades
+
+**rejected** · 2026-08-29 · model: MultiHorizonLightGBMQuantileForecaster, production shape (56-day window, h+1..h+72, one t0 per vintage day, no CQR)
+
+**Hypothesis.** Per docs/hypothesis-log.md [2026-08-29]: EXP-018's exogenous trio is inert because it is the wrong SHAPE of exogenous, not because exogenous data is useless. (1) It is not the merit-order quantity — external EPF work puts residual load (load minus renewable generation, MW) at rho~=0.53 with day-ahead price, above load or renewables alone, and LightGBM cannot reconstruct a three-way difference it is never handed. (2) There is no fuel-cost level anchor at all, so a trailing-56-day model can only infer level from its own price lags — the mechanism blamed for August 2026's upper-side coverage breach. Prediction: adding residual_load_mw and gas_ttf_eur_mwh to the 15-feature lean set improves quantile score by >=3%, on both the lean and full bases.
+
+**Outcome.** Position refuted on both bases. Primary gate (lean_fund vs lean) fails gates 1 and 2 — DM p=0.9929 decisively the wrong direction, QS 3.4% WORSE not 3% better; confirmatory (full_fund vs full) fails identically (p=0.6150). Residual load is inert (p=0.648 main, p=0.899 on the 263-vintage control) and so is plain load_forecast (p=0.851), which makes Alternative 3 moot rather than decided. Gas actively degrades (+3.2% QS, p=0.991), correcting the hypothesis's mechanism: this model class does not lack a level anchor, it rejects added level columns. That is the second independent confirmation of EXP-019's finding that re-adding price_rolling_mean_168h as an explicit level column costs — generalised now to exogenous level columns too. Monthly panel rules out Alternative 4 (worse in 5 of 7 months, Jul +16.7%; no rescue in the August level-shift month). Standing conclusion, now backed by a test that could have refuted it: at a 56-day window this model gains nothing from added exogenous columns and loses from added level columns — the next lever is window length or model class, not features.
+
+<details><summary>All recorded metrics (29)</summary>
+
+| metric | value |
+|---|---|
+| `n_paired_observations` | 14037 |
+| `full_mae` | 33.7 |
+| `full_qs` | 12.18 |
+| `full_winkler` | 195.6 |
+| `full_coverage_lower` | 0.768 |
+| `full_coverage_upper` | 0.822 |
+| `lean_mae` | 31.6 |
+| `lean_qs` | 11.23 |
+| `lean_winkler` | 177.6 |
+| `lean_coverage_lower` | 0.792 |
+| `lean_coverage_upper` | 0.8 |
+| `lean_dm_p_beats_full` | 0 |
+| `lean_load_qs` | 11.28 |
+| `lean_load_dm_p_beats_lean` | 0.8505 |
+| `lean_residual_qs` | 11.25 |
+| `lean_residual_dm_p_beats_lean` | 0.6484 |
+| `lean_gas_qs` | 11.59 |
+| `lean_gas_dm_p_beats_lean` | 0.9908 |
+| `lean_fund_qs` | 11.61 |
+| `lean_fund_dm_p_beats_lean` | 0.9929 |
+| `lean_fund_qs_delta_vs_lean_pct` | 3.37 |
+| `full_fund_qs` | 12.21 |
+| `full_fund_dm_p_beats_full` | 0.615 |
+| `gate_primary_all_pass` | no |
+| `gate_confirmatory_all_pass` | no |
+| `control_lean_qs` | 9.86 |
+| `control_lean_dm_p_beats_full` | 0 |
+| `control_lean_residual_qs` | 9.91 |
+| `control_lean_residual_dm_p_beats_lean` | 0.899 |
+
+</details>
+
+**Caveats.** Nothing shipped: FEATURE_COLUMNS untouched, no production path changed. Step-0 plumbing (four new consolidate.py columns) is kept — additive-only, verified bit-identical on the five pre-existing columns and the row index, so EXP-018a Stage 1 (fires ~2026-09-09 off the same parquet) is unperturbed. Window is 2026-02-05.. because gas_ttf does not exist before then (EDH market_proxies added TTF on that date); the no-gas arms were replayed on the full 2025-12-01 window as a control and agree. Both windows overlap EXP-018/019's discovery data, so the lean-beats-full replication here (-7.8% and -7.1% QS, p<0.0001 both) is supporting evidence only and does NOT discharge EXP-018a's fresh-vintage gates. EXP-020 Step 2 (fresh-vintage confirmation) cancelled: no effect to confirm. Mechanism claim's provenance was external — a HAN BDSD minor project on week-ahead NL price forecasting (FyE/core/sources/bdsd-minor-electricity-price-prediction-2026-01-19.pdf) and its cited sources (Ascberic 2021, Tschora 2022); the literature's rho~=0.53 is not disputed, it is simply already spanned by price lags plus calendar at this window length.
+
+**Artifacts.** `scripts/exp020_fundamentals_ablation.py` · `ml/shadow/exp020_fundamentals/summary.json` · `ml/shadow/exp020_fundamentals_ctl/summary.json` · `ml/data/consolidate.py` · `tests/test_consolidate.py`
+
+---
+
+## EXP-021 — Zero-shot foundation model (Chronos-Bolt) beats the tuned LightGBM incumbent by 20% quantile score with no features at all — model class confirmed as the live lever
+
+****kept**** · 2026-08-29 · model: amazon/chronos-bolt-base (205M, Apache-2.0, deterministic multi-quantile head), zero-shot, no fine-tuning, float32 on RTX 3090 Ti; production shape otherwise identical to EXP-018/019/020 (56-day context, h+1..h+72, one t0 per vintage day, no CQR)
+
+**Hypothesis.** Per docs/hypothesis-log.md [2026-08-29]: EXP-020 closed the feature lever, leaving window length and model class. Position: amazon/chronos-bolt-base run zero-shot on nothing but the 56-day price history the incumbent trains on — no features, no exogenous, no NL-specific training — lands within 5% of the lean LightGBM's quantile score and is materially better on upper-side coverage in the level-shift months, because its quantile heads were pretrained across many series and regimes rather than recalibrated nightly to one 56-day price level. Stated deliberately as competitiveness, not superiority: mere parity would already mean the incumbent's entire feature-and-retrain apparatus buys nothing pretraining does not supply.
+
+**Outcome.** Position confirmed and exceeded. Pre-commit predicted PARITY (within 5% QS); measured result is SUPERIORITY on all four gates against BOTH bases — vs lean QS -20.3% (DM p<0.0001), vs full -26.0%. Raw band coverage 0.811 against the 0.80 target with no conformal layer, where lean sits at 0.611. Alternative 3 (64->72 rollout is the defect) refuted and backwards: the FM's edge GROWS with horizon (-19.9% on h1-64, -22.8% on h65-72). Alternative 5 (calibration prize) fires hard: FM upper-side coverage beats lean in 8 of 9 months, biggest gaps in exactly the two months that motivated augur#19 (Jul +0.232, Aug +0.174) — the first thing tested against augur#19 that moves it. Alternative 1 partially fires: errors do decorrelate (r=0.753 < 0.8) but a 50/50 median blend (MAE 23.69) is WORSE than the FM alone (23.24), so ensembling is not the free win and any ensemble must be weighted. Six-check code-review battery all clean, and it is the load-bearing part of the entry: incumbent arms reproduce the EXP-020 control bit-identically; zero context/target overlap; batch invariance to 3e-5; naive baselines sane (rMAE persistence 1.249 / seasonal-naive 1.000 / full 0.921 / lean 0.871 / FM 0.729); pretraining contamination impossible (weights frozen 2025-11-21, window opens 2025-12-05). The battery also FOUND a real defect the pre-commit missed — build_features is shift(1), so the incumbent's feature row stops at t0-1h while the FM's context ran through t0 — and the correcting matched-information arm is what is reported: it costs 0.8pp of 21, so the conclusion is robust to it.
+
+<details><summary>All recorded metrics (34)</summary>
+
+| metric | value |
+|---|---|
+| `n_paired_observations` | 18717 |
+| `fm_mae` | 23.23 |
+| `fm_qs` | 7.86 |
+| `fm_winkler` | 119.8 |
+| `fm_coverage_lower` | 0.898 |
+| `fm_coverage_upper` | 0.913 |
+| `fm_coverage_band` | 0.811 |
+| `fm_band_width_median` | 73.35 |
+| `lean_mae` | 27.77 |
+| `lean_qs` | 9.86 |
+| `lean_winkler` | 155.6 |
+| `lean_coverage_band` | 0.611 |
+| `full_mae` | 29.36 |
+| `full_qs` | 10.62 |
+| `full_coverage_band` | 0.595 |
+| `fm_qs_delta_pct_vs_lean` | -20.3 |
+| `fm_qs_delta_pct_vs_full` | -26 |
+| `fm_dm_p_beats_lean` | 3.31948e-27 |
+| `fm_dm_p_beats_full` | 2.97745e-41 |
+| `gate_primary_verdict` | SUPERIORITY |
+| `gate_secondary_verdict` | SUPERIORITY |
+| `gate_primary_all_pass` | yes |
+| `unmatched_arm_fm_mae` | 22.98 |
+| `unmatched_arm_qs_delta_pct_vs_lean` | -21.1 |
+| `alt1_pearson_r_abs_errors_vs_lean` | 0.753 |
+| `alt1_mae_50_50_blend` | 23.69 |
+| `alt3_fm_qs_delta_pct_h1_64` | -19.9 |
+| `alt3_fm_qs_delta_pct_h65_72` | -22.8 |
+| `alt5_aug2026_fm_upper` | 0.93 |
+| `alt5_aug2026_lean_upper` | 0.756 |
+| `alt5_months_fm_upper_better` | 8 |
+| `rmae_vs_seasonal_naive_fm` | 0.729 |
+| `rmae_vs_seasonal_naive_lean` | 0.871 |
+| `rmae_vs_seasonal_naive_full` | 0.921 |
+
+</details>
+
+**Caveats.** NOTHING SHIPPED — FEATURE_COLUMNS, ml/shadow/, dashboard.js and daily_update.sh untouched; the only repo artifacts are the runner and two summary JSONs. Per the pre-committed decision rule, SUPERIORITY triggers a fresh-vintage confirmation (EXP-021a, opened same day) before any production path is touched, and an ADR-006 amendment only after a live shadow. Effect sizes are measured on the same 260-vintage window EXP-018/019/020 explored, so they carry that window's selection bias — though weakly, since a zero-shot arm tunes nothing and the weights predate the window. Method addendum: the Method's own regularity tripwire FIRED on the first contexts run (19h gaps on 125 of 260 vintages) — these were load_frame_ext dropna losses on exogenous NaNs, i.e. exactly the rows the incumbent drops, so the information sets matched but the spacing did not. Fixed by regridding each context onto the complete hourly grid with holes marked NaN (adds no data; Bolt's own missing-value marker), verified empirically before being relied on: on a synthetic series with an 18h block removed, the NaN-marked context tracks the clean forecast to 0.08 MAE while the compressed context deviates 0.92. Gates unchanged. Environment: b650-gpu needed a userland uv + managed CPython to get Python.h, since python3-dev/pip are absent and there is no sudo; triton cannot JIT without headers.
+
+**Artifacts.** `scripts/exp021_foundation_zeroshot.py` · `ml/shadow/exp021_foundation_aligned/summary.json` · `ml/shadow/exp021_foundation/summary.json` · `ml/shadow/exp021_foundation_aligned/fm_predict_meta.json`
+
+**Commits.** `d4562f5`
+
+---
+
+## EXP-022 — Context ladder: most of Chronos-Bolt's win is pretrained prior, not context volume — and the calibration half is entirely prior
+
+**parked** · 2026-08-29 · model: amazon/chronos-bolt-base zero-shot at 4 context lengths (1343h/672h/336h/168h) vs MultiHorizonLightGBMQuantileForecaster (lean 15-feature and full 24-feature, 56-day window)
+
+**Hypothesis.** Exploratory mechanism diagnostic for EXP-021, NOT pre-committed and carrying no gates. EXP-021's incumbent predicts all 72 horizons from a single ~14-number feature row while Chronos reads 1343 raw points, so the 20.3% gap could be pretrained prior OR simply context volume — a critique of our feature design rather than of gradient boosting. These separate by starving the FM of context while leaving the incumbent untouched: if Chronos on 7 days still beats LightGBM trained on 56, the surviving margin is prior, not information.
+
+**Outcome.** Diagnostic, nothing to adopt. Chronos with a 7-DAY context still beats LightGBM trained on 56 days by 12.5% QS (DM p<0.0001), so roughly 12 of EXP-021's 20.3 points are pretrained prior and only ~8 are context volume. Band coverage is ~0.81 at EVERY rung (0.811/0.804/0.813/0.823 from 56d down to 7d) — the calibration advantage is completely insensitive to context length and is therefore pure pretrained prior, which also explains why the gain is largest at p10 (26.3%) and smallest at the median (16.3%): tail quantiles are what a 1344-row nightly refit can least afford to estimate. Two supporting probes: the FM's bands are better SHAPED not merely wider (lean needs 2.0x inflation to reach 0.811 coverage, ending 1.7x wider; at matched width it reaches only 0.682); and the win is broad and routine rather than extremal (FM wins 75% of vintages, median per-vintage MAE 19.89 vs 26.62, but p95 is a tie at 48.55 vs 48.39 — the FM is better on ordinary days and no better on hard ones).
+
+<details><summary>All recorded metrics (40)</summary>
+
+| metric | value |
+|---|---|
+| `n_paired_observations` | 18717 |
+| `lean_lgbm_56d_mae` | 27.77 |
+| `full_lgbm_56d_mae` | 29.36 |
+| `chronos_ctx_full_mae` | 23.23 |
+| `chronos_ctx_672h_mae` | 23.7 |
+| `chronos_ctx_336h_mae` | 24.23 |
+| `chronos_ctx_168h_mae` | 25.37 |
+| `lean_lgbm_56d_qs` | 9.86 |
+| `full_lgbm_56d_qs` | 10.62 |
+| `chronos_ctx_full_qs` | 7.86 |
+| `chronos_ctx_672h_qs` | 7.97 |
+| `chronos_ctx_336h_qs` | 8.19 |
+| `chronos_ctx_168h_qs` | 8.63 |
+| `lean_lgbm_56d_dqs_pct_vs_lean` | 0 |
+| `full_lgbm_56d_dqs_pct_vs_lean` | 7.7 |
+| `chronos_ctx_full_dqs_pct_vs_lean` | -20.3 |
+| `chronos_ctx_672h_dqs_pct_vs_lean` | -19.2 |
+| `chronos_ctx_336h_dqs_pct_vs_lean` | -16.9 |
+| `chronos_ctx_168h_dqs_pct_vs_lean` | -12.5 |
+| `lean_lgbm_56d_coverage_band` | 0.611 |
+| `full_lgbm_56d_coverage_band` | 0.595 |
+| `chronos_ctx_full_coverage_band` | 0.811 |
+| `chronos_ctx_672h_coverage_band` | 0.804 |
+| `chronos_ctx_336h_coverage_band` | 0.813 |
+| `chronos_ctx_168h_coverage_band` | 0.823 |
+| `chronos_ctx_168h_dm_p_beats_lean` | 4.40059e-11 |
+| `prior_share_of_gap_pct_points` | 12.5 |
+| `context_share_of_gap_pct_points` | 7.8 |
+| `lean_band_inflation_needed_to_match_fm_coverage` | 2 |
+| `lean_coverage_at_matched_width_1.20x` | 0.682 |
+| `pinball_gain_pct_p10` | 26.3 |
+| `pinball_gain_pct_p50` | 16.3 |
+| `pinball_gain_pct_p90` | 19.5 |
+| `per_vintage_mae_median_fm` | 19.89 |
+| `per_vintage_mae_median_lean` | 26.62 |
+| `per_vintage_mae_p95_fm` | 48.55 |
+| `per_vintage_mae_p95_lean` | 48.39 |
+| `fm_wins_share_of_vintages` | 0.75 |
+| `mean_signed_error_fm` | 0.34 |
+| `mean_signed_error_lean` | -0.52 |
+
+</details>
+
+**Caveats.** CORRECTS EXP-021's recorded mechanism, per this registry's append-only correction rule. EXP-021's hypothesis-log resolution attributed the win to Chronos 'not being recalibrated nightly to one 56-day price level' — the level-drift story carried since EXP-018/019/020. The bias panel does not support it: mean signed error is +0.34 (FM) vs -0.52 (lean) EUR/MWh overall, and lean's worst month is June (-15.5), not the August level-shift month (-4.7). The win is in distributional SHAPE and SPREAD, not level tracking. Prose registers (hypothesis-log resolution, CLAUDE.md, memory/MEMORY.md) were corrected in place and point here. Exploratory and not pre-committed: it has no gates and decides nothing, in the same descriptive sense as EXP-018 Stage 0; per ADR-007 the pre-commit discipline governs promotion decisions, and nothing is promoted here. Caveat NOT resolved by this ladder: Chronos's pretraining corpus almost certainly contains electricity-domain series, so 'zero-shot' means zero-shot on THIS series, not on this KIND of data. Second caveat: the incumbent has never had a hyperparameter sweep (docs/hypothesis-log.md publishability entry, item 5, never run), so this compares our production model to Chronos, not the best possible GBM to Chronos.
+
+**Artifacts.** `scripts/exp022_context_ladder.py` · `ml/shadow/exp022_context_ladder/summary.json`
+
+**Commits.** `d4562f5`
+
+---
+
+## EXP-023 — Window-length sweep: 112 days beats the production 56-day window by 3.0% quantile score, all four gates pass
+
+**parked** · 2026-08-29 · model: MultiHorizonLightGBMQuantileForecaster, lean 15-feature set, production shape (h+1..h+72, one t0 per vintage day, no CQR)
+
+**Hypothesis.** Pre-committed in docs/experiment-backlog.md (commit 4024420). EXP-020 left two levers, window length and model class; EXP-021/022 resolved model class and showed context is worth ~8pp to the FM. The incumbent's 56-day window is simultaneously its training set and its context and has never been tuned. Position: QS improves monotonically to at least 112 days, the optimum is >=5% better than 56d, and the gain concentrates in the tail quantiles because a ~1344-row sample estimates quantile heads worst.
+
+**Outcome.** All four pre-committed gates PASS at 112 days: DM p<0.0001, QS 3.0% better than 56d, coverage better on both sides (lower 0.857->0.877, upper 0.761->0.776), Winkler better (173.2->169.4). The curve is an inverted U — 28d is 5.2% worse, 84d -1.4%, 112d -3.0%, 168d -2.5% — so a genuine optimum exists inside the available history and Alternative 2 (monotone to the data limit) is refuted. But the Position's stronger 5% claim is NOT met (3.0%), and its MECHANISM is not supported: the gain is near-uniform across quantiles (p10 -3.6%, p50 -3.5%, p90 -1.8%) rather than tail-concentrated, so 'quantile heads are sample-starved' is not what the window is buying. PARKED not kept: 112d is the best of five rungs chosen on the discovery window, which is exactly the selection bias EXP-018a exists to guard against, and the same fresh-vintage discipline must apply before FEATURE_COLUMNS' sibling constant is changed in production.
+
+<details><summary>All recorded metrics (41)</summary>
+
+| metric | value |
+|---|---|
+| `w28_qs` | 11.805 |
+| `w56_qs` | 11.22 |
+| `w84_qs` | 11.067 |
+| `w112_qs` | 10.878 |
+| `w168_qs` | 10.942 |
+| `w28_mae` | 33.22 |
+| `w56_mae` | 32.37 |
+| `w84_mae` | 31.63 |
+| `w112_mae` | 31.26 |
+| `w168_mae` | 31.34 |
+| `w28_dqs_pct_vs_56d` | 5.22 |
+| `w56_dqs_pct_vs_56d` | 0 |
+| `w84_dqs_pct_vs_56d` | -1.36 |
+| `w112_dqs_pct_vs_56d` | -3.05 |
+| `w168_dqs_pct_vs_56d` | -2.47 |
+| `w28_coverage_lower` | 0.817 |
+| `w56_coverage_lower` | 0.857 |
+| `w84_coverage_lower` | 0.864 |
+| `w112_coverage_lower` | 0.877 |
+| `w168_coverage_lower` | 0.876 |
+| `w28_coverage_upper` | 0.751 |
+| `w56_coverage_upper` | 0.761 |
+| `w84_coverage_upper` | 0.771 |
+| `w112_coverage_upper` | 0.776 |
+| `w168_coverage_upper` | 0.799 |
+| `w112_dm_p_beats_56d` | 1.57415e-05 |
+| `w168_dm_p_beats_56d` | 0.0139376 |
+| `pinball_p10_56d` | 8.334 |
+| `pinball_p10_112d` | 8.034 |
+| `pinball_p50_56d` | 16.232 |
+| `pinball_p50_112d` | 15.667 |
+| `pinball_p90_56d` | 9.092 |
+| `pinball_p90_112d` | 8.932 |
+| `gate_best_window` | 112 |
+| `gate_gate_1_dm_p_lt_0.10` | yes |
+| `gate_gate_2_qs_ge_3pct_better` | yes |
+| `gate_gate_3_coverage` | yes |
+| `gate_gate_4_winkler` | yes |
+| `gate_position_5pct_met` | no |
+| `gate_monotone_to_112d` | yes |
+| `gate_ALL_PASS` | yes |
+
+</details>
+
+**Caveats.** Confound control cost more than the pre-commit estimated: it predicted ~150 usable vintages, actual is 95, because the parquet begins 2025-09-28 and a 168d window needs 168 days of pre-history, so the first usable t0 is 2026-03-15. The evaluation window is therefore Mar-Aug 2026 only — the high-price half of the year — and the result should not be assumed to hold in calm months. The rule itself was pre-committed and was followed unchanged. Environment: run on b650-gpu with lightgbm/pandas/numpy/scipy/scikit-learn pinned to requirements.lock; a 56d validation rung reproduced situla's EXP-020 lean predictions BIT-IDENTICALLY across 14901 overlapping cells before any sweep result was trusted.
+
+**Artifacts.** `scripts/exp023_window_sweep.py` · `ml/shadow/exp023_window_sweep/summary.json`
+
+**Commits.** `911be75`
+
+---
+
+## EXP-024 — Lag richness refuted: more raw lags do not recover the foundation model's context advantage — but derived columns cost 5x more than raw ones at identical dimensionality
+
+**rejected** · 2026-08-30 · model: MultiHorizonLightGBMQuantileForecaster, production shape (56-day window, h+1..h+72, one t0 per vintage day, no CQR)
+
+**Hypothesis.** Pre-committed in docs/experiment-backlog.md (commit 4024420, 2026-08-29). EXP-018 found REMOVING features improves skill; EXP-022 found the FM's edge is partly information the incumbent never receives (a single ~14-number feature row vs 1343 raw points). Both cannot be naively true. Position: the resolution is that KIND matters, not COUNT — adding raw price lags out to 168h recovers >=4 of the ~8 percentage points EXP-022 attributed to context volume, while adding the same NUMBER of derived columns does not. Mechanism (extending EXP-019): raw lags are absolute levels and are harmless; smoothed level columns dilute the split search.
+
+**Outcome.** Position REFUTED: adding raw lags does not recover the FM's context advantage, it costs. lean (15 feat) QS 9.51; lean_lag24 (33) +1.6% worse; lean_lag168 (37) +2.5% worse (DM p=1.0000, decisively the wrong direction). Gates 1 and 2 fail. Alternative 1 ('dilution is about dimensionality per se') is therefore supported — more features hurt regardless of kind. BUT the dimensionality-matched control turns this from a flat negative into a decomposition, which is exactly why the pre-commit made it load-bearing: at IDENTICAL width (37 features vs 37), raw lags cost +2.5% while derived columns cost +12.2%, a ~5x difference, and the derived arm also breaks coverage (0.780 vs 0.811) and Winkler (172.1 vs 150.9) where the raw-lag arm holds both. So COUNT and KIND both matter: pure dimensionality costs ~2.5pp, and making those same-count columns smoothed/derived costs a further ~9.7pp. The Position's mechanism (raw lags are harmless) is half-right — they are far less harmful, but not harmless. The consequential finding is the negative one: the ~8 percentage points EXP-022 attributed to context volume are NOT recoverable by widening the incumbent's feature vector. The bottleneck is not the feature row's width but the model class's ability to consume a long context, which strengthens EXP-021/022's model-class reading and removes the cheapest hoped-for alternative to it.
+
+<details><summary>All recorded metrics (29)</summary>
+
+| metric | value |
+|---|---|
+| `lean_nfeat` | 15 |
+| `lean_lag24_nfeat` | 33 |
+| `lean_lag168_nfeat` | 37 |
+| `lean_lag168_derived_nfeat` | 37 |
+| `lean_mae` | 26.66 |
+| `lean_lag24_mae` | 26.98 |
+| `lean_lag168_mae` | 27.34 |
+| `lean_lag168_derived_mae` | 29.17 |
+| `lean_qs` | 9.512 |
+| `lean_lag24_qs` | 9.661 |
+| `lean_lag168_qs` | 9.752 |
+| `lean_lag168_derived_qs` | 10.673 |
+| `lean_dqs_pct_vs_lean` | 0 |
+| `lean_lag24_dqs_pct_vs_lean` | 1.56 |
+| `lean_lag168_dqs_pct_vs_lean` | 2.52 |
+| `lean_lag168_derived_dqs_pct_vs_lean` | 12.21 |
+| `lean_coverage_lower` | 0.811 |
+| `lean_lag24_coverage_lower` | 0.812 |
+| `lean_lag168_coverage_lower` | 0.813 |
+| `lean_lag168_derived_coverage_lower` | 0.78 |
+| `lean_winkler` | 150.9 |
+| `lean_lag24_winkler` | 153.9 |
+| `lean_lag168_winkler` | 154.8 |
+| `lean_lag168_derived_winkler` | 172.1 |
+| `lag168_dm_p_beats_lean` | 0.999965 |
+| `derived_dm_p_beats_lean` | 1 |
+| `primary_all_pass` | no |
+| `control_all_pass` | no |
+| `mechanism_supported` | no |
+
+</details>
+
+**Caveats.** Fourth independent confirmation of the EXP-019/020 split-search-dilution mechanism, and the first to isolate it from dimensionality by construction: EXP-019 (internal rolling mean), EXP-020 (exogenous gas), EXP-029 (residual-regression level columns), now EXP-024 (matched-count derived vs raw). The interpretive requirement in the pre-commit ('if BOTH arms pass, the mechanism claim is wrong') is not triggered — neither passes — but its spirit applies in reverse: since neither passes, the mechanism is read off the MAGNITUDE gap between them rather than off a pass/fail. Row set fixed across all four variants on the union of their columns, so no variant gains training rows from another's NaNs.
+
+**Artifacts.** `scripts/exp024_lag_richness.py` · `ml/shadow/exp024_lag_richness/summary.json`
+
+**Commits.** `5260c2f`
+
+---
+
+## EXP-025 — Band transplant refuted — but production CQR already reaches most of the foundation model's calibration, and a weighted blend beats the FM alone
+
+**rejected** · 2026-08-29 · model: post-processing only: chronos-bolt-base spread x lean LightGBM median; no refit, no GPU
+
+**Hypothesis.** Pre-committed in docs/experiment-backlog.md (commit 4024420). EXP-022 showed the FM's band advantage is a pure pretrained prior, flat across context lengths. Position: transplanting Chronos's asymmetric quantile spread around the incumbent's median lifts band coverage from 0.611 to >=0.76 while costing <3% QS relative to the full FM — i.e. the calibration prior is separable from the point forecast.
+
+**Outcome.** Position REFUTED. The transplant reaches band coverage 0.733, below the pre-committed 0.76 gate, and costs 20% QS against the full FM against a <3% gate; gates 1 and 3 fail. The calibration prior is NOT cleanly separable from the point forecast it was fitted alongside. Two alternatives fired and both matter more than the refutation. (Alt 3, the important one) Production CQR on the incumbent reaches band coverage 0.788 — BETTER than the transplant's 0.733 and close to the FM's 0.811. This materially deflates the calibration framing of EXP-021/022: the honest live comparison is FM raw 0.811 vs lean+CQR 0.788, not vs the pre-conformal 0.611 that was quoted, because production does not ship the pre-conformal band. The FM's remaining calibration edge is one of EFFICIENCY, not coverage: it reaches 0.811 at median width 73.4 where CQR needs width 89.2 for 0.788 (Winkler 119.8 vs 148.9). (Alt 2) A weighted median blend at w=0.80 toward the FM scores QS 7.756 vs the FM's 7.864, -1.4%, DM p=0.0042 — so ensembling does beat the FM alone, unlike EXP-021's unoptimised 50/50. w was selected in-sample and needs out-of-sample confirmation before it means anything.
+
+<details><summary>All recorded metrics (18)</summary>
+
+| metric | value |
+|---|---|
+| `transplant_band_coverage` | 0.733 |
+| `transplant_qs` | 9.438 |
+| `transplant_qs_delta_pct_vs_fm` | 20 |
+| `transplant_coverage_side_gap` | 0.019 |
+| `lean_band_coverage` | 0.611 |
+| `fm_band_coverage` | 0.811 |
+| `lean_cqr_band_coverage` | 0.788 |
+| `lean_cqr_band_width_median` | 89.2 |
+| `fm_band_width_median` | 73.4 |
+| `lean_cqr_winkler` | 148.9 |
+| `fm_winkler` | 119.8 |
+| `best_blend_arm` | C_blend_w0.75_ownspread |
+| `best_blend_qs` | 7.765 |
+| `blend_w080_qs` | 7.756 |
+| `blend_w080_dm_p_beats_fm` | 0.0042 |
+| `blend_w080_delta_pct_vs_fm` | -1.4 |
+| `gate_all_pass` | no |
+| `alt3_cqr_reaches_transplant` | yes |
+
+</details>
+
+**Caveats.** Arm D applies CQR ONCE to raw quantiles, which is the charitable reading of production — production's compute_cqr_q conformalises already-widened bands (feedback loop, standing finding in memory/MEMORY.md). The charitable version still beat the transplant, so Alternative 3 is refuted more strongly than a faithful replication would have refuted it. This discharges EXP-021a's Alternative 4 and REQUIRES a correction to the calibration claim recorded in CLAUDE.md and the EXP-021/022 resolutions.
+
+**Artifacts.** `scripts/exp025_band_transplant.py` · `ml/shadow/exp025_band_transplant/summary.json`
+
+**Commits.** `911be75`
+
+---
+
+## EXP-026 — Model-size ladder: chronos-bolt-tiny retains 93.5% of base's advantage — the pretrained prior is cheap
+
+****kept**** · 2026-08-29 · model: amazon/chronos-bolt-{tiny,mini,small,base} zero-shot on the identical EXP-021 matched-information contexts
+
+**Hypothesis.** Pre-committed in docs/experiment-backlog.md (commit 4024420). EXP-021a Stage 2 gates deployment on CPU latency on a GPU-less production host, and chronos-bolt-base is 205M parameters. Position: chronos-bolt-small retains >=80% of base's QS advantage over lean, and completes one 1343-point/72h forecast on sadalsuud CPU in <=10s median.
+
+**Outcome.** Alternative 2 fires decisively: chronos-bolt-TINY retains 93.5% of base's advantage over lean (-18.9% QS vs base's -20.3%), mini 97.1%, small 98.3%, and all beat lean at DM p<0.0001. Band coverage is essentially identical across the ladder (0.815/0.819/0.829/0.811), so Alternative 3 (skill and calibration scaling differently) does not fire — the calibration prior in particular is fully present in the smallest checkpoint. Skill scaling with size is real but tiny in magnitude, which refutes Alternative 1. Consequence: the advantage is a CHEAP prior, and the 'a 205M-parameter model in our nightly path' objection to EXP-021a Stage 3 largely dissolves, since tiny would likely do.
+
+<details><summary>All recorded metrics (21)</summary>
+
+| metric | value |
+|---|---|
+| `lean_lgbm_qs` | 9.864 |
+| `bolt_tiny_qs` | 7.995 |
+| `bolt_mini_qs` | 7.922 |
+| `bolt_small_qs` | 7.899 |
+| `bolt_base_qs` | 7.864 |
+| `lean_lgbm_mae` | 27.77 |
+| `bolt_tiny_mae` | 23.57 |
+| `bolt_mini_mae` | 23.53 |
+| `bolt_small_mae` | 23.34 |
+| `bolt_base_mae` | 23.23 |
+| `lean_lgbm_retention_pct` | 0 |
+| `bolt_tiny_retention_pct` | 93.5 |
+| `bolt_mini_retention_pct` | 97.1 |
+| `bolt_small_retention_pct` | 98.3 |
+| `bolt_base_retention_pct` | 100 |
+| `lean_lgbm_coverage_band` | 0.611 |
+| `bolt_tiny_coverage_band` | 0.815 |
+| `bolt_mini_coverage_band` | 0.819 |
+| `bolt_small_coverage_band` | 0.829 |
+| `bolt_base_coverage_band` | 0.811 |
+| `latency_benchmark_run` | no |
+
+</details>
+
+**Caveats.** HALF THE PRE-COMMITTED METHOD IS OUTSTANDING: part (b), the CPU latency benchmark, must run on sadalsuud (the GPU-less production host) and was NOT run here — running a benchmark on production was not authorised in this session. The skill gate passes; the feasibility gate is unmeasured, so EXP-021a Stage 2 is NOT discharged. Do not read this entry as establishing deployability.
+
+**Artifacts.** `ml/shadow/exp026_size_ladder/summary.json` · `scripts/exp021_foundation_zeroshot.py`
+
+**Commits.** `911be75`
+
+---
+
+## EXP-027 — Fine-tuning destroys the calibration prior — and point skill too: naive fine-tuning on 3578 points is strictly worse than zero-shot
+
+**rejected** · 2026-08-30 · model: amazon/chronos-bolt-base fine-tuned with AdamW (lr 1e-4, batch 8, grad-clip 1.0, no LR schedule, no early stopping), context 1024 -> native prediction_length 64; evaluated zero-shot-style at h+1..h+72
+
+**Hypothesis.** Pre-committed in docs/experiment-backlog.md (commit 4024420, 2026-08-29). EXP-022 established the FM's calibration advantage is a broad pretrained prior (coverage flat ~0.81 from 56d down to 7d context) and EXP-026 showed it survives to the tiny checkpoint — exactly what fine-tuning on one narrow series should overwrite. Position (a DISSOCIATION, not a direction): fine-tuning improves MAE by >=5% over zero-shot AND simultaneously degrades raw band coverage by >=0.05 (0.811 -> <=0.76). Point skill up, calibration down; a heavily fine-tuned FM should drift TOWARD the incumbent's failure mode.
+
+**Outcome.** Position REFUTED, Alternative 2 confirmed decisively, and the mechanism half was right for the wrong overall outcome. Fine-tuning degrades BOTH halves monotonically in steps: MAE 26.75 -> 30.13 -> 30.47 -> 31.85 (+19.0% at 4000 steps) and band coverage 0.825 -> 0.488 -> 0.443 -> 0.394 (-0.431). The dissociation gate therefore FAILS on its skill half (MAE got worse, not >=5% better) while its calibration half is confirmed roughly nine times over (-0.431 against a predicted -0.05). The predicted MECHANISM is visible exactly as described: median band width collapses 85.5 -> 33.9, i.e. the model overwrites a broad pretrained spread prior with a narrow single-series one and becomes wildly overconfident — Winkler 138.2 -> 218.5. What the Position got wrong is assuming point skill would be bought in exchange; on 3578 points there is nothing to buy. Verified as overfitting rather than a broken optimiser: training loss fell steadily 10.74 -> 5.69 (binned means, -45%) while held-out MAE rose 19%, so the model was genuinely fitting the training data better while generalising worse. Even the FIRST checkpoint (250 steps) has already destroyed calibration (0.488), so this is not a schedule-length artifact. Operational conclusion: ZERO-SHOT IS THE DEPLOYMENT MODE for this asset; EXP-021's Alternative 4 ('fine-tuning is the real bet') is closed.
+
+<details><summary>All recorded metrics (27)</summary>
+
+| metric | value |
+|---|---|
+| `step0_mae` | 26.75 |
+| `step250_mae` | 30.13 |
+| `step1000_mae` | 30.47 |
+| `step4000_mae` | 31.85 |
+| `step0_qs` | 9.07 |
+| `step250_qs` | 10.99 |
+| `step1000_qs` | 11.53 |
+| `step4000_qs` | 12.59 |
+| `step0_coverage_band` | 0.825 |
+| `step250_coverage_band` | 0.488 |
+| `step1000_coverage_band` | 0.443 |
+| `step4000_coverage_band` | 0.394 |
+| `step0_band_width_median` | 85.5 |
+| `step250_band_width_median` | 43.3 |
+| `step1000_band_width_median` | 40 |
+| `step4000_band_width_median` | 33.9 |
+| `step0_winkler` | 138.2 |
+| `step250_winkler` | 179.1 |
+| `step1000_winkler` | 193.6 |
+| `step4000_winkler` | 218.5 |
+| `final_mae_delta_pct` | 19 |
+| `final_coverage_delta` | -0.431 |
+| `mae_improved_ge_5pct` | no |
+| `coverage_degraded_ge_0.05` | yes |
+| `DISSOCIATION_CONFIRMED` | no |
+| `train_loss_first` | 15.13 |
+| `train_loss_mean_steps_2000_3000` | 5.691 |
+
+</details>
+
+**Caveats.** SCOPE LIMIT, stated because it bounds the conclusion: this tests NAIVE fine-tuning, not fine-tuning done well. The recipe used a fixed lr=1e-4 with no LR schedule, no validation split, no early stopping and no checkpoint selection — the pre-commit specified the leakage discipline and the checkpoint grid but not a recipe, and no recipe search was run. A careful recipe with early stopping would very likely land between step 0 and step 250 and could plausibly avoid the collapse. What IS established is that the fine-tuning corpus is far too small for the naive approach: only 3578 hourly points exist before the 2026-02-28 cutoff (the pre-commit estimated ~7900, which is the FULL parquet, not the pre-cutoff half), giving ~2490 distinct window start positions against 32000 sampled windows — roughly 13x repetition. Leakage discipline held: every scored target is strictly after train_end. Contexts may overlap the fine-tuning period, which matches how a deployed fine-tune would operate and is recorded rather than corrected.
+
+**Artifacts.** `scripts/exp027_finetune_dissociation.py` · `ml/shadow/exp027_finetune/summary.json`
+
+**Commits.** `5260c2f`
+
+---
+
+## EXP-028 — Covariates DO help a covariate-capable foundation model: Chronos-2 gains 8.3% quantile score from exogenous that LightGBM cannot use
+
+**parked** · 2026-08-29 · model: amazon/chronos-2 zero-shot with past_covariates/future_covariates (no retraining); comparators chronos-bolt-base, lean and full LightGBM re-scored on the same subset
+
+**Hypothesis.** Pre-committed in docs/experiment-backlog.md (commit 4024420). EXP-020 refuted exogenous features for ONE model class with a mechanism (split-search dilution) that is LightGBM-specific; a cross-attention transformer has no split search, so the question re-opens with model class. Sharper motivation: EXP-021's FM wins by 20.3% while being strictly information-poorer than the model it beats. Position: chronos-2 with covariates improves QS >=5% over the same model run univariate, with the gain in the MEDIAN rather than the tails.
+
+**Outcome.** The Position's skill claim is CONFIRMED and the exogenous question genuinely re-opens with model class. chronos-2 with the seven known-future covariates scores QS 7.30 vs 7.96 univariate — 8.3% better, DM p=0.0051, MAE 23.10->21.14 — clearing gates 1, 2 and 4 and the >=5% median-gain mechanism requirement. This is the first positive exogenous result in Augur's history and it directly qualifies EXP-020's standing conclusion: exogenous data is not useless, it was unusable BY LIGHTGBM AT THIS WINDOW. Gate 3 FAILS, so ALL_PASS is False: covariates make the model sharper (band 0.803->0.742, Winkler 123.3->113.3) at the cost of coverage on both sides (lower 0.923->0.886, upper 0.880->0.856), exceeding the 0.02 tolerance. So the trade is skill-and-sharpness for calibration, not a free win. Two further findings: chronos-2 UNIVARIATE already beats chronos-bolt-base by 5.5% on this subset, so part of the headline is the newer model rather than the covariates; and gas remains unhelpful even here (c2_all 7.37 vs c2_known_future 7.30), a fourth confirmation that added level columns do not pay. PARKED: real effect, failed calibration gate, small subset (77 vintages), and the covariates carry the harness's vintage-overwrite optimism.
+
+<details><summary>All recorded metrics (31)</summary>
+
+| metric | value |
+|---|---|
+| `c2_univariate_qs` | 7.958 |
+| `c2_known_future_qs` | 7.3 |
+| `c2_all_qs` | 7.37 |
+| `c2_gasdrop_qs` | 7.3 |
+| `bolt_base_qs` | 8.397 |
+| `full_qs` | 12.458 |
+| `lean_qs` | 11.307 |
+| `c2_univariate_mae` | 23.1 |
+| `c2_known_future_mae` | 21.14 |
+| `c2_all_mae` | 21.24 |
+| `c2_gasdrop_mae` | 21.14 |
+| `bolt_base_mae` | 24.41 |
+| `full_mae` | 34.58 |
+| `lean_mae` | 32.89 |
+| `c2_univariate_coverage_band` | 0.803 |
+| `c2_known_future_coverage_band` | 0.742 |
+| `c2_all_coverage_band` | 0.749 |
+| `c2_gasdrop_coverage_band` | 0.742 |
+| `bolt_base_coverage_band` | 0.87 |
+| `full_coverage_band` | 0.618 |
+| `lean_coverage_band` | 0.619 |
+| `known_future_dqs_pct_vs_univariate` | -8.3 |
+| `known_future_dm_p` | 0.00509474 |
+| `c2_all_dqs_pct_vs_univariate` | -7.4 |
+| `bolt_dqs_pct_vs_c2_univariate` | 5.5 |
+| `gate_gate_1_dm_p_lt_0.10` | yes |
+| `gate_gate_2_qs_ge_5pct_better` | yes |
+| `gate_gate_3_coverage` | no |
+| `gate_gate_4_winkler` | yes |
+| `gate_mechanism_pinball_p50_ge_5pct` | yes |
+| `gate_ALL_PASS` | no |
+
+</details>
+
+**Caveats.** Contamination caveat is the load-bearing limitation: chronos-2's weights were last modified 2026-06-05, inside EXP-021's evaluation window, so unlike chronos-bolt-base (frozen 2025-11-21) contamination cannot be ruled out by construction. Restricting to t0 > 2026-06-05 removes overlap with the weight-freeze date but does NOT prove the pretraining corpus excludes NL day-ahead prices; the comparison between c2 and bolt in particular should be read with that asymmetry in mind, and the covariate-vs-univariate comparison (both chronos-2, same weights) is the internally valid one. Exogenous values are vintage-overwritten and therefore fresher than the live cron sees (ratio 1.84), which biases TOWARD this result, so 8.3% is an upper bound. EXP-029's pre-screen predicted this would fail; it was wrong, exactly as its own Alternative 3 anticipated.
+
+**Artifacts.** `scripts/exp028_chronos2_covariates.py` · `ml/shadow/exp028_chronos2/summary.json`
+
+**Commits.** `911be75`
+
+---
+
+## EXP-029 — Residual pre-screen: null as predicted, but the screen is invalid as a gate — it would have vetoed EXP-028's real 8.3% gain
+
+**rejected** · 2026-08-29 · model: LGBMRegressor on (y - p50_chronos_bolt) from 9 exogenous columns + horizon; temporal 70/30 split by vintage
+
+**Hypothesis.** Pre-committed in docs/experiment-backlog.md (commit 4024420) as the near-free CPU pre-screen for EXP-028. Position (deliberately a null): the FM's residuals are close to exogenous-orthogonal — out-of-sample R^2 < 0.05 and a residual correction worth <2% MAE — because EXP-020 found exogenous inert and EXP-022 localised the FM's advantage to a distributional prior rather than a conditional-mean gain.
+
+**Outcome.** The Position's NUMBER was confirmed (OOS R^2 = -2.00, far below the 0.05 bar; the correction makes MAE 79% worse) but the INFERENCE it existed to support was wrong, and that is the finding. EXP-028 was run anyway and found a real, significant 8.3% gain from the same exogenous columns — so the screen would have vetoed a true positive. This is precisely the failure the pre-commit's Alternative 3 anticipated in advance ('near-zero R^2 AND EXP-028 later shows a gain => a null is evidence against, not proof of absence'), which is the only reason the GPU arm was run at all. REJECTED as a screening method: additive residual regression is not a valid proxy for what a covariate-conditioned sequence model can extract. Diagnostically it is still informative. Marginal correlations are NOT small (wind_gen_forecast_mw -0.33 Pearson / -0.38 Spearman, wind_speed -0.25, residual_load +0.17) so the signal was visibly there; what failed was exploitation. And the failure is monotone in level columns: R^2 -2.00 (all) -> -0.41 (no levels) -> -0.058 (wind only), with gas_ttf and temperature as top features of the worst model. That is a THIRD independent confirmation of the EXP-019/020 mechanism, now in a completely different estimator: added level columns destroy out-of-sample generalisation in tabular models, while chronos-2, which instance-normalises, used the same columns productively.
+
+<details><summary>All recorded metrics (13)</summary>
+
+| metric | value |
+|---|---|
+| `oos_r2_all` | -2.0031 |
+| `delta_mae_pct_all` | -78.71 |
+| `oos_r2_no_gas` | -2.2158 |
+| `oos_r2_no_levels` | -0.4073 |
+| `oos_r2_wind_only` | -0.0576 |
+| `delta_mae_pct_no_gas` | -91.79 |
+| `delta_mae_pct_no_levels` | -23.78 |
+| `delta_mae_pct_wind_only` | -10.08 |
+| `pearson_wind_gen` | -0.3298 |
+| `spearman_wind_gen` | -0.3799 |
+| `pearson_wind_speed` | -0.2524 |
+| `pearson_residual_load` | 0.1695 |
+| `promotes_exp028` | no |
+
+</details>
+
+**Caveats.** Methodological lesson worth keeping beyond this entry: a cheap pre-screen must be validated against the expensive test it is meant to replace at least once before it is trusted to veto. Here the screen and the real experiment disagreed on the first try. The pre-commit's own Alternative 3 is what preserved the result — had the screen been treated as decisive, Augur's first positive exogenous finding would have been discarded unseen.
+
+**Artifacts.** `scripts/exp029_residual_screen.py` · `ml/shadow/exp029_residual_screen/summary.json`
+
+**Commits.** `911be75`
+
+---
+
+## EXP-030 — EXP-026 part (b) completed by proxy: CPU inference latency is a non-issue — even the 205M base model runs one 72h forecast in 0.52s on 4 threads
+
+****kept**** · 2026-08-30 · model: amazon/chronos-bolt-{tiny,mini,small,base}, CPU-only inference, torch.set_num_threads(4), 1343-point context, prediction_length 73, 10 timed runs after warm-up
+
+**Hypothesis.** Completes part (b) of EXP-026's pre-committed Method (docs/experiment-backlog.md, commit 4024420), which was recorded as OUTSTANDING when EXP-026's skill half was decided. EXP-021a Stage 2 gates deployment on median CPU latency <= 60s on sadalsuud (GPU-less production host); EXP-026's own gate is <= 10s median / <= 30s max. Filed as a separate entry rather than edited into EXP-026 because that entry is already committed and this registry is append-only.
+
+**Outcome.** Latency is not a constraint, by a wide margin. On 4 pinned threads: tiny 0.03s, mini 0.06s, small 0.13s, base 0.52s median for one 1343-point / 72h forecast (max == median to 2dp in every case, so no tail). Against EXP-026's own 10s gate the base model has ~19x headroom, and against EXP-021a Stage 2's 60s gate ~115x. Combined with EXP-026's skill result (tiny retains 93.5% of base's advantage), the 'a 205M-parameter model in the nightly path' objection is dissolved twice over: the small checkpoint is nearly as good AND the large one is already fast enough. Deployment cost is dominated by the torch dependency footprint, not by inference time.
+
+<details><summary>All recorded metrics (15)</summary>
+
+| metric | value |
+|---|---|
+| `chronos-bolt-tiny_median_s` | 0.0291883 |
+| `chronos-bolt-mini_median_s` | 0.0610551 |
+| `chronos-bolt-small_median_s` | 0.129119 |
+| `chronos-bolt-base_median_s` | 0.521586 |
+| `chronos-bolt-tiny_max_s` | 0.0326041 |
+| `chronos-bolt-mini_max_s` | 0.0613304 |
+| `chronos-bolt-small_max_s` | 0.129354 |
+| `chronos-bolt-base_max_s` | 0.524152 |
+| `chronos-bolt-tiny_params_millions` | 8.7 |
+| `chronos-bolt-mini_params_millions` | 21.2 |
+| `chronos-bolt-small_params_millions` | 47.7 |
+| `chronos-bolt-base_params_millions` | 205.3 |
+| `base_headroom_vs_10s_gate_x` | 19.2 |
+| `base_headroom_vs_60s_stage2_gate_x` | 115 |
+| `is_lower_bound` | yes |
+
+</details>
+
+**Caveats.** PROXY, NOT THE PRE-COMMITTED MEASUREMENT — EXP-021a Stage 2 is NOT discharged. The pre-commit says latency must be measured 'on the machine that would actually run it'. sadalsuud is production, has no torch, and installing a deep-learning stack on the host running the nightly job is a production change that was not authorised in this session. Measured instead on b650-gpu (AMD Ryzen 7 9700X, Zen 5 desktop) pinned to 4 threads to match sadalsuud's core count (AMD Ryzen 3 5300U, Zen 2 low-power mobile, 4c/8t) — core count matches, per-core throughput does not, so these are a LOWER BOUND on sadalsuud latency. The direction of the result is what makes the proxy adequate anyway: the margin is 19x-115x, far larger than any plausible Zen2-mobile-vs-Zen5-desktop per-core gap (~3-5x), so the conclusion survives the proxy even under pessimistic scaling. Had the proxy landed near the gate it would have been uninformative and the real measurement would have been mandatory. Still worth running on sadalsuud before Stage 2 is formally signed off, since only that discharges the pre-commit as written.
+
+**Artifacts.** `scripts/exp026_cpu_latency.py` · `ml/shadow/exp026_size_ladder/cpu_latency_proxy.json`
+
+**Commits.** `6e51032`
+
+---
+
+## EXP-031 — Documentation-integrity audit of EXP-021..030: 19 registry numbers were untraceable to any artifact; all now regenerable, and the check is automated
+
+****kept**** · 2026-08-30 · model: n/a — documentation audit
+
+**Hypothesis.** Not an experiment on the model — a record of an audit of this registry, filed here because experiments/README.md designates an appended follow-up entry as the mechanism for correcting committed entries rather than editing them in place. Question asked: is the documentation of EXP-021..030 actually correct, and can that be demonstrated rather than asserted?
+
+**Outcome.** The audit found ONE real defect and confirmed the rest. Defect: 19 of 241 numeric metrics across EXP-021/022/025/030 could not be traced to any committed artifact. They were not invented — every one recomputed to the exact recorded value — but 16 of them came from throwaway inline analyses whose outputs were never saved, so no reader could regenerate or check them. That is the same failure class as leaving results in /tmp, and experiments/README.md names it explicitly ('numbers should match the source artifact ... do not invent'). Remediated by scripts/posthoc_diagnostics.py, which regenerates all 16 into two committed artifacts; the remaining 3 are documented arithmetic derivations, each verified against its source and whitelisted with the formula. Untraceable count is now 0 of 241. Confirmed clean: schema (15 required fields, valid decisions, four data_window keys) on all 10 entries; id order and uniqueness across all 29; artifact existence in scope; and — the strongest claim made this session — all SEVEN pre-committed Method bodies are sha256-identical between the pre-commit revision 4024420 and HEAD, so no Method was edited after its result landed. Two pre-existing issues surfaced but NOT introduced by this session and NOT fixed here: eight older entries (EXP-008..020) carry empty commits[], and five older entries annotate artifact paths as 'file.md (note)' which no literal path check can resolve — the auditor now strips the annotation and verifies the base path.
+
+<details><summary>All recorded metrics (10)</summary>
+
+| metric | value |
+|---|---|
+| `numeric_metrics_checked` | 241 |
+| `untraceable_before` | 19 |
+| `untraceable_after` | 0 |
+| `documented_derivations_whitelisted` | 3 |
+| `method_bodies_compared` | 7 |
+| `method_bodies_identical_to_precommit` | 7 |
+| `schema_failures` | 0 |
+| `order_failures` | 0 |
+| `artifact_failures_in_scope` | 0 |
+| `preexisting_entries_with_empty_commits` | 8 |
+
+</details>
+
+**Caveats.** ARTIFACT-LIST CORRECTION, which is the main reason this entry exists rather than an in-place edit: EXP-022's artifacts should also include ml/shadow/exp022_context_ladder/diagnostics.json, and EXP-025's should also include ml/shadow/exp025_band_transplant/diagnostics.json. Those entries are already committed and this registry is append-only, so the addition is recorded here instead. Also note the EXP-025 fine blend-weight sweep (w=0.80) regenerated by posthoc_diagnostics.py is POST-HOC: the pre-committed EXP-025 grid is w in {0,.25,.5,.75,1}, scripts/exp025_band_transplant.py was deliberately left unmodified, and the w=0.80 optimum was selected in-sample and is unconfirmed out of sample. Re-run the audit any time with `PYTHONPATH=. .venv/bin/python scripts/audit_registry.py`; it exits non-zero on failure so it can gate /curate.
+
+**Artifacts.** `scripts/audit_registry.py` · `scripts/posthoc_diagnostics.py` · `ml/shadow/exp022_context_ladder/diagnostics.json` · `ml/shadow/exp025_band_transplant/diagnostics.json`
+
+**Commits.** `f60773c`
+
+---

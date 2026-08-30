@@ -20,6 +20,7 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 | Questioning ML architecture choices | `memory/ml-decisions.md` (week-ahead, River ARF, feature strategy) + `docs/river-arf-retrospective.md` (why ARF is being retired and what replaces it) |
 | Working with energyDataHub data formats | `memory/data-formats.md` — schema v2.1, units, timezone conventions |
 | Changing ML pipeline, model, or forecast logic | `docs/model-progress-log.md` — add dated entry with rationale, evidence, and outcome |
+| **Reading experiment results** | `docs/experiment-results.md` — every experiment's hypothesis, outcome, full metrics and caveats in one readable page. **Generated** from `experiments/registry.jsonl` by `scripts/render_results.py`; never hand-edit, regenerate after appending |
 | **Verifying the experiment record** | `scripts/audit_registry.py` — schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed. Exits non-zero on failure; run it at `/curate` |
 | Logging or citing an experiment (A/B, warmup, ablation) | `experiments/registry.jsonl` — append one line per experiment; schema in `experiments/README.md` |
 | **Picking up the next experiment** | `docs/experiment-backlog.md` — designed, pre-committed, not yet run; ordered by decision value per unit cost. EXP-025 (transplanted calibration prior) is cheapest and most actionable |
@@ -189,6 +190,8 @@ Client browser (https://energy.jeroenveen.nl):
 | `scripts/exp016_replay_aci.py` | EXP-016 offline replay — per-side ACI (Gibbs-Candès) with α trace + γ sensitivity |
 | `scripts/exp018_stage0_ablation.py` | EXP-018 per-feature-group ablation — production-shaped walk-forward, `--variants`/`--reuse-predictions`; **also the EXP-018a Stage-1 runner** |
 | `scripts/exp019_stationary_ablation.py` | EXP-019 anchor-relative spread variants (imports the EXP-018 harness) |
+| `docs/experiment-results.md` | **Generated** readable digest of all experiments — summary table + per-experiment sections |
+| `scripts/render_results.py` | Renders the digest from the registry; `--check` fails if stale |
 | `scripts/audit_registry.py` | Registry auditor — 5 checks incl. number-traceability and pre-commit immutability |
 | `scripts/posthoc_diagnostics.py` | Regenerates registry numbers originally computed ad-hoc (EXP-022/025 diagnostics.json) |
 | `scripts/exp024_lag_richness.py` | EXP-024 lag richness + the dimensionality-matched derived control |
