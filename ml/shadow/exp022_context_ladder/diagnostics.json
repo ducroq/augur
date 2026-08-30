@@ -1,0 +1,92 @@
+{
+  "purpose": "regenerates the EXP-022 registry numbers that were originally computed ad-hoc; see scripts/posthoc_diagnostics.py",
+  "prior_share_of_gap_pct_points": 12.5,
+  "context_share_of_gap_pct_points": 7.8,
+  "band_inflation_ladder": {
+    "x1.00": {
+      "median_width": 60.98758871216927,
+      "coverage": 0.6107282149917188
+    },
+    "x1.20": {
+      "median_width": 73.18510645460313,
+      "coverage": 0.6810920553507507
+    },
+    "x1.50": {
+      "median_width": 91.4813830682539,
+      "coverage": 0.76267564246407
+    },
+    "x2.00": {
+      "median_width": 121.97517742433853,
+      "coverage": 0.8403590318961373
+    }
+  },
+  "lean_coverage_at_matched_width_1.20x": 0.681,
+  "lean_band_inflation_needed_to_match_fm_coverage": 2.0,
+  "fm_median_width": 73.35,
+  "lean_median_width": 60.99,
+  "pinball_p10_fm": 6.017,
+  "pinball_p10_lean": 8.16,
+  "pinball_gain_pct_p10": 26.3,
+  "pinball_p50_fm": 11.617,
+  "pinball_p50_lean": 13.887,
+  "pinball_gain_pct_p50": 16.3,
+  "pinball_p90_fm": 5.958,
+  "pinball_p90_lean": 7.397,
+  "pinball_gain_pct_p90": 19.5,
+  "per_vintage_mae_median_fm": 19.89,
+  "per_vintage_mae_median_lean": 26.62,
+  "per_vintage_mae_p95_fm": 48.55,
+  "per_vintage_mae_p95_lean": 48.39,
+  "fm_wins_share_of_vintages": 0.75,
+  "n_vintages": 260,
+  "mean_signed_error_fm": 0.34,
+  "mean_signed_error_lean": -0.52,
+  "monthly_signed_bias": {
+    "2025-12": {
+      "mean_price": 85.2,
+      "bias_fm": 3.69,
+      "bias_lean": 1.84
+    },
+    "2026-01": {
+      "mean_price": 107.7,
+      "bias_fm": -5.79,
+      "bias_lean": -8.55
+    },
+    "2026-02": {
+      "mean_price": 93.1,
+      "bias_fm": 7.1,
+      "bias_lean": 4.95
+    },
+    "2026-03": {
+      "mean_price": 99.1,
+      "bias_fm": -2.75,
+      "bias_lean": 7.78
+    },
+    "2026-04": {
+      "mean_price": 84.5,
+      "bias_fm": 6.47,
+      "bias_lean": 4.46
+    },
+    "2026-05": {
+      "mean_price": 95.0,
+      "bias_fm": -2.22,
+      "bias_lean": 5.64
+    },
+    "2026-06": {
+      "mean_price": 108.5,
+      "bias_fm": -4.83,
+      "bias_lean": -15.53
+    },
+    "2026-07": {
+      "mean_price": 106.1,
+      "bias_fm": 5.11,
+      "bias_lean": -0.94
+    },
+    "2026-08": {
+      "mean_price": 128.2,
+      "bias_fm": -3.3,
+      "bias_lean": -4.73
+    }
+  },
+  "lean_worst_bias_month": "2026-06"
+}

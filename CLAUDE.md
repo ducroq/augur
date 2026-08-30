@@ -20,6 +20,7 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 | Questioning ML architecture choices | `memory/ml-decisions.md` (week-ahead, River ARF, feature strategy) + `docs/river-arf-retrospective.md` (why ARF is being retired and what replaces it) |
 | Working with energyDataHub data formats | `memory/data-formats.md` — schema v2.1, units, timezone conventions |
 | Changing ML pipeline, model, or forecast logic | `docs/model-progress-log.md` — add dated entry with rationale, evidence, and outcome |
+| **Verifying the experiment record** | `scripts/audit_registry.py` — schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed. Exits non-zero on failure; run it at `/curate` |
 | Logging or citing an experiment (A/B, warmup, ablation) | `experiments/registry.jsonl` — append one line per experiment; schema in `experiments/README.md` |
 | **Picking up the next experiment** | `docs/experiment-backlog.md` — designed, pre-committed, not yet run; ordered by decision value per unit cost. EXP-025 (transplanted calibration prior) is cheapest and most actionable |
 | Taking a provisional position to revisit later | `docs/hypothesis-log.md` — Position / Alternative / Method / Revisit trigger / Review-by; surface due items in `/curate` |
@@ -166,7 +167,7 @@ Client browser (https://energy.jeroenveen.nl):
 **Process + experiments**:
 | Path | What it is |
 |------|-----------|
-| `experiments/registry.jsonl` | Append-only experiment log (EXP-001..EXP-030, gap at EXP-017 which was never run); schema in `experiments/README.md` |
+| `experiments/registry.jsonl` | Append-only experiment log (EXP-001..EXP-031, gap at EXP-017 which was never run); schema in `experiments/README.md` |
 | `docs/decisions/006-lightgbm-quantile-production-architecture.md` | ADR-006 — what the production system does |
 | `docs/decisions/007-model-promotion-method.md` | ADR-007 — how we decide what to change |
 | `docs/decisions/004-river-online-learning-architecture.md` | ADR-004 — superseded by ADR-006 |
@@ -188,6 +189,8 @@ Client browser (https://energy.jeroenveen.nl):
 | `scripts/exp016_replay_aci.py` | EXP-016 offline replay — per-side ACI (Gibbs-Candès) with α trace + γ sensitivity |
 | `scripts/exp018_stage0_ablation.py` | EXP-018 per-feature-group ablation — production-shaped walk-forward, `--variants`/`--reuse-predictions`; **also the EXP-018a Stage-1 runner** |
 | `scripts/exp019_stationary_ablation.py` | EXP-019 anchor-relative spread variants (imports the EXP-018 harness) |
+| `scripts/audit_registry.py` | Registry auditor — 5 checks incl. number-traceability and pre-commit immutability |
+| `scripts/posthoc_diagnostics.py` | Regenerates registry numbers originally computed ad-hoc (EXP-022/025 diagnostics.json) |
 | `scripts/exp024_lag_richness.py` | EXP-024 lag richness + the dimensionality-matched derived control |
 | `scripts/exp027_finetune_dissociation.py` | EXP-027 fine-tuning trajectory (train ≤2026-02-28, eval t0 ≥2026-03-01) |
 | `scripts/exp026_cpu_latency.py` | EXP-026 part (b) CPU-latency **proxy** on jwasys — explicitly a lower bound, does not discharge EXP-021a Stage 2 |
