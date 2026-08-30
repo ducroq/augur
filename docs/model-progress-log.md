@@ -4,6 +4,44 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
+## 2026-08-30 — EXP-024 and EXP-027: the last two backlog experiments, both refuted, both informative
+
+Completes the backlog written on 2026-08-29 (`4024420`). Both Methods were fixed before the data existed and neither was edited.
+
+### EXP-024 — more raw lags do not recover the FM's context advantage
+
+| variant | nfeat | MAE | QS | dQS% | cov_lo | Winkler | DM p |
+|---|---|---|---|---|---|---|---|
+| lean | 15 | 26.66 | 9.51 | 0.0 | 0.811 | 150.9 | — |
+| lean_lag24 | 33 | 26.98 | 9.66 | +1.6 | 0.812 | 153.9 | 0.9979 |
+| lean_lag168 | 37 | 27.34 | 9.75 | +2.5 | 0.813 | 154.8 | 1.0000 |
+| **lean_lag168_derived** (control) | 37 | 29.17 | 10.67 | **+12.2** | 0.780 | 172.1 | 1.0000 |
+
+Position refuted — raw lags cost rather than help, so Alternative 1 ("dilution is about dimensionality per se") is supported. **But the dimensionality-matched control turns a flat negative into a decomposition, which is exactly why the pre-commit made it load-bearing.** At *identical* width (37 vs 37), raw lags cost +2.5% and derived columns cost **+12.2%** — a ~5× difference — and the derived arm additionally breaks coverage (0.780 vs 0.811) and Winkler (172.1 vs 150.9) where the raw-lag arm holds both. So **count and kind both matter**: pure dimensionality costs ~2.5pp, and making those same-count columns smoothed/derived costs a further ~9.7pp.
+
+The consequential result is the negative one. **The ~8 percentage points EXP-022 attributed to context volume are not recoverable by widening the incumbent's feature vector.** The bottleneck is not the feature row's width but the model class's ability to consume a long context — which strengthens the model-class reading and removes the cheapest hoped-for alternative to it. This is also the fourth independent confirmation of the EXP-019/020 dilution mechanism (after EXP-019 internal rolling mean, EXP-020 exogenous gas, EXP-029 residual-regression level columns) and the first to isolate it from dimensionality by construction.
+
+### EXP-027 — fine-tuning destroys the calibration prior, and buys nothing
+
+| checkpoint | MAE | ΔMAE% | band cov | Δcov | width | Winkler |
+|---|---|---|---|---|---|---|
+| step 0 (zero-shot) | 26.75 | 0.0 | 0.825 | — | 85.5 | 138.2 |
+| step 250 | 30.13 | +12.6 | 0.488 | −0.337 | 43.3 | 179.1 |
+| step 1000 | 30.47 | +13.9 | 0.443 | −0.382 | 40.0 | 193.6 |
+| **step 4000** | **31.85** | **+19.0** | **0.394** | **−0.431** | 33.9 | 218.5 |
+
+The Position predicted a **dissociation** — point skill up, calibration down. The calibration half is confirmed roughly nine times over (−0.431 against a predicted −0.05) and the *mechanism* is visible precisely as described: median band width collapses 85.5 → 33.9, i.e. the model overwrites a broad pretrained spread prior with a narrow single-series one and becomes wildly overconfident. **The skill half is refuted**: MAE gets 19% worse, not 5% better. There was nothing to buy in exchange.
+
+Alternative 2 confirmed: the corpus is far too small. Only **3578 hourly points** exist before the 2026-02-28 cutoff — the pre-commit's ~7900 estimate was the *full* parquet, not the pre-cutoff half — giving ~2490 distinct window starts against 32 000 sampled windows, ~13× repetition. **Verified as overfitting, not a broken optimiser**: training loss fell steadily 10.74 → 5.69 (binned means, −45%) while held-out MAE rose 19%. Even the first checkpoint at 250 steps has already destroyed calibration, so it is not a schedule-length artifact.
+
+**Operational conclusion: zero-shot is the deployment mode for this asset.** EXP-021's Alternative 4 ("fine-tuning is the real bet") is closed.
+
+**Scope limit, recorded because it bounds the conclusion:** this tests *naive* fine-tuning — fixed lr=1e-4, no schedule, no validation split, no early stopping, no checkpoint selection. The pre-commit fixed the leakage discipline and the checkpoint grid but not a recipe, and no recipe search was run. A careful recipe with early stopping would very likely land between step 0 and step 250 and could plausibly avoid the collapse. What is established is that the corpus is far too small for the naive approach.
+
+**Status**: nothing shipped, no production path touched. The 2026-08-29 backlog is now fully executed (EXP-023/024/025/026/028/029 + EXP-027), all seven `parked` or `rejected` except EXP-026's skill half. Full numbers in `experiments/registry.jsonl`.
+
+---
+
 ## 2026-08-29 (overnight) — Five backlog experiments run: a longer window works, covariates work in the right model class, and the calibration claim needed correcting
 
 **Setup**: EXP-023..029 were pre-committed in `docs/experiment-backlog.md` at commit `4024420` *before* any of them ran, so the Methods below are fixed-before-data by git rather than by assertion. Compute moved to `b650-gpu` (jwasys): a second venv (`~/augur-run`) pinned to `requirements.lock` exactly. **Before any sweep result was trusted, a 56-day validation rung on that box reproduced situla's EXP-020 `lean` predictions bit-identically across 14 901 overlapping cells** — environment parity verified, not assumed.
