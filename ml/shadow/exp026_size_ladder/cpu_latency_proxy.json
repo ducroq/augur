@@ -1,0 +1,42 @@
+{
+  "proxy_host": "b650-gpu (AMD Ryzen 7 9700X, Zen 5 desktop)",
+  "target_host": "sadalsuud (AMD Ryzen 3 5300U, Zen 2 low-power mobile, 4c/8t)",
+  "threads_pinned": 4,
+  "context_points": 1343,
+  "prediction_length": 73,
+  "IS_A_LOWER_BOUND": true,
+  "interpretation": "Proxy above the gate => sadalsuud certainly fails (conclusive). Proxy below the gate => suggestive only; EXP-021a Stage 2 still requires the real measurement on sadalsuud.",
+  "gate_median_s": 10.0,
+  "gate_max_s": 30.0,
+  "stage2_gate_median_s": 60.0,
+  "results": {
+    "chronos-bolt-tiny": {
+      "n_params_millions": 8.7,
+      "median_s": 0.029188313521444798,
+      "max_s": 0.03260413883253932,
+      "min_s": 0.02905788505449891,
+      "runs": 10
+    },
+    "chronos-bolt-mini": {
+      "n_params_millions": 21.2,
+      "median_s": 0.06105511891655624,
+      "max_s": 0.06133037293329835,
+      "min_s": 0.06057487474754453,
+      "runs": 10
+    },
+    "chronos-bolt-small": {
+      "n_params_millions": 47.7,
+      "median_s": 0.1291194660589099,
+      "max_s": 0.12935419287532568,
+      "min_s": 0.12786890473216772,
+      "runs": 10
+    },
+    "chronos-bolt-base": {
+      "n_params_millions": 205.3,
+      "median_s": 0.5215863939374685,
+      "max_s": 0.524151649326086,
+      "min_s": 0.5207286202348769,
+      "runs": 10
+    }
+  }
+}

@@ -38,6 +38,19 @@ Alternative 2 confirmed: the corpus is far too small. Only **3578 hourly points*
 
 **Scope limit, recorded because it bounds the conclusion:** this tests *naive* fine-tuning — fixed lr=1e-4, no schedule, no validation split, no early stopping, no checkpoint selection. The pre-commit fixed the leakage discipline and the checkpoint grid but not a recipe, and no recipe search was run. A careful recipe with early stopping would very likely land between step 0 and step 250 and could plausibly avoid the collapse. What is established is that the corpus is far too small for the naive approach.
 
+### EXP-030 (EXP-026 part b) — CPU latency is a non-issue
+
+| checkpoint | params | median | max |
+|---|---|---|---|
+| bolt-tiny | 8.7M | 0.03s | 0.03s |
+| bolt-mini | 21.2M | 0.06s | 0.06s |
+| bolt-small | 47.7M | 0.13s | 0.13s |
+| bolt-base | 205.3M | **0.52s** | 0.52s |
+
+One 1343-point / 72h forecast on 4 pinned threads. Against EXP-026's own 10s gate the *base* model has ~19× headroom; against EXP-021a Stage 2's 60s gate, ~115×. Combined with EXP-026's skill result (tiny retains 93.5%), the "205M-parameter model in the nightly path" objection dissolves twice over — the small checkpoint is nearly as good *and* the large one is already fast enough. **Deployment cost is dominated by the torch dependency footprint, not inference time.**
+
+**This is a proxy and does not discharge EXP-021a Stage 2.** The pre-commit requires measurement on the host that would run it; sadalsuud is production, has no torch, and installing a deep-learning stack there is a production change that was not authorised. Measured on b650-gpu (Ryzen 7 9700X, Zen 5 desktop) pinned to 4 threads to match sadalsuud's core count (Ryzen 3 5300U, Zen 2 mobile) — core count matches, per-core throughput does not, so these are a **lower bound**. What makes the proxy adequate here is the *margin*: 19–115× is far larger than any plausible Zen2-mobile-vs-Zen5-desktop gap (~3–5×), so the conclusion survives pessimistic scaling. Had it landed near the gate it would have been uninformative. Filed as its own registry entry rather than edited into EXP-026, which was already committed.
+
 **Status**: nothing shipped, no production path touched. The 2026-08-29 backlog is now fully executed (EXP-023/024/025/026/028/029 + EXP-027), all seven `parked` or `rejected` except EXP-026's skill half. Full numbers in `experiments/registry.jsonl`.
 
 ---
