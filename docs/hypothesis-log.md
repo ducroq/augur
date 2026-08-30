@@ -180,6 +180,30 @@ Items 1-5 are ~1 week. Items 6-8 are ~1 week. Item 9 is the polishing pass, ~3-5
 
 ## Resolved
 
+### [2026-08-29 → resolved 2026-08-30] The 2026-08-29 experiment backlog: seven pre-committed arms, all executed
+
+**Why this entry exists, and what it is making good.** `docs/experiment-backlog.md` (committed `4024420`, 2026-08-29) carries seven full ADR-007 pre-commits — Position, Alternatives with falsification signals, Method with gates. Its own promotion rule says that when one is picked up it must be copied into this file's `## Open` section verbatim with the run date added. **That rule was not followed**: all seven were run on 2026-08-29/30 and resolved straight into `experiments/registry.jsonl` and `docs/model-progress-log.md`, leaving this log with no trace of them. This entry restores the trace. They are filed under Resolved rather than Open because none is awaiting evidence any more.
+
+**How pre-commitment is evidenced, given the rule was skipped.** Not by a copy in this file but by git, which is stronger: every Method body in the backlog is **sha256-identical between `4024420` and HEAD**, and the backlog commit (2026-08-29 20:44:27) precedes every result commit (`911be75` 21:01:57, `5260c2f` and `6e51032` the next morning). `scripts/audit_registry.py` check 5 re-verifies this on demand and exits non-zero if any Method was edited after its result landed.
+
+**Outcomes** (full numbers in the registry; narrative in `docs/model-progress-log.md` 2026-08-29 and 2026-08-30):
+
+| Entry | Decision | One-line outcome |
+|---|---|---|
+| EXP-023 window sweep | `parked` | 112d beats production's 56d by 3.0% QS, all four gates pass; parked because best-of-five on the discovery window, and only 95 vintages survive the confound control |
+| EXP-024 lag richness | `rejected` | Widening the feature row fails (+2.5% QS worse); the matched control shows count *and* kind both matter (raw +2.5% vs derived +12.2% at identical width) |
+| EXP-025 band transplant | `rejected` | Transplant fails (0.733 < 0.76 gate) — but its control arm showed lean+CQR reaches 0.788, correcting the calibration claim in EXP-021/022 |
+| EXP-026 size ladder | `kept` | bolt-tiny retains 93.5% of base's advantage; coverage flat across the ladder |
+| EXP-027 fine-tuning | `rejected` | Both halves degrade (MAE +19.0%, coverage 0.825→0.394); zero-shot is the deployment mode |
+| EXP-028 chronos-2 covariates | `parked` | +8.3% QS from exogenous — Augur's first positive exogenous result — but fails the coverage gate |
+| EXP-029 residual screen | `rejected` | Null as predicted, but invalid as a gate: it would have vetoed EXP-028's true positive |
+
+**What this changes about the standing position.** Features, feature-row width and fine-tuning are all closed. Zero-shot foundation modelling is the deployment mode, latency is a non-issue (EXP-030), and two live threads remain: the 112-day window (cheap, needs fresh-vintage confirmation) and covariates in a covariate-capable model class.
+
+**Domain:** EXP-023..EXP-030, `docs/experiment-backlog.md`, ADR-006, ADR-007, augur#15, augur#19.
+
+**Status:** resolved 2026-08-30. Nothing shipped from any of the seven; no production path touched.
+
 ### [2026-08-29 -> resolved 2026-08-29] EXP-021: a pretrained time-series foundation model, zero-shot and feature-free, is competitive with the tuned LightGBM incumbent — model class is the lever EXP-020 pointed at
 
 **Position (provisional):** EXP-020 closed the feature lever with a test that could have refuted it: at a 56-day window this model gains nothing from added exogenous columns and *loses* from added level columns, whatever their provenance. Two levers remain — window length and model class. This entry takes the model-class one. Position: `amazon/chronos-bolt-base`, run **zero-shot** on nothing but the 56-day price history that the incumbent trains on, lands within **5%** of the lean LightGBM's quantile score, and is **materially better on upper-side coverage** in the level-shift months (Jul/Aug 2026) — because its quantile heads were pretrained across many series and regimes and are therefore not recalibrated nightly to one 56-day price level, which is precisely the mechanism EXP-018/019/020 blamed **(the first half of this clause survived contact with the evidence; the level-drift half did not — see the Mechanism correction in the Resolution below, and EXP-022)** for both the dead weight in the feature set and the August upper-side breach (Aug 2026 upper 0.774, band 0.660, against a 128 EUR/MWh monthly mean).

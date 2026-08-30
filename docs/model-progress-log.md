@@ -4,6 +4,22 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
+## 2026-08-30 — EXP-031: documentation audit found 19 untraceable numbers; the check is now automated
+
+**Trigger**: a direct question — was the experiment documentation actually done right, and can that be shown rather than asserted?
+
+**One real defect.** 19 of 241 numeric metrics across EXP-021/022/025/030 could not be traced to any committed artifact. None was invented — every one recomputed to the exact recorded value — but 16 came from throwaway inline analyses whose outputs were never saved. Among them were the per-tau pinball decomposition and the signed-bias panel that *corrected EXP-021's stated mechanism*, so the numbers that overturned a claim were themselves unverifiable. This is the failure `experiments/README.md` names directly ("numbers should match the source artifact ... do not invent") and the same class as leaving results in `/tmp`. Remediated by `scripts/posthoc_diagnostics.py`, which regenerates all 16 into two committed `diagnostics.json` files, every value reproducing identically; the remaining 3 are arithmetic derivations, each verified and whitelisted with its formula. **Untraceable is now 0 of 241.**
+
+**Confirmed clean.** Schema on all session entries; id order and uniqueness across the registry; artifact existence; and all seven pre-committed Method bodies **sha256-identical** between `4024420` and HEAD, proving no Method was edited after its result landed.
+
+**Two pre-existing issues surfaced, neither introduced nor fixed here**: eight older entries (EXP-008..020) carry empty `commits[]`, and five annotate artifact paths as `file.md (note)` — the auditor now strips the annotation and verifies the base path rather than silently rewriting older entries.
+
+**A second gap, found on re-check and fixed the same day**: the backlog's own promotion rule (copy each entry into `hypothesis-log.md` before running) was skipped for all seven batch-run experiments, leaving that log with no trace of them. A consolidated Resolved entry now records the arc, and the rule has been amended — dated and reasoned — to cover batch runs via the git-pinned Method plus the auditor's sha256 check.
+
+**Status**: `scripts/audit_registry.py` runs five checks and exits non-zero on failure, so `/curate` can gate on it instead of trusting a claim. No model or production path touched.
+
+---
+
 ## 2026-08-30 — EXP-024 and EXP-027: the last two backlog experiments, both refuted, both informative
 
 Completes the backlog written on 2026-08-29 (`4024420`). Both Methods were fixed before the data existed and neither was edited.
