@@ -1,0 +1,21 @@
+# Failure-alert template: instantiated by OnFailure=augur-alert@%n.service
+# (see augur-daily.service.d/alert.conf and augur-heartbeat.service).
+# %i carries the failed unit's name.
+#
+# Runs as jeroen, not root: the handler needs only the journal (jeroen is in
+# `adm`) and FluxusSource's secrets.ini (jeroen owns it, mode 600). Running as
+# root would also leave root-owned files in the repo's logs/ directory.
+#
+# Install: cp to /etc/systemd/system/ && systemctl daemon-reload
+[Unit]
+Description=Failure alert for %i
+
+[Service]
+Type=oneshot
+User=jeroen
+Group=jeroen
+ExecStart=/usr/bin/bash /home/jeroen/local_dev/augur/scripts/alert_failure.sh %i
+
+# The handler is written to always exit 0; cap it anyway so an SMTP hang cannot
+# leave a failure-handling unit running (notify_email.py uses a 20s SMTP timeout).
+TimeoutStartSec=120

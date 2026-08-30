@@ -4,6 +4,36 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
+## 2026-08-30 (latest) — Failure alerting built: the OnFailure gap, and the larger gap OnFailure cannot see
+
+**Context.** `OnFailure=` alerting on `augur-daily.service` was parked 2026-07-03 as a monitoring nicety. It stopped being one on 2026-08-29: EXP-018a, EXP-021a and EXP-028a are all gated on an *uninterrupted* run of fresh vintages from `t0 >= 2026-08-25`, so a silent freeze no longer costs a day of dashboard data — it costs a week of the September schedule, unrecoverably (there is no backfill; a reconstructed vintage built from fresher exogenous is not comparable with the live ones beside it — augur#14).
+
+**The gap, stated precisely.** Every in-script alarm the pipeline has — `ARF FAIL rc=N`, `DEP_MARKER`, `SMOKE_MARKER`, the ARF-forecast-<24h and eval-stale guards, and the `t0` stale/jumped markers added 2026-08-28 — surfaces *in the daily commit subject*. That is a good channel for a run that finishes. It is no channel at all for a run that dies first, which is exactly the 2026-06-29 → 07-03 shape: five consecutive nightly failures, zero notification, discovered only when someone noticed missing `Daily update` commits on origin/main.
+
+**The second gap, which is the one worth recording.** Adding `OnFailure=` closes the *hard-failure* case and nothing else. `daily_update.sh` ends with
+
+```bash
+git diff --cached --quiet && echo "No changes to commit" || { git commit ...; git push; }
+```
+
+so a run that stages nothing prints a line, **exits 0, and the unit succeeds**. The vintage is lost and `OnFailure=` structurally cannot fire. The same holds for a timer that got disabled and for a box that was down at 16:30 UTC. Alerting only on unit failure would have produced a monitor that looks complete on paper and stays silent through a realistic subset of the failures it was built for.
+
+**What shipped** (all in the repo; deployment to sadalsuud is a separate step):
+
+1. **`scripts/notify_email.py`** — stdlib-only sender reading `[email_credentials]` from FluxusSource's gitignored `secrets.ini` on sadalsuud. Deliberately **no new notification service** (engineer's call, 2026-07-17); this is the channel `nexusmind-alert@.service` on the same host already uses. Missing or incomplete creds degrade to log-only and still exit 0 — an alerter that throws inside systemd's failure handling only adds noise. `AUGUR_NOTIFY_SECRETS` overrides the path so a dev-box dry-run cannot send a real email.
+
+2. **`scripts/alert_failure.sh` + `scripts/systemd/augur-alert@.service` + `augur-daily.service.d/alert.conf`** — the hard-failure path. A drop-in rather than an edit to `augur-daily.service`, so it detaches without touching the `ExecStartPre` gate ordering declared there (the convention `nexusmind.service.d/alert.conf` already sets on this host). Runs as `jeroen`, not root: it needs only the journal (`adm` group) and `secrets.ini` (owner, mode 600), and root would leave root-owned files in `logs/`. 3h burst guard, armed **only after a confirmed send** — a skipped or failed email must not silence the next real alert. The email names *hypotheses* for the failure (git pull/commit/push, venv outside the dep probe, disk, the 5h30m unit timeout) and explicitly excludes the `set +e` steps, which cannot land there; a hardcoded "most likely cause" is what misdiagnosed the first NexusMind version.
+
+3. **`scripts/heartbeat_check.sh` + `augur-heartbeat.{service,timer}`** — the silent-success path. 06:00 UTC daily: alarms if the newest `Daily update` commit is older than 30h, if `augur-daily.timer` is not enabled and active, or if commits sit unpushed (Netlify never rebuilt). The threshold and hour are chosen together: a healthy run commits ~18:30–21:00 UTC, so at 06:00 a good state is ~10h old and a *single* missed day is ~34h — one silent miss alarms the next morning, and a legitimately late run never does. It exits 0 when it *sends* an alert, reserving its own `OnFailure=` for a broken watchman.
+
+**Accepted blind spot, recorded rather than papered over:** the heartbeat runs *on* sadalsuud, so it cannot report sadalsuud being down. Closing that requires an off-host dead-man's switch — a new service, which is the thing that was declined. The residual exposure is "box down through 06:00 UTC", which is also the case where the daily commits stop, i.e. the pre-existing manual signal still applies.
+
+**Tests**: `tests/test_notify_email.py`, 12 tests on the credential layer and the exit contract — every degraded state produces a readable skip and exit 0, never an exception, never a silent success. SMTP itself is not exercised; the tested boundary stops at the socket.
+
+**What was NOT changed**: `daily_update.sh`, `wait_for_edh.sh`, `augur-daily.service`, `augur-daily.timer`, the model, and the forecast path. The alerting attaches entirely through a drop-in and a new independent timer.
+
+---
+
 ## 2026-08-30 (later) — Follow-through: two confirmations pre-committed, one already fails, and the latency gate is discharged for real
 
 **EXP-023a and EXP-028a pre-committed** before the fresh-vintage windows open, because writing confirmation gates after the data lands is not a pre-commitment. EXP-023a's design states its power problem openly: the discovery effect is 3.0%, so matching EXP-018a's power needs ~7× the vintages, and the fresh-vintage bar is therefore set at **1.5%**, not the in-sample 3.0% — demanding zero shrinkage on an underpowered sample is a coin flip dressed as a test.

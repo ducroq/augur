@@ -1,0 +1,22 @@
+[Unit]
+Description=Augur daily-pipeline liveness check (no Daily update commit in >30h)
+Documentation=https://github.com/ducroq/augur/blob/main/scripts/heartbeat_check.sh
+# The watchman watches itself: a heartbeat that crashes is a silent failure of
+# the thing built to end silent failures. The script exits 0 when it *sends* an
+# alert, so this only fires on an internal error.
+OnFailure=augur-alert@%n.service
+
+[Service]
+Type=oneshot
+User=jeroen
+Group=jeroen
+WorkingDirectory=/home/jeroen/local_dev/augur
+ExecStart=/home/jeroen/local_dev/augur/scripts/heartbeat_check.sh
+
+StandardOutput=journal
+StandardError=journal
+UMask=0027
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

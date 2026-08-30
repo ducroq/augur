@@ -1,0 +1,18 @@
+[Unit]
+Description=Run the Augur pipeline liveness check every morning
+
+[Timer]
+# 06:00 UTC — well after the daily window closes (16:30 UTC start + up to 4h
+# EDH wait + run => commits land ~18:30-21:00 UTC). At this hour a healthy last
+# commit is ~10h old and a single missed day is ~34h, so the 30h threshold in
+# heartbeat_check.sh alarms on one silent miss without ever tripping on a
+# legitimately late run.
+OnCalendar=*-*-* 06:00:00 UTC
+
+# Catch up after a reboot — a box that was down through 06:00 is exactly when
+# the check is most likely to have something to report.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
