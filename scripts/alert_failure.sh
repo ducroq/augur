@@ -36,7 +36,17 @@ MARKER="$AUGUR_DIR/logs/.alerts_last_email"
 BURST_GUARD_MIN="${BURST_GUARD_MIN:-180}"
 TS=$(date -Iseconds)
 
-JOURNAL=$(journalctl -u "$UNIT" -n 25 --no-pager 2>&1 | tail -25) || JOURNAL="(journalctl unavailable)"
+# augur-daily.service sets StandardOutput/StandardError=append:logs/daily_update.log,
+# which OVERRIDES systemd's default journal capture — so `journalctl -u` holds only
+# systemd's own lifecycle lines and NEVER the script's output. (The comment in
+# augur-daily.service claiming output "lands in the journal" is wrong; corrected
+# 2026-08-31 after the first test alert shipped an email with seven days of
+# "Deactivated successfully" and zero diagnostics.) The journal still carries the
+# exit code and timeout, so keep it — but the actual error text is in the run log,
+# and that is what the reader needs first.
+JOURNAL=$(journalctl -u "$UNIT" -n 12 --no-pager 2>&1 | tail -12) || JOURNAL="(journalctl unavailable)"
+RUNLOG="$AUGUR_DIR/logs/daily_update.log"
+RUNTAIL=$(tail -40 "$RUNLOG" 2>&1) || RUNTAIL="(run log unreadable at $RUNLOG)"
 
 mkdir -p "$(dirname "$LOG")" 2>/dev/null || true
 {
@@ -74,7 +84,10 @@ HINTEOF
 
 BODY="$TS -- systemd unit '$UNIT' FAILED on sadalsuud.
 
-Last journal lines:
+Last 40 lines of the run log -- THIS is where the error text is:
+$RUNTAIL
+
+systemd lifecycle lines (exit code / timeout; carries no script output):
 $JOURNAL
 
 $HINT

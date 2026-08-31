@@ -19,6 +19,12 @@
 #   2. augur-daily.timer is enabled and active  -- catches a disabled timer
 #   3. commits on HEAD not on origin/main       -- advisory; a commit that
 #      never reached Netlify leaves the dashboard stale
+#   4. alarm markers in the newest commit SUBJECT -- added 2026-08-31 after the
+#      2026-08-30 incident: the shadow update crashed (`shadow rc=1/eval rc=skip`),
+#      a commit still landed, so checks 1-3 all read healthy while the PRODUCTION
+#      model was down and the dashboard forecast was stale. Every soft-failure
+#      alarm this pipeline raises rides in the commit subject by design, and
+#      until now nothing read them.
 #
 # Exit contract: 0 when healthy AND when a staleness alert was sent (that is a
 # successful check, not a failed unit). Non-zero only on internal error, so
@@ -51,6 +57,10 @@ TIMER_ENABLED=$(systemctl is-enabled augur-daily.timer 2>&1 || true)
 TIMER_ACTIVE=$(systemctl is-active augur-daily.timer 2>&1 || true)
 NEXT_RUN=$(systemctl show augur-daily.timer -p NextElapseUSecRealtime --value 2>/dev/null || true)
 UNPUSHED=$(git rev-list --count origin/main..HEAD 2>/dev/null || echo "?")
+LAST_BODY=$(git log -1 --grep='^Daily update' --format='%s' 2>/dev/null)
+# Soft-failure markers daily_update.sh composes into the subject: any [ALARM: ...],
+# `ARF FAIL rc=N`, a non-zero step rc, or a step gated off as `rc=skip`.
+ALARM_HIT=$(printf '%s' "$LAST_BODY" | grep -oE 'ALARM: [^]]*|ARF FAIL rc=[0-9]+|rc=[1-9][0-9]*|rc=skip' | paste -sd'; ' - 2>/dev/null || true)
 
 FINDINGS=""
 [ "$AGE_H" -gt "$MAX_AGE_HOURS" ] && FINDINGS="${FINDINGS}
@@ -64,9 +74,15 @@ FINDINGS=""
 [ "$UNPUSHED" != "0" ] && [ "$UNPUSHED" != "?" ] && FINDINGS="${FINDINGS}
   * UNPUSHED: ${UNPUSHED} commit(s) on HEAD are not on origin/main — Netlify
     never rebuilt, so the live dashboard is behind the local forecast."
+[ -n "$ALARM_HIT" ] && FINDINGS="${FINDINGS}
+  * SOFT FAILURE in the newest daily commit: ${ALARM_HIT}
+    The run completed and committed, so it is invisible to the staleness and
+    timer checks above — but a non-zero step rc means that step produced
+    nothing. \`shadow rc=N\` specifically means the PRODUCTION LightGBM model
+    did not update and the dashboard forecast is stale."
 
 if [ -z "$FINDINGS" ]; then
-    echo "$TS: heartbeat OK — last daily commit ${AGE_H}h ago, timer ${TIMER_ENABLED}/${TIMER_ACTIVE}" >> "$LOG" 2>/dev/null || true
+    echo "$TS: heartbeat OK — last daily commit ${AGE_H}h ago, timer ${TIMER_ENABLED}/${TIMER_ACTIVE}, subject clean" >> "$LOG" 2>/dev/null || true
     exit 0
 fi
 
@@ -90,7 +106,7 @@ Run log:   $AUGUR_DIR/logs/daily_update.log"
 RESULT=$(printf '%s' "$BODY" | python3 "$AUGUR_DIR/scripts/notify_email.py" \
     "[Augur] daily pipeline heartbeat FAILED (last commit ${AGE_H}h ago)" 2>&1) \
     || RESULT="ERROR: notify_email.py did not run"
-echo "$TS: heartbeat ALERT (age ${AGE_H}h, timer ${TIMER_ENABLED}/${TIMER_ACTIVE}, unpushed ${UNPUSHED}) — $RESULT" >> "$LOG" 2>/dev/null || true
+echo "$TS: heartbeat ALERT (age ${AGE_H}h, timer ${TIMER_ENABLED}/${TIMER_ACTIVE}, unpushed ${UNPUSHED}, markers '${ALARM_HIT}') — $RESULT" >> "$LOG" 2>/dev/null || true
 
 # A sent alert means the check worked. Do not fail the unit, or the heartbeat's
 # own OnFailure= would send a second, less informative email for the same event.
