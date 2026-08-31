@@ -205,7 +205,13 @@ The 2026-08-30 run lost a vintage. What the Position claimed cannot happen, happ
 
 **Shipped in response** (2026-08-31): `latest_feasible_t0` (`87ed30c`) anchors t0 on the last *complete* feature row and names the short feeds; `1bfd728` persists `t0_held_back_hours`/`t0_short_feeds` and emits `[ALARM: t0 held back Nh — <feeds> short]`, because the first version of that fix only *logged* the hold-back — repeating this entry's own lesson inside its own remedy. Alerting gained a commit-subject marker reader (`da57139`) after `shadow rc=1` sat unread for ~11 hours.
 
-**Not changed, and flagged as an open judgement call:** the `SHADOW_UPDATE_RC -eq 0` gate on `T0_MARKER`. Ungating it trades a suppressed-alarm blind spot for stale-value false alarms. The heartbeat's marker reader now catches `rc=1` independently, which covers the *detection* need without touching the gate — so this is recorded, not fixed.
+**Not changed — decided 2026-08-31, deliberately, and this is the record so it is not re-litigated as an oversight.** The `SHADOW_UPDATE_RC -eq 0` gate on `T0_MARKER` stays. Three options were weighed:
+
+- *Ungate it* — rejected as **strictly worse**. On a failed run `shadow_state.json` still holds the previous run's values, so `t0_advance_days` would report yesterday's number as today's: a stale `advance=1` reads as **healthy**, which is worse than silence.
+- *Emit `[t0 unknown — shadow failed]` on non-zero rc* — rejected as redundant. It fires only on days whose subject already carries `shadow rc=N`, so it adds a marker without adding information.
+- *Leave it* — **chosen.** The gate is correct in itself; the heartbeat's commit-subject reader now catches `rc=1` independently, so detection does not route through `T0_MARKER` at all. The residual gap is **forensic, not operational**: a reader of `git log` alone cannot tell from a crashed day's subject whether a vintage was skipped, though `calibration_history` still shows it.
+
+**This review is the point at which to revisit it, on data rather than judgement** — criterion (1) below was rewritten precisely to measure it over 14 runs. If any gap in `calibration_history` turns out to have been diagnosable *only* from the run log, the forensic gap is real and worth closing; if the `rc=N` signal proved sufficient every time, close this as settled.
 
 **Revised Method for the 2026-09-11 review.** Criteria (2) and (3) stand. Criterion (1) is replaced by: *every gap in `calibration_history` has a same-day commit subject carrying **either** a `[ALARM: t0 ...]` marker **or** a non-zero step rc* — the honest version of "loudly announced", which the original conflated with "correctly diagnosed". Add (4): *no `[ALARM: t0 held back Nh]` appears on a day when both feeds were full-length*, which would mean the new anchor is over-triggering.
 
