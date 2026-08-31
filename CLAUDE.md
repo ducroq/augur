@@ -133,7 +133,7 @@ Client browser (https://energy.jeroenveen.nl):
 | `ml/shadow/secure_pickle.py` | HMAC-SHA256 sidecar; `save_signed_pickle` / `load_verified_pickle` |
 | `ml/shadow/metrics.py` | Reusable metrics module — pinball, mean_quantile_score, twcrps_left_tail, lower_side_coverage, winkler_interval_score, diebold_mariano (manual Newey-West HAC) |
 | `ml/models/shadow/shadow_model.pkl` | Trained LGBM artifact (HMAC-signed; **gitignored** — regenerated nightly on sadalsuud from the rolling window, never committed) |
-| `ml/models/shadow/shadow_state.json` | `last_run_utc`, `pending_predictions`, `calibration_history` (with `p10_raw`/`p50_raw`/`p90_raw`), CQR stats |
+| `ml/models/shadow/shadow_state.json` | `last_run_utc`, `pending_predictions`, `calibration_history` (with `p10_raw`/`p50_raw`/`p90_raw`), CQR stats, and **`t0_held_back_hours`/`t0_short_feeds`** (2026-08-31) — read by `daily_update.sh` to emit `[ALARM: t0 held back Nh — <feeds> short]`, because a held-back anchor still exits 0 with a clean `shadow rc=0` while the forecast is degraded |
 | `static/data/augur_forecast_shadow.json` | Production forecast file consumed by `dashboard.js` |
 | `ml/data/consolidate.py` | Parses encrypted energyDataHub history into training parquet |
 | `ml/data/training_history.parquet` | Training history (gitignored; regenerated nightly). Nine columns since 2026-08-29: the five the model uses (`price_eur_mwh`, `wind_speed_80m`, `solar_ghi`, `temperature`, `load_forecast`) plus four EXP-020 fundamentals (`wind_gen_forecast_mw`, `solar_gen_forecast_mw`, `gas_ttf_eur_mwh`, `is_holiday_nl`) that are **collected but not in `FEATURE_COLUMNS`** — EXP-020 refuted them; they stay because they are additive-only and free. |
@@ -184,7 +184,7 @@ Client browser (https://energy.jeroenveen.nl):
 | `docs/lightgbm-quantile-shadow-plan.md` | Original shadow plan (historical) |
 | `docs/river-arf-retrospective.md` | ARF retirement narrative + closing addendum on the EXP-014 promotion |
 | `docs/model-progress-log.md` | Dated narrative log of ML pipeline changes |
-| `tests/` | pytest suite — 241 tests (SecureDataHandler, OnlineFeatureBuilder, LGBM forecaster + multi-horizon + secure_pickle + conformal + backtest + update_shadow + evaluate_shadow + slice MAE + archive path + metrics module + **consolidate parsers (test_consolidate.py, 18 tests, 2026-06-10)** + **t0-advance guard (TestClassifyT0Advance, 7 tests, 2026-08-28)** + **EXP-020 fundamentals parsers (20 tests, 2026-08-29)** + **alert-channel credential layer + exit contract (test_notify_email.py, 12 tests, 2026-08-30)** + **feasible-t0 selection (TestLatestFeasibleT0, 7 tests, 2026-08-31)**) |
+| `tests/` | pytest suite — 243 tests (SecureDataHandler, OnlineFeatureBuilder, LGBM forecaster + multi-horizon + secure_pickle + conformal + backtest + update_shadow + evaluate_shadow + slice MAE + archive path + metrics module + **consolidate parsers (test_consolidate.py, 18 tests, 2026-06-10)** + **t0-advance guard (TestClassifyT0Advance, 7 tests, 2026-08-28)** + **EXP-020 fundamentals parsers (20 tests, 2026-08-29)** + **alert-channel credential layer + exit contract (test_notify_email.py, 12 tests, 2026-08-30)** + **feasible-t0 selection + hold-back state (TestLatestFeasibleT0 + TestHoldBackReachesState, 9 tests, 2026-08-31)**) |
 | `scripts/m4_method_run.py` | M4 verdict runner (historical — pre-EXP-014) |
 | `scripts/exp012_evaluate.py` | EXP-012/013 paired-data evaluation (vintage-corrected) |
 | `scripts/exp014_evaluate_promotion.py` | EXP-014 promotion-criterion runner |

@@ -266,12 +266,16 @@ try:
     with open('$AUGUR_DIR/ml/models/shadow/shadow_state.json') as f:
         st = json.load(f)
     adv = st.get('t0_advance_days')
-    print('none' if adv is None else adv, (st.get('last_t0') or '')[:10])
+    held = st.get('t0_held_back_hours') or 0
+    feeds = ','.join(st.get('t0_short_feeds') or []) or '-'
+    print('none' if adv is None else adv, (st.get('last_t0') or '')[:10], held, feeds)
 except Exception:
-    print('none', '')
-" 2>/dev/null || echo "none ")
+    print('none', '', 0, '-')
+" 2>/dev/null || echo "none  0 -")
     T0_ADVANCE=$(echo "$T0_ADVANCE_INFO" | cut -d' ' -f1)
     T0_DATE=$(echo "$T0_ADVANCE_INFO" | cut -d' ' -f2)
+    T0_HELD_BACK=$(echo "$T0_ADVANCE_INFO" | cut -d' ' -f3)
+    T0_SHORT_FEEDS=$(echo "$T0_ADVANCE_INFO" | cut -d' ' -f4)
     case "$T0_ADVANCE" in
         none|1) : ;;  # first run after a state reset, or a healthy one-day step
         0)
@@ -287,6 +291,19 @@ except Exception:
             T0_MARKER=" [ALARM: t0 jumped ${T0_ADVANCE}d]"
             ;;
     esac
+
+    # Hold-back is a SEPARATE condition from advance, and can coexist with a
+    # healthy +1 step. t0 is held back when a feature column's coverage ends
+    # before the price column's (2026-08-31: EDH's load feed halved 48h->24h
+    # while price stayed 48h). The run then succeeds with `shadow rc=0` while
+    # producing a SHORTER, degraded forecast anchored in the past. Without a
+    # marker that is invisible — the same soft-failure-with-no-reader shape
+    # that hid the 2026-08-30 outage for a day, repeated inside its own fix.
+    # Self-clears the moment upstream restores the horizon.
+    if [ -n "$T0_HELD_BACK" ] && [ "$T0_HELD_BACK" != "0" ] && [ "$T0_HELD_BACK" != "0.0" ]; then
+        echo "ALARM: t0 held back ${T0_HELD_BACK}h — short upstream feeds: ${T0_SHORT_FEEDS}. Forecast horizon is reduced by that much."
+        T0_MARKER="${T0_MARKER} [ALARM: t0 held back ${T0_HELD_BACK}h — ${T0_SHORT_FEEDS} short]"
+    fi
 fi
 
 # Commit and push

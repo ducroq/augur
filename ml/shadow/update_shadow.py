@@ -82,6 +82,8 @@ def load_shadow_state(path: Path) -> dict:
             "last_run_utc": None,
             "last_t0": None,
             "t0_advance_days": None,
+            "t0_held_back_hours": 0.0,
+            "t0_short_feeds": [],
             "last_train_window": None,
             "n_train_samples": 0,
             "last_cqr_q": 0.0,
@@ -544,8 +546,8 @@ def run_shadow_update(
         raise ValueError(
             f"No complete feature row anywhere at or before price_t0={price_t0!r}"
         )
+    held_back_h = (price_t0 - t0).total_seconds() / 3600
     if t0 < price_t0:
-        held_back_h = (price_t0 - t0).total_seconds() / 3600
         logger.warning(
             "ALARM: t0 held back %.0fh to %s (last price is %s) — short feeds: %s. "
             "The forecast anchor is behind the price horizon; upstream truncation.",
@@ -659,6 +661,13 @@ def run_shadow_update(
     # post-run alarm, which reads both fields out of shadow_state.json.
     state["last_t0"] = t0.isoformat()
     state["t0_advance_days"] = t0_advance_days
+    # Persist the hold-back, do not merely log it. A run whose anchor is held
+    # back produces a SHORTER, degraded forecast while exiting 0 with a clean
+    # `shadow rc=0` — the exact soft-failure-with-no-reader shape that hid the
+    # 2026-08-30 outage for a day. daily_update.sh turns these into a commit
+    # subject marker, which is what heartbeat_check.sh reads.
+    state["t0_held_back_hours"] = round(held_back_h, 1)
+    state["t0_short_feeds"] = short_cols
     state["last_train_window"] = {
         "start": pd.Timestamp(window.index.min()).isoformat(),
         "end": pd.Timestamp(window.index.max()).isoformat(),

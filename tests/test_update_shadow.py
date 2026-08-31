@@ -502,3 +502,70 @@ class TestLatestFeasibleT0:
         )
         assert advance_naive == 2
         assert alarm_naive is not None
+
+
+class TestHoldBackReachesState:
+    """A held-back t0 must land in shadow_state.json, not just the log file.
+
+    The run still exits 0 and still commits `shadow rc=0` while producing a
+    SHORTER, degraded forecast. Logging that to logs/daily_update.log and
+    nowhere else is the soft-failure-with-no-reader shape that hid the
+    2026-08-30 outage for a day — and the first version of this very fix
+    repeated it. daily_update.sh reads these keys to build the commit-subject
+    marker that heartbeat_check.sh then greps.
+    """
+
+    @staticmethod
+    def _write_parquet(path, price_end, load_end, start="2026-05-01 00:00"):
+        idx = pd.date_range(start, price_end, freq="h", tz="UTC")
+        rng = np.random.default_rng(7)
+        hours = idx.hour.to_numpy()
+        df = pd.DataFrame(
+            {
+                # a daily shape so the quantile models have something to fit
+                "price_eur_mwh": 90 + 40 * np.sin(hours / 24 * 2 * np.pi)
+                + rng.normal(0, 8, len(idx)),
+                "wind_speed_80m": rng.normal(8, 2, len(idx)),
+                "solar_ghi": rng.uniform(0, 400, len(idx)),
+                "temperature": rng.normal(15, 5, len(idx)),
+                "load_forecast": rng.normal(14000, 1500, len(idx)),
+            },
+            index=idx,
+        )
+        df.index.name = "timestamp_utc"
+        df.loc[df.index > pd.Timestamp(load_end, tz="UTC"), "load_forecast"] = np.nan
+        df.to_parquet(path)
+        return df
+
+    def test_short_feed_is_recorded_in_state_for_the_commit_subject(
+        self, tmp_path, hmac_key_env
+    ):
+        parquet = tmp_path / "history.parquet"
+        self._write_parquet(parquet, "2026-08-31 21:00", "2026-08-30 21:00")
+
+        state = run_shadow_update(
+            parquet_path=parquet,
+            shadow_dir=tmp_path / "shadow",
+            forecast_out=tmp_path / "forecast.json",
+        )
+
+        assert state["t0_held_back_hours"] == 24.0
+        assert "load_forecast" in state["t0_short_feeds"]
+        # and the anchor really is the held-back one
+        assert state["last_t0"].startswith("2026-08-30T21:00")
+
+    def test_matched_feeds_record_no_hold_back(self, tmp_path, hmac_key_env):
+        parquet = tmp_path / "history.parquet"
+        self._write_parquet(parquet, "2026-08-31 21:00", "2026-08-31 21:00")
+
+        state = run_shadow_update(
+            parquet_path=parquet,
+            shadow_dir=tmp_path / "shadow",
+            forecast_out=tmp_path / "forecast.json",
+        )
+
+        # A clean run must leave the marker OFF, or it fires every night and
+        # the alert stops meaning anything.
+        assert state["t0_held_back_hours"] == 0.0
+        assert state["t0_short_feeds"] == []
+        assert state["last_t0"].startswith("2026-08-31T21:00")
