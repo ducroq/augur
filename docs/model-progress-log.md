@@ -16,7 +16,7 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 | 08-26 16:44 | 46h | 48h |
 | **08-30 19:02** | **48h** | **24h** |
 
-`load_forecast` halved to 24h while price stayed at 48h. `update_shadow.py` anchored `t0 = parquet["price_eur_mwh"].dropna().index.max()` — the *longest* column — while `predict_72h` needs *all five* feature columns at t0. t0 landed 18h past the end of load. Matched horizons are the only reason this had never fired.
+`load_forecast` halved to 24h while price stayed at 48h. **Corrected 2026-08-31 after the energyDataHub session decrypted the publish**: this was *not* an EDH collector change. The request window was unchanged at 48h and the envelope still declared `end_time 2026-08-31T23:59:59+02:00`; ENTSO-E returned A44 day-ahead prices for 08-31 but not A65 day-ahead load, following a total 503 outage on 08-29 that made EDH's 08-30 run its first success after the gap. The divergence is transient outage residue upstream of EDH. **Augur's exposure, however, was structural and would have fired on any future divergence.** `update_shadow.py` anchored `t0 = parquet["price_eur_mwh"].dropna().index.max()` — the *longest* column — while `predict_72h` needs *all five* feature columns at t0. t0 landed 18h past the end of load. Matched horizons are the only reason this had never fired.
 
 The upstream trigger deserves recording too: EDH's 08-29 publish came at 00:20 UTC, an overnight catch-up that `MIN_PUBLISH_HOUR_UTC=12` correctly refused, so the 08-29 run timed out its gate and ran on stale data with a short price horizon (t0 = 08-29). The 08-30 run then caught up two days at once. The `t0 jumped 2d` alarm fired correctly.
 
