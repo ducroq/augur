@@ -410,6 +410,37 @@ def _normalize_parquet_index(parquet: pd.DataFrame) -> pd.DataFrame:
     return parquet.sort_index()
 
 
+def latest_feasible_t0(
+    parquet: pd.DataFrame, price_t0: pd.Timestamp
+) -> tuple[pd.Timestamp | None, list[str]]:
+    """Last timestamp <= price_t0 that has a COMPLETE feature row.
+
+    Why this is not simply `price_t0`: the parquet's columns do not share a
+    horizon. EDH publishes each feed independently, so `price_eur_mwh` can
+    reach 48h ahead while `load_forecast` reaches only 24h. Anchoring t0 on
+    the price column alone then picks an hour whose feature row is part NaN,
+    and `predict_72h` raises `No clean feature row at t0=...`. That is exactly
+    what killed the 2026-08-30 production run: EDH's load feed halved from 48h
+    to 24h in its 19:02 UTC publish while price stayed at 48h.
+
+    Returns (t0, short_columns) where `short_columns` names the raw parquet
+    columns whose coverage ends before `price_t0` — the upstream diagnostic
+    that says *which* feed truncated. `t0` is None when no clean row exists at
+    all, which is a different and much worse problem than a short feed.
+    """
+    feats = build_features(parquet.loc[parquet.index <= price_t0])
+    clean = feats.dropna().index
+    t0 = clean.max() if len(clean) else None
+
+    short = [
+        col
+        for col in parquet.columns
+        if parquet[col].notna().any()
+        and parquet[col].dropna().index.max() < price_t0
+    ]
+    return t0, short
+
+
 # Expected calendar-day advance of t0 between consecutive runs.
 #
 # Why this guard exists: t0 is `parquet["price_eur_mwh"].dropna().index.max()`,
@@ -496,11 +527,33 @@ def run_shadow_update(
         len(state["pending_predictions"]),
     )
 
-    # 3. Pick t0 = last realised timestamp in parquet
+    # 3. Pick t0 = last timestamp we can actually build a feature row for.
+    #
+    #    NOT simply the last realised price: the feeds have different horizons,
+    #    so the price column can reach a day further than load_forecast, and an
+    #    hour that has a price but no load has an unusable (part-NaN) feature
+    #    row. Holding t0 back to the last complete row degrades the forecast
+    #    horizon by a day; anchoring on price crashes the run and loses the
+    #    vintage outright (2026-08-30). See latest_feasible_t0.
     realized_index = parquet["price_eur_mwh"].dropna().index
     if len(realized_index) == 0:
         raise ValueError("No realised prices in parquet")
-    t0 = realized_index.max()
+    price_t0 = realized_index.max()
+    t0, short_cols = latest_feasible_t0(parquet, price_t0)
+    if t0 is None:
+        raise ValueError(
+            f"No complete feature row anywhere at or before price_t0={price_t0!r}"
+        )
+    if t0 < price_t0:
+        held_back_h = (price_t0 - t0).total_seconds() / 3600
+        logger.warning(
+            "ALARM: t0 held back %.0fh to %s (last price is %s) — short feeds: %s. "
+            "The forecast anchor is behind the price horizon; upstream truncation.",
+            held_back_h,
+            t0,
+            price_t0,
+            ", ".join(short_cols) or "none identified",
+        )
 
     # 3b. Guard: did t0 actually advance one day since the last run?
     t0_advance_days, t0_alarm = classify_t0_advance(state.get("last_t0"), t0)

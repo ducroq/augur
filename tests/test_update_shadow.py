@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from ml.shadow.features_pandas import build_features
 from ml.shadow.lightgbm_quantile import MultiHorizonLightGBMQuantileForecaster
 from ml.shadow.secure_pickle import HMAC_KEY_ENV, sidecar_path
 from ml.shadow.update_shadow import (
@@ -28,6 +29,7 @@ from ml.shadow.update_shadow import (
     classify_t0_advance,
     compute_cqr_q,
     format_forecast_dicts,
+    latest_feasible_t0,
     load_shadow_state,
     run_shadow_update,
     save_shadow_state,
@@ -397,3 +399,106 @@ class TestRunShadowUpdateSmoke:
             shadow_dir / SHADOW_MODEL_FILENAME
         )
         assert hasattr(model, "predict_horizons")
+
+
+class TestLatestFeasibleT0:
+    """t0 must be an hour the model can actually build a feature row for.
+
+    Regression cover for the 2026-08-30 production failure: EDH's load feed
+    halved from 48h to 24h while the price feed stayed at 48h, so
+    `t0 = price.dropna().index.max()` landed on an hour with a part-NaN
+    feature row and `predict_72h` raised, losing the vintage.
+    """
+
+    @staticmethod
+    def _frame(price_end, load_end, start="2026-06-01 00:00"):
+        """Parquet-shaped frame where price and load can end at different hours."""
+        idx = pd.date_range(start, price_end, freq="h", tz="UTC")
+        rng = np.random.default_rng(0)
+        df = pd.DataFrame(
+            {
+                "price_eur_mwh": rng.normal(100, 20, len(idx)),
+                "wind_speed_80m": rng.normal(8, 2, len(idx)),
+                "solar_ghi": rng.uniform(0, 400, len(idx)),
+                "temperature": rng.normal(15, 5, len(idx)),
+                "load_forecast": rng.normal(14000, 1500, len(idx)),
+            },
+            index=idx,
+        )
+        df.index.name = "timestamp_utc"
+        df.loc[df.index > pd.Timestamp(load_end, tz="UTC"), "load_forecast"] = np.nan
+        return df
+
+    def test_matched_horizons_leave_t0_at_the_price_max(self):
+        df = self._frame("2026-08-31 21:00", "2026-08-31 21:00")
+        price_t0 = df["price_eur_mwh"].dropna().index.max()
+        t0, short = latest_feasible_t0(df, price_t0)
+        assert t0 == price_t0
+        assert short == []
+
+    def test_short_load_feed_holds_t0_back_to_the_last_complete_row(self):
+        """The exact 2026-08-30 shape: price to 48h, load to 24h."""
+        df = self._frame("2026-08-31 21:00", "2026-08-30 21:00")
+        price_t0 = df["price_eur_mwh"].dropna().index.max()
+        t0, short = latest_feasible_t0(df, price_t0)
+        assert t0 == pd.Timestamp("2026-08-30 21:00", tz="UTC")
+        assert t0 < price_t0
+        assert short == ["load_forecast"]
+
+    def test_the_held_back_t0_actually_yields_a_usable_feature_row(self):
+        """The point of the fix — predict_72h must stop raising."""
+        df = self._frame("2026-08-31 21:00", "2026-08-30 21:00")
+        price_t0 = df["price_eur_mwh"].dropna().index.max()
+        t0, _ = latest_feasible_t0(df, price_t0)
+        feats = build_features(df.loc[df.index <= t0])
+        assert not feats.loc[[t0]].dropna().empty
+        # and the naive anchor is exactly what used to blow up
+        assert build_features(df.loc[df.index <= price_t0]).loc[[price_t0]].dropna().empty
+
+    def test_every_short_feed_is_named_for_the_upstream_diagnostic(self):
+        df = self._frame("2026-08-31 21:00", "2026-08-30 21:00")
+        df.loc[df.index > pd.Timestamp("2026-08-29 21:00", tz="UTC"), "solar_ghi"] = np.nan
+        price_t0 = df["price_eur_mwh"].dropna().index.max()
+        t0, short = latest_feasible_t0(df, price_t0)
+        assert set(short) == {"load_forecast", "solar_ghi"}
+        # t0 is bounded by the SHORTEST feed, not the first one found
+        assert t0 == pd.Timestamp("2026-08-29 21:00", tz="UTC")
+
+    def test_all_nan_column_is_not_reported_as_short(self):
+        """A column that is empty everywhere is a different problem; do not
+        blame it for truncation or it drowns the real signal."""
+        df = self._frame("2026-08-31 21:00", "2026-08-31 21:00")
+        df["gas_ttf_eur_mwh"] = np.nan
+        price_t0 = df["price_eur_mwh"].dropna().index.max()
+        _, short = latest_feasible_t0(df, price_t0)
+        assert "gas_ttf_eur_mwh" not in short
+
+    def test_no_clean_row_anywhere_returns_none(self):
+        df = self._frame("2026-08-31 21:00", "2026-08-31 21:00")
+        df["load_forecast"] = np.nan
+        price_t0 = df["price_eur_mwh"].dropna().index.max()
+        t0, _ = latest_feasible_t0(df, price_t0)
+        assert t0 is None
+
+    def test_holding_t0_back_can_restore_a_healthy_advance(self):
+        """Scenario-dependent, and deliberately not claimed as a general property.
+
+        Holding t0 back changes what the advance guard sees. WHEN the last
+        complete row happens to sit one day on from the previous run, the guard
+        reads healthy. It does NOT follow that the fix repairs a skipped
+        vintage: on the live 2026-08-31 parquet the held-back anchor is
+        2026-08-31 03:00, still two calendar days on from 08-29, and `t0 jumped
+        2d` fires — correctly, because the 08-30 vintage really was lost. The
+        fix stops the crash; it does not resurrect data."""
+        df = self._frame("2026-08-31 21:00", "2026-08-30 21:00")
+        price_t0 = df["price_eur_mwh"].dropna().index.max()
+        t0, _ = latest_feasible_t0(df, price_t0)
+        advance, alarm = classify_t0_advance("2026-08-29T21:00:00+00:00", t0)
+        assert advance == 1
+        assert alarm is None
+        # the naive anchor is what produced the 2-day jump
+        advance_naive, alarm_naive = classify_t0_advance(
+            "2026-08-29T21:00:00+00:00", price_t0
+        )
+        assert advance_naive == 2
+        assert alarm_naive is not None
