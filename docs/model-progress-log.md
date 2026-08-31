@@ -4,6 +4,37 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
+## 2026-08-31 — Production model down a night: t0 followed the longest feed, not the shortest
+
+**What happened.** The 2026-08-30 nightly run crashed inside `predict_72h` with `No clean feature row at t0=Timestamp('2026-08-31 21:00:00+0000') (NaNs in lags)`. `shadow rc=1/eval rc=skip`. No forecast was written, the dashboard served 2026-08-29's forecast for ~24h, and the 2026-08-30 vintage is permanently lost. `shadow_state.json` was untouched (`last_t0` still `2026-08-29T21:00`) because the crash preceded the state write — nothing was corrupted.
+
+**Root cause: the feeds do not share a horizon, and t0 assumed they did.** EDH publishes each feed independently. Measured across the last ten publishes:
+
+| publish | price | load |
+|---|---|---|
+| 08-20, 08-21, 08-24 16:32, 08-25 | 48h | **48h** |
+| 08-26 16:44 | 46h | 48h |
+| **08-30 19:02** | **48h** | **24h** |
+
+`load_forecast` halved to 24h while price stayed at 48h. `update_shadow.py` anchored `t0 = parquet["price_eur_mwh"].dropna().index.max()` — the *longest* column — while `predict_72h` needs *all five* feature columns at t0. t0 landed 18h past the end of load. Matched horizons are the only reason this had never fired.
+
+The upstream trigger deserves recording too: EDH's 08-29 publish came at 00:20 UTC, an overnight catch-up that `MIN_PUBLISH_HOUR_UTC=12` correctly refused, so the 08-29 run timed out its gate and ran on stale data with a short price horizon (t0 = 08-29). The 08-30 run then caught up two days at once. The `t0 jumped 2d` alarm fired correctly.
+
+**Fix** (`87ed30c`): `latest_feasible_t0` returns the last timestamp at or before `price_t0` with a complete feature row, plus the names of the columns whose coverage ends early, and `run_shadow_update` logs `ALARM: t0 held back Nh ... short feeds: ...`. Verified on the live parquet: anchor moves 08-31 21:00 → **08-31 03:00**, held back 18h, short feeds `load_forecast, wind_gen_forecast_mw, solar_gen_forecast_mw`, feature row clean. Deployed; tonight's run will produce a forecast.
+
+**Three things the fix explicitly does not do**, recorded because each is a tempting misreading:
+1. **It does not recover the 08-30 vintage.** The held-back anchor is still two calendar days on from the last good run, so `t0 jumped 2d` still fires. A test whose name implied otherwise was reworded before it landed. The fix stops the crash; it does not resurrect data.
+2. **It does not touch the feature set.** Dropping `load_forecast` is the obvious move — EXP-018 measured the exogenous trio inert at ±0.4% MAE — and it is exactly what **EXP-018a** decides ~2026-09-07. Letting an incident fix pre-empt a pre-committed experiment would contaminate it. The feature stays.
+3. **It does not fix the upstream truncation**, which is EDH's to restore and is **not yet filed**. The forecast horizon stays short by the hold-back while the feed is short, so the dashboard shows a forecast partly anchored in the past. That is the intended degradation.
+
+**Cost to the September schedule.** One vintage (08-30). EXP-018a needs 14 consecutive vintages from `t0 >= 2026-08-25`; this pushes its earliest date and, with EDH already skipping ~11% of days, makes the "only if no day is missed" caveat materially more binding.
+
+**The alerting, one day old, missed it — and that is the more useful lesson.** See the 2026-08-31 alerting entry in `memory/gotcha-log.md`: `OnFailure=` covers a unit that dies, the heartbeat covers a run that never commits, and this was a third mode — completed, committed, exit 0, `shadow rc=1` in the subject. Coverage had been scoped to the failure that motivated the work instead of to the failure modes the pipeline can express. The heartbeat now reads the commit subject for alarm markers, and the alert email now carries the run log instead of a journal that structurally cannot hold script output (`da57139`, `c9c113e`).
+
+**Tests**: `TestLatestFeasibleT0`, 7 cases. Suite 234 → 241.
+
+---
+
 ## 2026-08-30 (latest) — Failure alerting built: the OnFailure gap, and the larger gap OnFailure cannot see
 
 **Context.** `OnFailure=` alerting on `augur-daily.service` was parked 2026-07-03 as a monitoring nicety. It stopped being one on 2026-08-29: EXP-018a, EXP-021a and EXP-028a are all gated on an *uninterrupted* run of fresh vintages from `t0 >= 2026-08-25`, so a silent freeze no longer costs a day of dashboard data — it costs a week of the September schedule, unrecoverably (there is no backfill; a reconstructed vintage built from fresher exogenous is not comparable with the live ones beside it — augur#14).

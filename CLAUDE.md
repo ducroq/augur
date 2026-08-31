@@ -127,7 +127,7 @@ Client browser (https://energy.jeroenveen.nl):
 | `ml/shadow/lightgbm_quantile.py` | `MultiHorizonLightGBMQuantileForecaster` — 9 LGBM models, horizon-as-feature; `predict(sort=False)` returns raw tau quantiles |
 | `ml/shadow/features_pandas.py` | 24-feature builder for LGBM (price lags, rolling stats, calendar, exogenous, horizon) |
 | `ml/shadow/conformal.py` | Split-conformal CQR band correction (Romano/Patterson/Candès 2019) |
-| `ml/shadow/update_shadow.py` | Nightly LGBM retrain + 72h predict + CQR widen + consumer-pricing fields via `read_arf_surcharge` |
+| `ml/shadow/update_shadow.py` | Nightly LGBM retrain + 72h predict + CQR widen + consumer-pricing fields via `read_arf_surcharge`. **t0 comes from `latest_feasible_t0` (2026-08-31), not `price.index.max()`** — EDH's feeds do not share a horizon (load halved to 24h while price stayed 48h on 08-30 and crashed the run), so the anchor is the last timestamp with a *complete* feature row and the alarm names the short feed. |
 | `ml/shadow/evaluate_shadow.py` | Daily LGBM-vs-ARF metrics, appends to `ml/shadow/eval_log.jsonl` |
 | `ml/shadow/eval_log.jsonl` | Append-only eval log per realised eval day |
 | `ml/shadow/secure_pickle.py` | HMAC-SHA256 sidecar; `save_signed_pickle` / `load_verified_pickle` |
@@ -184,7 +184,7 @@ Client browser (https://energy.jeroenveen.nl):
 | `docs/lightgbm-quantile-shadow-plan.md` | Original shadow plan (historical) |
 | `docs/river-arf-retrospective.md` | ARF retirement narrative + closing addendum on the EXP-014 promotion |
 | `docs/model-progress-log.md` | Dated narrative log of ML pipeline changes |
-| `tests/` | pytest suite — 234 tests (SecureDataHandler, OnlineFeatureBuilder, LGBM forecaster + multi-horizon + secure_pickle + conformal + backtest + update_shadow + evaluate_shadow + slice MAE + archive path + metrics module + **consolidate parsers (test_consolidate.py, 18 tests, 2026-06-10)** + **t0-advance guard (TestClassifyT0Advance, 7 tests, 2026-08-28)** + **EXP-020 fundamentals parsers (20 tests, 2026-08-29)** + **alert-channel credential layer + exit contract (test_notify_email.py, 12 tests, 2026-08-30)**) |
+| `tests/` | pytest suite — 241 tests (SecureDataHandler, OnlineFeatureBuilder, LGBM forecaster + multi-horizon + secure_pickle + conformal + backtest + update_shadow + evaluate_shadow + slice MAE + archive path + metrics module + **consolidate parsers (test_consolidate.py, 18 tests, 2026-06-10)** + **t0-advance guard (TestClassifyT0Advance, 7 tests, 2026-08-28)** + **EXP-020 fundamentals parsers (20 tests, 2026-08-29)** + **alert-channel credential layer + exit contract (test_notify_email.py, 12 tests, 2026-08-30)** + **feasible-t0 selection (TestLatestFeasibleT0, 7 tests, 2026-08-31)**) |
 | `scripts/m4_method_run.py` | M4 verdict runner (historical — pre-EXP-014) |
 | `scripts/exp012_evaluate.py` | EXP-012/013 paired-data evaluation (vintage-corrected) |
 | `scripts/exp014_evaluate_promotion.py` | EXP-014 promotion-criterion runner |
