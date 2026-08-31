@@ -25,7 +25,7 @@ The upstream trigger deserves recording too: EDH's 08-29 publish came at 00:20 U
 **Three things the fix explicitly does not do**, recorded because each is a tempting misreading:
 1. **It does not recover the 08-30 vintage.** The held-back anchor is still two calendar days on from the last good run, so `t0 jumped 2d` still fires. A test whose name implied otherwise was reworded before it landed. The fix stops the crash; it does not resurrect data.
 2. **It does not touch the feature set.** Dropping `load_forecast` is the obvious move — EXP-018 measured the exogenous trio inert at ±0.4% MAE — and it is exactly what **EXP-018a** decides ~2026-09-07. Letting an incident fix pre-empt a pre-committed experiment would contaminate it. The feature stays.
-3. **It does not fix the upstream truncation**, which is EDH's to restore and is **not yet filed**. The forecast horizon stays short by the hold-back while the feed is short, so the dashboard shows a forecast partly anchored in the past. That is the intended degradation.
+3. **It does not fix the upstream truncation**, which is EDH's to restore; filed as **energydatahub#51** with the publish-by-publish horizon table (caveated: one publish observed, may be transient). The forecast horizon stays short by the hold-back while the feed is short, so the dashboard shows a forecast partly anchored in the past. That is the intended degradation.
 
 **Cost to the September schedule.** One vintage (08-30). EXP-018a needs 14 consecutive vintages from `t0 >= 2026-08-25`; this pushes its earliest date and, with EDH already skipping ~11% of days, makes the "only if no day is missed" caveat materially more binding.
 
