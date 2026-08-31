@@ -16,8 +16,15 @@ WorkingDirectory=/home/jeroen/local_dev/augur
 # be from the current UTC date.
 ExecStartPre=/home/jeroen/local_dev/augur/scripts/wait_for_edh.sh
 
-# Main job: the existing script, untouched. Appends to its existing logfile
-# AND lands in the journal (systemd captures stdout/stderr by default).
+# Main job: the existing script, untouched.
+#
+# NOTE (corrected 2026-08-31): the StandardOutput/StandardError= lines below
+# redirect to the logfile and thereby OVERRIDE systemd's default journal
+# capture. This comment previously claimed output lands in the logfile "AND"
+# the journal; it does not. `journalctl -u augur-daily.service` carries only
+# systemd's own lifecycle lines — start, exit code, timeout — and never a byte
+# of script output. scripts/alert_failure.sh was written against the wrong
+# claim and shipped a diagnostics-free alert email once before it was caught.
 ExecStart=/home/jeroen/local_dev/augur/scripts/daily_update.sh
 
 StandardOutput=append:/home/jeroen/local_dev/augur/logs/daily_update.log
