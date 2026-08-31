@@ -8,7 +8,7 @@
 | File | When to load | Key insight |
 |------|-------------|-------------|
 | `memory/gotcha-log.md` | Stuck or debugging | Problem-fix archive |
-| `memory/data-formats.md` | Working with energyDataHub data | Schema v2.1 structure, units, timezone conventions |
+| `memory/data-formats.md` | Working with energyDataHub data | **Schema v2.2 envelope** (`{metadata, data:{...}}`, since 2026-06-07) wrapping the v2.1 inner shape; units, timezone conventions; and the rule that coverage is never read from metadata |
 | `memory/ml-decisions.md` | ML architecture choices | Historical XGBoost plan + River ARF era; superseded by ADR-006 |
 
 ## Current State
