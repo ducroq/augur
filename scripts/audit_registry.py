@@ -44,7 +44,15 @@ REQUIRED = ["id", "date", "title", "hypothesis", "model", "branch", "commits",
             "decision_rationale", "artifacts", "references"]
 DECISIONS = {"kept", "parked", "rejected", "rolled_back", "superseded"}
 DW_KEYS = {"train_start", "train_end", "holdout_start", "holdout_end"}
-PRECOMMIT_REV = "4024420"
+PRECOMMIT_REV = "4024420"          # the 2026-08-29 batch (EXP-023..029)
+# Entries pre-committed AFTER that batch, each pinned to the revision where its
+# Method first landed. Without this the check compares a later entry against an
+# empty string at PRECOMMIT_REV and fails forever — i.e. it would punish adding
+# a new pre-commitment, the exact behaviour it exists to encourage. Added
+# 2026-08-31 when EXP-034 hit precisely that.
+PRECOMMIT_REV_BY_ID = {
+    "EXP-034": "eedf7b2",
+}
 BACKLOG = "docs/experiment-backlog.md"
 
 # Which artifacts back which entry's numbers. Entries absent from this map are
@@ -177,16 +185,27 @@ def main() -> int:
     # 5 PRECOMMIT
     precommit_ok = True
     try:
-        old = subprocess.run(["git", "show", f"{PRECOMMIT_REV}:{BACKLOG}"],
-                             capture_output=True, text=True, check=True).stdout
-        new = subprocess.run(["git", "show", f"HEAD:{BACKLOG}"],
-                             capture_output=True, text=True, check=True).stdout
-        a, b = method_sections(old), method_sections(new)
-        for k in sorted(set(a) | set(b)):
-            ha = hashlib.sha256(a.get(k, "").encode()).hexdigest()
+        def sections_at(rev):
+            return method_sections(subprocess.run(
+                ["git", "show", f"{rev}:{BACKLOG}"],
+                capture_output=True, text=True, check=True).stdout)
+
+        cache = {PRECOMMIT_REV: sections_at(PRECOMMIT_REV)}
+        b = sections_at("HEAD")
+        for k in sorted(set(cache[PRECOMMIT_REV]) | set(b)):
+            rev = PRECOMMIT_REV_BY_ID.get(k, PRECOMMIT_REV)
+            if rev not in cache:
+                cache[rev] = sections_at(rev)
+            baseline = cache[rev].get(k, "")
+            if not baseline:
+                fails.append(f"{k}: no Method body at its pre-commit {rev} — "
+                             f"pin it in PRECOMMIT_REV_BY_ID, or it is not pre-committed")
+                precommit_ok = False
+                continue
+            ha = hashlib.sha256(baseline.encode()).hexdigest()
             hb = hashlib.sha256(b.get(k, "").encode()).hexdigest()
             if ha != hb:
-                fails.append(f"{k}: Method body EDITED since pre-commit {PRECOMMIT_REV}")
+                fails.append(f"{k}: Method body EDITED since pre-commit {rev}")
                 precommit_ok = False
     except subprocess.CalledProcessError:
         warns.append(f"could not read {BACKLOG} at {PRECOMMIT_REV}; pre-commit check skipped")

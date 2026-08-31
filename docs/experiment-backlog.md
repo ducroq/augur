@@ -260,8 +260,6 @@ Stating it this way makes the pre-screen honest: **this entry expects EXP-028 to
 
 **Gates.** Advisory rather than decisive: R² ≥0.05 **or** ΔMAE ≥2% promotes EXP-028 ahead of EXP-026; below both, EXP-028 drops to lowest priority but stays open on Alternative 3.
 
----
-
 ## EXP-034 — A *leading* fragility indicator breaks the ceiling that a lagging one cannot
 
 **Written 2026-08-31. Not part of the 2026-08-29 batch.** Descends from EXP-015/016, not from EXP-021/022.
