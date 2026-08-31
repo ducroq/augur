@@ -203,7 +203,7 @@ Client browser (https://energy.jeroenveen.nl):
 | `scripts/exp019_stationary_ablation.py` | EXP-019 anchor-relative spread variants (imports the EXP-018 harness) |
 | `docs/experiment-results.md` | **Generated** readable digest of all experiments — summary table + per-experiment sections |
 | `scripts/render_results.py` | Renders the digest from the registry; `--check` fails if stale |
-| `scripts/audit_registry.py` | Registry auditor — 5 checks incl. number-traceability and pre-commit immutability |
+| `scripts/audit_registry.py` | Registry auditor — 5 checks incl. number-traceability and pre-commit immutability. Check 5 resolves each backlog entry to **its own** pre-commit revision via `PRECOMMIT_REV_BY_ID` (2026-08-31); pinning all entries to one global revision made adding a new pre-commitment fail forever against an empty baseline |
 | `scripts/posthoc_diagnostics.py` | Regenerates registry numbers originally computed ad-hoc (EXP-022/025 diagnostics.json) |
 | `scripts/exp024_lag_richness.py` | EXP-024 lag richness + the dimensionality-matched derived control |
 | `scripts/exp027_finetune_dissociation.py` | EXP-027 fine-tuning trajectory (train ≤2026-02-28, eval t0 ≥2026-03-01) |
