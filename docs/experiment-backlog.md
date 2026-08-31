@@ -27,6 +27,9 @@ Different from its neighbours:
 | 5 | EXP-028 Chronos-2 with covariates | GPU min | jwasys | **RUN 2026-08-29 — `parked`**, +8.3% QS, Augur's first positive exogenous result |
 | 6 | EXP-026 model-size ladder | GPU min + bench | jwasys | **RUN 2026-08-29 — `kept`**; latency half completed by proxy 2026-08-30 (EXP-030): base 0.52s, ~115× headroom |
 | 7 | EXP-027 fine-tuning dissociation | GPU hours | jwasys | **RUN 2026-08-30 — `rejected`**; both halves degrade, zero-shot is the deployment mode |
+| 8 | EXP-034 fragility-conditioned bands | minutes | CPU | **Added 2026-08-31, not run.** Queued *after* EXP-018a Stage 1 — see its own sequencing note |
+
+**Entry 8 was added 2026-08-31 and is not part of the 2026-08-29 batch** — it descends from the EXP-015/016 calibration arc rather than from EXP-021/022, and its Method was fixed on 2026-08-31 before any data was seen. The seven-entry framing below refers to the original batch.
 
 **Run status: ALL SEVEN EXECUTED (2026-08-29 overnight + 2026-08-30).** Originally five of seven executed on `b650-gpu`, with environment parity verified bit-identically against situla before any result was trusted. Results are in `experiments/registry.jsonl` (EXP-023/025/026/028/029) and `docs/model-progress-log.md`. **EXP-024 and EXP-027 have since been run (2026-08-30), both `rejected`.** Every Method below is preserved exactly as written on 2026-08-29, before any data was seen; none was edited after a result landed. The entries below are kept verbatim as written on 2026-08-29 *before* any data was seen; where a Method's cost estimate proved wrong (EXP-023 predicted ~150 usable vintages, actual 95) that is recorded in the registry rather than corrected here, because editing a pre-commit after the fact is exactly what the promotion rule forbids.
 
@@ -256,3 +259,54 @@ Stating it this way makes the pre-screen honest: **this entry expects EXP-028 to
 3. Apply the fitted correction to the FM median on the held-out vintages and report ΔMAE and ΔQS against the uncorrected FM.
 
 **Gates.** Advisory rather than decisive: R² ≥0.05 **or** ΔMAE ≥2% promotes EXP-028 ahead of EXP-026; below both, EXP-028 drops to lowest priority but stays open on Alternative 3.
+
+---
+
+## EXP-034 — A *leading* fragility indicator breaks the ceiling that a lagging one cannot
+
+**Written 2026-08-31. Not part of the 2026-08-29 batch.** Descends from EXP-015/016, not from EXP-021/022.
+
+**Sequencing — read before running.** Queue **after EXP-018a Stage 1**. The replay consumes `calibration_history` raws produced by the *production* model, so if Stage 1 changes `FEATURE_COLUMNS` the historical raws come from a superseded model. A result obtained before Stage 1 is a mechanism test, not a deployable one, and would need re-confirming on whichever base Stage 1 leaves standing. Runs offline on the existing window and consumes **no fresh vintages**.
+
+**Question.** EXP-016 tested per-side ACI and parked it: it repairs post-shift days but hits a **γ-independent ~0.85 ceiling caused by first-shift-day misses**, and trips the Winkler guardrail. Is that ceiling a property of *adaptive conformal* specifically, or of *lagging* signals in general?
+
+**Mechanism, which is the whole reason this entry exists.** ACI adapts using past coverage errors. It is therefore structurally incapable of reacting on the day a shift begins — no value of γ changes that, which is exactly what "γ-independent" reports. Every calibration attempt so far (EXP-015 static per-side, EXP-016 ACI) reads only the model's own realised misses. If a signal available **at t0, before the price moves** carries information about conditional *variance*, it can widen on day zero rather than day one, and that is the only part of the ceiling that has never been tested.
+
+Residual load — `load_forecast − wind_gen_forecast_mw − solar_gen_forecast_mw` — is the standard scarcity proxy in power markets, all three columns are *forecasts* already in the parquet, and its price response is famously **convex**: it barely moves the mean until it moves it enormously.
+
+**This is not a re-run of EXP-020, and the distinction is the load-bearing claim.** EXP-020 refuted these columns **as level features for the conditional mean**, four times over with EXP-019/024/029. It says nothing about them **as conditioning variables for the conditional variance**. A variable that is inert in the first moment and informative in the tail is precisely the shape the standing "levels hurt" conclusion does not cover — and if that turns out to be wishful, this experiment is how we find out cheaply.
+
+**Position (provisional).** Conditioning the CQR quantile on a residual-load scarcity z-score lifts **upper-side coverage on shift-onset days from ~0.77 to ≥0.85**, with pooled Winkler **not more than 5% worse** than production, **and** the gain is not reproducible by a uniform widening of the same average band width.
+
+**Definitions, fixed here before any data is seen** (this is the part a post-hoc version would tune):
+
+- **Scarcity score** at each t0 and horizon: z-score of residual load against the trailing **56-day** distribution *at the same hour-of-day*, computed from forecast columns only.
+- **Shift-onset day**: a day whose realised daily-mean price differs from the trailing 7-day mean by more than **1.5σ** of the trailing 28-day daily-mean distribution. First qualifying day of a run only — subsequent days are "post-shift", which EXP-016 already handles.
+- **Conditioning rule**: a single scalar multiplier on the per-side CQR quantile, monotone in the scarcity z, with **one** free parameter fitted on the first 70% of vintages and evaluated on the last 30% — temporal split, never random.
+
+**Alternatives (falsification signals).**
+
+1. **Inert in the variance too.** EXP-020's conclusion extends to the second moment. **Signal:** onset-day upper coverage improves <0.03, or improves but is matched by the uniform-width control. Then the exogenous columns are closed for calibration as well as for the mean, which is a genuinely useful negative — it would make the fifth independent confirmation and should be recorded as such.
+2. **It works, but only as a price proxy.** Residual load may be standing in for price level or recent volatility, adding nothing over a signal derived from price alone. **Signal:** an EWMA-of-price-volatility baseline captures the same onset-day gain. Then the finding is *"conditional variance modelling helps"*, not *"exogenous helps"* — still worth having, but a different and weaker claim, and it should be re-titled rather than reported as an exogenous win.
+3. **Underpowered.** **Signal:** fewer than **20** shift-onset days in the window. Then report as underpowered and say so; do not read a null from it. Pre-committed because onset days are rare by construction and the temptation to relax the 1.5σ definition after counting them is exactly what this section exists to prevent.
+
+**Method (pre-committed 2026-08-31).** Offline replay, no new model, no GPU. Extend the harness in `scripts/exp015_replay_cqr.py` / `exp016_replay_aci.py`, which already read `p10_raw/p50_raw/p90_raw` from `shadow_state.json:calibration_history`.
+
+1. Build the scarcity z-series from the parquet forecast columns; join to `calibration_history` on `timestamp_utc`.
+2. Label shift-onset days by the definition above; report the count **before** looking at any coverage number.
+3. Score **three** arms on the held-out 30%:
+   - **A — production CQR** (baseline, as shipped).
+   - **B — uniform widening**, scaled so its *mean band width equals arm C's*. This is the control, and it is not optional: without it the experiment measures "wider bands cover more", which is the EXP-024 matched-count lesson applied to width instead of feature count.
+   - **C — fragility-conditioned CQR** per the conditioning rule.
+4. Report for each arm: upper / lower / band coverage, pooled and restricted to onset days; Winkler; mean width; and the per-side breakdown, since augur#19's deficit has moved sides once already.
+
+**Gates.** PROMOTE to a live shadow trial only if **all three** hold:
+- onset-day upper-side coverage ≥ **0.85** in arm C;
+- pooled Winkler in arm C not more than **5%** worse than arm A;
+- arm B does **not** reach the first bar — i.e. the gain comes from *conditioning*, not from width.
+
+Any one failing parks it with the reason recorded. Arm B reaching the bar is a `rejected`, not a `parked`.
+
+**Cost.** Minutes of CPU on the existing window. No GPU, no fresh vintages, no production path touched.
+
+**Standing caution.** EXP-029 is the cautionary twin: a cheap, well-motivated pre-screen that was rejected as a gate because it would have vetoed a true positive. Fragility indicators are the same shape — trivial to construct, hard to validate. The matched-width control in arm B is the specific defence against believing this one too early.

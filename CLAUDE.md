@@ -184,7 +184,7 @@ Client browser (https://energy.jeroenveen.nl):
 | `docs/decisions/007-model-promotion-method.md` | ADR-007 — how we decide what to change |
 | `docs/decisions/004-river-online-learning-architecture.md` | ADR-004 — superseded by ADR-006 |
 | `docs/hypothesis-log.md` | Provisional positions awaiting evidence; iteration-4/5 EXP-014 entries resolved 2026-05-29 |
-| `docs/experiment-backlog.md` | Five designed-but-unrun experiments (EXP-023..027), each an ADR-007 pre-commit with gates fixed 2026-08-29; all run on the existing 260-vintage window and consume no fresh vintages |
+| `docs/experiment-backlog.md` | ADR-007 pre-commits. The 2026-08-29 batch (EXP-023..029) is **all run**; the one open entry is **EXP-034** (fragility-conditioned bands, added 2026-08-31, queued after EXP-018a Stage 1). All run on the existing window and consume no fresh vintages |
 | `docs/articles/m4-metric-redesign-story.md` | Case-study article — five-iteration arc from M4 park to EXP-014 promotion (~4960 words) |
 | `docs/literature.md` | Topic-indexed bibliography |
 | `docs/metric-redesign-literature-review.md` | Focused EPF metric review (input to EXP-012) |
