@@ -194,7 +194,52 @@ Position confirmed if all three hold. (1) failing means the guard has a blind sp
 
 **Domain:** daily pipeline reliability, `wait_for_edh.sh`, `update_shadow.py`, augur#14, augur#25, EDH publish reliability.
 
-**Status:** open — deployed to sadalsuud 2026-08-28, first observation is the 2026-08-28 18:30 CEST run.
+**Addendum [2026-08-31] — the Position is falsified on both halves, 11 days before its own review date.**
+
+The 2026-08-30 run lost a vintage. What the Position claimed cannot happen, happened:
+
+1. **"Every vintage is either produced or loudly announced as missing" — half true, and the half that failed is the diagnostic half.** The day *was* announced, as `shadow rc=1/eval rc=skip` in the commit subject. But **no `[ALARM: t0 ...]` marker appeared at all**, because `T0_MARKER` in `daily_update.sh` is computed inside `if [ "${SHADOW_UPDATE_RC:-1}" -eq 0 ]`. That gate is deliberate and its comment is right — on a failed run `shadow_state.json` still holds the previous run's values, so an ungated marker would re-fire a stale alarm. The consequence was not anticipated: **a crash both loses the vintage and suppresses the alarm that would name why.** Criterion (1) of the Method fails as written — the gap in `calibration_history` has no matching t0 marker.
+2. **"The residual failure rate is then EDH's, not ours" — refuted.** The loss was not an EDH skip. EDH published normally at 19:02 UTC. The vintage died on an **Augur-side structural defect**: `t0 = parquet["price_eur_mwh"].dropna().index.max()` followed the longest column while `predict_72h` requires all five feature columns, so when ENTSO-E returned A44 day-ahead prices for 08-31 but not A65 day-ahead load, the feature row was part-NaN and the run raised. The residual was ours, in a component this Position had just declared closed.
+
+**What none of the three Alternatives predicted.** All three are about *publish timing* — a mis-set floor, a narrower race, a systematic skip. The actual mechanism was **feed-horizon divergence inside a publish that arrived exactly on time**. The Position's blind spot was treating "did the data arrive" as the whole question and never asking "does the data that arrived span what the model needs".
+
+**Shipped in response** (2026-08-31): `latest_feasible_t0` (`87ed30c`) anchors t0 on the last *complete* feature row and names the short feeds; `1bfd728` persists `t0_held_back_hours`/`t0_short_feeds` and emits `[ALARM: t0 held back Nh — <feeds> short]`, because the first version of that fix only *logged* the hold-back — repeating this entry's own lesson inside its own remedy. Alerting gained a commit-subject marker reader (`da57139`) after `shadow rc=1` sat unread for ~11 hours.
+
+**Not changed, and flagged as an open judgement call:** the `SHADOW_UPDATE_RC -eq 0` gate on `T0_MARKER`. Ungating it trades a suppressed-alarm blind spot for stale-value false alarms. The heartbeat's marker reader now catches `rc=1` independently, which covers the *detection* need without touching the gate — so this is recorded, not fixed.
+
+**Revised Method for the 2026-09-11 review.** Criteria (2) and (3) stand. Criterion (1) is replaced by: *every gap in `calibration_history` has a same-day commit subject carrying **either** a `[ALARM: t0 ...]` marker **or** a non-zero step rc* — the honest version of "loudly announced", which the original conflated with "correctly diagnosed". Add (4): *no `[ALARM: t0 held back Nh]` appears on a day when both feeds were full-length*, which would mean the new anchor is over-triggering.
+
+**Status:** open — Position falsified 2026-08-31 and rewritten above; the 14-run window restarts from the 2026-08-31 run on `87ed30c`/`1bfd728`. Original deployment 2026-08-28.
+
+### [2026-08-31] The load/price horizon divergence is transient ENTSO-E outage residue, not a new steady state
+
+**Position (provisional):** The 2026-08-30 publish in which EDH's `load_forecast` spanned 24h while `energy_price_forecast` spanned 48h is **one-off outage residue and will not recur**. Basis: the energyDataHub session decrypted the committed publish (`8e5cc52`) and found EDH's request window unchanged at 48h with the envelope still declaring `end_time 2026-08-31T23:59:59+02:00` — so the collector asked for two days and ENTSO-E returned A44 day-ahead prices for 08-31 but not A65 day-ahead load. 2026-08-29 was a total ENTSO-E 503 at EDH (run `33269881393` published nothing), and the 08-30 18:58 run was the first success after it. Every normal-hour publish sampled before that — 08-20, 08-21, 08-24 16:32, 08-25, 08-26 — carried both feeds at 192 points. Filed as energydatahub#51.
+
+**Alternatives (failure-mode signals):**
+
+1. **It is a new steady state.** ENTSO-E's A65 day-ahead load publication may have moved to a 24h horizon permanently, or EDH's window may drift. **Signal:** three or more consecutive normal-hour publishes with price 192 / load 96. Then the `[ALARM: t0 held back Nh]` marker fires nightly forever, the forecast permanently loses ~24h of reach, and the response is a real decision rather than a wait — either accept the shorter horizon, or reconsider whether `load_forecast` earns its place at all (which is **EXP-018a's** question, so it must not be pre-empted by this).
+2. **It is intermittent rather than transient.** Recurs every few weeks tied to ENTSO-E incidents. **Signal:** the marker fires, clears, and fires again within a month with a full-length publish in between. Then the hold-back mechanism is doing exactly its job and nothing more is needed — but the nightly heartbeat email becomes noise on those days, and the marker should probably alarm only after N consecutive days rather than on the first.
+3. **A different feed truncates next.** The mechanism is not specific to load — any feed whose delivered span can differ from its requested span has it. **Signal:** `t0_short_feeds` names a column other than `load_forecast`/`wind_gen_forecast_mw`/`solar_gen_forecast_mw`. Then the fix generalised correctly and the finding is upstream-wide, worth telling EDH for their horizon-coverage check.
+
+**Method:** over the **next 7 daily runs** (2026-08-31 → ≈2026-09-07), from the daily commit subjects and `ml/models/shadow/shadow_state.json`:
+
+```
+# (1) Count days with t0_held_back_hours > 0.
+# (2) For each, record t0_short_feeds and whether EDH published at a normal hour.
+# (3) Cross-check against energydatahub#51's status and EDH's own publish record.
+```
+
+Position confirmed if the hold-back appears on ≤1 of the 7 days and `#51` is closed as non-reproducing. ≥3 consecutive days confirms Alternative 1. A clear-then-recur pattern confirms Alternative 2.
+
+**Cost of being wrong is asymmetric and worth stating:** if the Position holds, doing nothing is correct and the marker self-clears. If Alternative 1 holds and we assume the Position, we run a permanently degraded forecast while a nightly alarm trains us to ignore it — the classic alert-fatigue path. So the failure mode to watch for is *not noticing the marker stopped being informative*.
+
+**Revisit trigger:** 7 daily runs, ≈2026-09-07 — the same date EXP-018a Stage 1 unblocks, so resolve this first: EXP-018a's verdict on `load_forecast` is cleaner if we know whether the column is reliably present. Surface in `/curate`.
+
+**Review by:** 2026-09-30.
+
+**Domain:** upstream data reliability, `update_shadow.py:latest_feasible_t0`, `ml/data/consolidate.py`, energydatahub#51, energydatahub#33, EXP-018a.
+
+**Status:** open — Augur-side fix deployed 2026-08-31; this hypothesis is about the upstream behaviour, not the fix.
 
 ### [2026-08-25] EXP-018a: removing the six rolling-stat features (and the three exogenous) beats the 24-feature production set out of sample
 

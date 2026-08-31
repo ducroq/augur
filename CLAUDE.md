@@ -67,6 +67,15 @@ sadalsuud (systemd timer: 16:30 UTC start + wait_for_edh.sh gate, fires after ED
     │           so the run always sees fresh exogenous data. Migrated from `45 16 * * *` cron
     │           on 2026-06-08/09 (augur#12).
     │
+    │ Alerting (2026-08-30/31): three layers, each blind to the others' cases.
+    │           OnFailure=augur-alert@ -> alert_failure.sh   when the UNIT DIES
+    │           augur-heartbeat.timer 06:00 UTC              when NO COMMIT lands in >30h,
+    │                                                        the timer is off, or commits are unpushed
+    │           ...same heartbeat greps the commit SUBJECT   for soft failures that exit 0:
+    │                                                        [ALARM: ...], ARF FAIL, rc=N, rc=skip
+    │           Channel: FluxusSource secrets.ini Gmail via notify_email.py. No new service.
+    │           Blind spot by design: it runs ON sadalsuud, so it cannot report sadalsuud down.
+    │
     ▼
 Augur Netlify build
     ├── decrypt_data_cached.py --force   → static/data/*.json (10 files)
