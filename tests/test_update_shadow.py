@@ -83,6 +83,61 @@ class TestBackfillRealized:
         assert realized == []
         assert len(still_pending) == 1
 
+    def test_fallback_sourced_hour_is_withheld_from_scoring(self):
+        """A price from epex/elspot is not the series the forecast is scored against.
+
+        backfill_realized is the single point where realised prices enter, so the
+        gate here is what keeps calibration_history, the CQR band width and every
+        eval_log row measuring against ENTSO-E only.
+        """
+        pending = [
+            _pending_entry("2026-08-27T00:00:00+00:00", "2026-08-27"),
+            _pending_entry("2026-08-28T00:00:00+00:00", "2026-08-28"),
+        ]
+        parquet = pd.DataFrame(
+            {"price_eur_mwh": [120.0, 90.0], "price_is_entsoe": [0.0, 1.0]},
+            index=pd.DatetimeIndex(
+                ["2026-08-27T00:00:00+00:00", "2026-08-28T00:00:00+00:00"], tz="UTC"
+            ),
+        )
+        realized, still_pending = backfill_realized(pending, parquet)
+        assert len(realized) == 1
+        assert realized[0]["realized"] == 90.0
+        assert len(still_pending) == 1, "the fallback hour stays pending, unscored"
+        assert still_pending[0]["eval_day"] == "2026-08-27"
+
+    def test_partial_hour_provenance_is_withheld(self):
+        """0.5 means only half the hour was ENTSO-E — not good enough to score."""
+        pending = [_pending_entry("2026-08-27T00:00:00+00:00", "2026-08-27")]
+        parquet = pd.DataFrame(
+            {"price_eur_mwh": [120.0], "price_is_entsoe": [0.5]},
+            index=pd.DatetimeIndex(["2026-08-27T00:00:00+00:00"], tz="UTC"),
+        )
+        realized, still_pending = backfill_realized(pending, parquet)
+        assert realized == []
+        assert len(still_pending) == 1
+
+    def test_unknown_provenance_is_withheld_not_assumed_entsoe(self):
+        pending = [_pending_entry("2026-08-27T00:00:00+00:00", "2026-08-27")]
+        parquet = pd.DataFrame(
+            {"price_eur_mwh": [120.0], "price_is_entsoe": [float("nan")]},
+            index=pd.DatetimeIndex(["2026-08-27T00:00:00+00:00"], tz="UTC"),
+        )
+        realized, still_pending = backfill_realized(pending, parquet)
+        assert realized == []
+        assert len(still_pending) == 1
+
+    def test_parquet_without_provenance_column_scores_everything(self):
+        """Backward compatible: an older parquet must not silently score nothing."""
+        pending = [_pending_entry("2026-08-27T00:00:00+00:00", "2026-08-27")]
+        parquet = pd.DataFrame(
+            {"price_eur_mwh": [120.0]},
+            index=pd.DatetimeIndex(["2026-08-27T00:00:00+00:00"], tz="UTC"),
+        )
+        realized, still_pending = backfill_realized(pending, parquet)
+        assert len(realized) == 1
+        assert still_pending == []
+
     def test_empty_pending(self):
         parquet = pd.DataFrame(
             {"price_eur_mwh": [40.0]},

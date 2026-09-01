@@ -104,20 +104,66 @@ def save_shadow_state(state: dict, path: Path) -> None:
 # ---------- pending / calibration management --------------------------------
 
 
+# Provenance column written by ml/data/consolidate.py: 1.0 where ENTSO-E supplied
+# the hour's price, 0.0 where a fallback (epex/elspot) did.
+PROVENANCE_COLUMN = "price_is_entsoe"
+
+
 def backfill_realized(
     pending: list[dict], parquet: pd.DataFrame
 ) -> tuple[list[dict], list[dict]]:
     """Return (newly_realized_rows, still_pending) by pairing pending against the parquet.
 
-    A pending entry is "realized" if its ``timestamp_utc`` is now present in the
-    parquet ``price_eur_mwh`` column (non-NaN).
+    A pending entry is "realized" if its ``timestamp_utc`` is present in the
+    parquet ``price_eur_mwh`` column (non-NaN) AND that hour's price came from
+    ENTSO-E.
+
+    Why the provenance gate (2026-09-01): this function is the single point where
+    realised prices enter the system -- calibration_history, the CQR band width
+    and, through calibration_history, every eval_log row all descend from it. The
+    fallback sources are not the same series as the target: epex runs +16.13 mean
+    / +10.72 median EUR/MWh against entsoe over 7886 matched hours. Scoring a
+    forecast against one is measuring against the wrong ground truth. It had
+    reached 46 of 477 rows (9.6%) of the live CQR window and 21 of the 24 hours of
+    eval day 2026-08-27, whose logged MAE of 14.679 is smaller than the bias in
+    its own ground truth.
+
+    Withheld entries simply stay pending and age out via trim_to_recent_days, so
+    a day that never accumulates enough ENTSO-E hours is left UNEVALUATED rather
+    than evaluated wrongly -- find_eligible_eval_days needs
+    MIN_HOURS_FOR_FULL_DAY of them. That is the intended outcome: no row beats a
+    misleading one, the same reasoning that declined reconstructed vintages in
+    augur#14.
     """
     if not pending:
         return [], []
     if parquet.empty or "price_eur_mwh" not in parquet.columns:
         return [], list(pending)
+    prices = parquet["price_eur_mwh"].dropna()
+    if PROVENANCE_COLUMN in parquet.columns:
+        provenance = parquet[PROVENANCE_COLUMN].reindex(prices.index)
+        # NaN provenance fails this comparison and is therefore withheld:
+        # unknown origin is treated as not-ENTSO-E, never as ENTSO-E.
+        is_entsoe = provenance >= 1.0
+        withheld = int((~is_entsoe).sum())
+        if withheld:
+            logger.warning(
+                "Withholding %d realised hour(s) from scoring: price came from a "
+                "fallback source, not ENTSO-E (%s < 1.0). Affected day(s): %s",
+                withheld,
+                PROVENANCE_COLUMN,
+                ", ".join(sorted({str(ts.date()) for ts in prices.index[~is_entsoe]})),
+            )
+        prices = prices[is_entsoe]
+    else:
+        logger.warning(
+            "Parquet has no %s column — cannot separate ENTSO-E prices from "
+            "fallback ones, so every realised hour is being scored. Regenerate "
+            "the parquet with the current ml/data/consolidate.py.",
+            PROVENANCE_COLUMN,
+        )
     realized_lookup: dict[str, float] = {}
-    for ts, price in parquet["price_eur_mwh"].dropna().items():
+    for ts, price in prices.items():
         ts_norm = pd.Timestamp(ts)
         if ts_norm.tzinfo is None:
             ts_norm = ts_norm.tz_localize("UTC")
