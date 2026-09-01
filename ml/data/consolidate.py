@@ -103,8 +103,16 @@ def _unwrap_v22_envelope(data: dict) -> dict:
 # hours entsoe misses it supplies the target and discards the accurate fallback.
 #
 # Why it has not simply been deleted. entsoe has hourly holes even inside files
-# that contain it, so 93 of 8013 parquet hours (1.16%) are epex-sourced --
-# including 21 of the 24 hours of 2026-08-27. Removing epex sends those hours to
+# that contain it, so 141 of 8013 parquet hours (1.76%) resolve to a fallback --
+# including 21 of the 24 hours of 2026-08-27. (An earlier pass said 93/1.16%; it
+# asked whether ANY file ever carried entsoe for an hour, but the combine loop
+# lets the LAST file to write a timestamp win, so the question is whether the
+# winning write was entsoe. 141 is that number, and it is what price_is_entsoe
+# reports.) The affected days come in a telling shape -- 1-2 hours on one day
+# then 21-23 on the next: 10-20/21, 02-15/16, 03-01/02, 06-29/30 + 07-01,
+# 08-26/27. That is an EDH missed-publish signature (energyDataHub#50), the same
+# root cause as the lost vintages, not a separate ENTSO-E fault.
+# Removing epex sends those hours to
 # NaN, and `dropna(subset=["price_eur_mwh"])` below then deletes the ROWS. But
 # ml/shadow/features_pandas.py builds lags with a POSITIONAL
 # `df["price_eur_mwh"].shift(h)`, and PRICE_LAGS/ROLLING_WINDOWS reach 168, so a

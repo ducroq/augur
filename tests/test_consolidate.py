@@ -140,10 +140,10 @@ class TestEpexIsMarkedNotDropped:
     Measured against entsoe over 7886 matched hours it runs +16.13 mean /
     +10.72 median EUR/MWh (corr 0.859) versus elspot at +0.86 / 0.00 (corr
     0.954), a level bias flat across lags -4h..+4h. It also OUTRANKS elspot, so
-    on the 1.16% of hours entsoe misses it supplies the target and discards the
-    better fallback.
+    on the 1.76% of hours (141 of 8013) that resolve to a fallback it supplies
+    the target and discards the better one.
 
-    Removing it is not safe yet: it would send 93 hours to NaN and the row-drop
+    Removing it is not safe yet: it would send those hours to NaN and the row-drop
     below would punch a 21h hole into 2026-08-27, which features_pandas'
     POSITIONAL `shift(h)` would turn into misaligned lags for ~7 days after it.
     So these tests pin the interim contract -- the value is still used, and it
