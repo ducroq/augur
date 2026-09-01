@@ -17,6 +17,7 @@ from ml.data import consolidate
 from ml.data.consolidate import (
     _unwrap_v22_envelope,
     parse_price_file,
+    parse_price_source_file,
     parse_wind_file,
     parse_solar_file,
     parse_weather_file,
@@ -128,9 +129,93 @@ class TestParsePriceFile:
         }
         monkeypatch.setattr(consolidate, "load_json_file", lambda _: {"data": inner})
         out = parse_price_file(tmp_path / "fake.json")
-        # The merge loop's iteration order is elspot, epex, entsoe — entsoe
-        # writes last and wins on shared timestamps.
+        # WHOLESALE_SOURCES is ordered elspot -> entsoe; entsoe writes last
+        # and wins on shared timestamps.
         assert out.iloc[0] == 50.0
+
+
+class TestEpexIsExcluded:
+    """epex was removed from the target 2026-09-01.
+
+    It is collected as "EPEX SPOT day-ahead" with country_code='NL' but runs
+    +16.13 mean / +10.72 median EUR/MWh against entsoe over 7886 matched hours
+    (corr 0.859), a level bias flat across lags -4h..+4h. Worse, it used to
+    OUTRANK elspot (+0.86 mean / 0.00 median, corr 0.954), so on the 1.16% of
+    hours where entsoe has a hole it supplied the target and discarded the
+    accurate fallback. These tests keep it out.
+    """
+
+    def test_epex_never_supplies_the_target(self, monkeypatch, tmp_path):
+        ts = "2026-06-09T00:00:00+00:00"
+        inner = {"epex": {"metadata": {"units": "EUR/MWh"}, "data": {ts: 99.0}}}
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: {"data": inner})
+        out = parse_price_file(tmp_path / "fake.json")
+        assert len(out) == 0, "an epex-only hour must have no target, not a wrong one"
+
+    def test_elspot_wins_the_hours_epex_used_to_take(self, monkeypatch, tmp_path):
+        ts = "2026-06-09T00:00:00+00:00"
+        inner = {
+            "elspot": {"metadata": {"units": "EUR/MWh"}, "data": {ts: 30.0}},
+            "epex": {"metadata": {"units": "EUR/MWh"}, "data": {ts: 88.0}},
+        }
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: {"data": inner})
+        out = parse_price_file(tmp_path / "fake.json")
+        assert out.iloc[0] == 30.0
+
+    def test_entsoe_still_outranks_elspot_when_both_present(self, monkeypatch, tmp_path):
+        ts = "2026-06-09T00:00:00+00:00"
+        inner = {
+            "elspot": {"metadata": {"units": "EUR/MWh"}, "data": {ts: 30.0}},
+            "epex": {"metadata": {"units": "EUR/MWh"}, "data": {ts: 88.0}},
+            "entsoe": {"metadata": {"units": "EUR/MWh"}, "data": {ts: 50.0}},
+        }
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: {"data": inner})
+        assert parse_price_file(tmp_path / "fake.json").iloc[0] == 50.0
+
+
+class TestPriceProvenance:
+    """`price_is_entsoe` is additive provenance, never a feature.
+
+    Numeric rather than a label because consolidate resamples every column with
+    `.resample("h").mean()`, which raises on object dtype -- and a mean over a
+    sub-hourly bin reads as the fraction of that hour sourced from ENTSO-E.
+    """
+
+    def _parse(self, monkeypatch, tmp_path, inner):
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: {"data": inner})
+        return parse_price_source_file(tmp_path / "fake.json")
+
+    def test_entsoe_hour_flags_one(self, monkeypatch, tmp_path):
+        ts = "2026-06-09T00:00:00+00:00"
+        inner = {"entsoe": {"metadata": {"units": "EUR/MWh"}, "data": {ts: 50.0}}}
+        assert self._parse(monkeypatch, tmp_path, inner).iloc[0] == 1.0
+
+    def test_elspot_fallback_hour_flags_zero(self, monkeypatch, tmp_path):
+        ts = "2026-06-09T00:00:00+00:00"
+        inner = {"elspot": {"metadata": {"units": "EUR/MWh"}, "data": {ts: 30.0}}}
+        assert self._parse(monkeypatch, tmp_path, inner).iloc[0] == 0.0
+
+    def test_provenance_index_matches_the_price_index_exactly(self, monkeypatch, tmp_path):
+        inner = {
+            "elspot": {"metadata": {"units": "EUR/MWh"},
+                       "data": {"2026-06-09T00:00:00+00:00": 30.0,
+                                "2026-06-09T01:00:00+00:00": 31.0}},
+            "entsoe": {"metadata": {"units": "EUR/MWh"},
+                       "data": {"2026-06-09T01:00:00+00:00": 51.0}},
+        }
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: {"data": inner})
+        price = parse_price_file(tmp_path / "fake.json")
+        prov = parse_price_source_file(tmp_path / "fake.json")
+        assert list(price.index) == list(prov.index)
+        assert list(prov.values) == [0.0, 1.0]
+
+    def test_provenance_is_float_so_resample_mean_survives(self, monkeypatch, tmp_path):
+        inner = {"entsoe": {"metadata": {"units": "EUR/MWh"},
+                            "data": {"2026-06-09T00:00:00+00:00": 50.0,
+                                     "2026-06-09T00:15:00+00:00": 52.0}}}
+        prov = self._parse(monkeypatch, tmp_path, inner)
+        assert prov.dtype.kind == "f"
+        assert prov.resample("h").mean().iloc[0] == 1.0
 
 
 # --- parse_entsoe_wholesale (via _parse_single_source) ---------------------
@@ -408,3 +493,68 @@ class TestParseCalendarFile:
         payload = {"data": {"2026-04-27T00:00:00+02:00": {"season": "spring"}}}
         monkeypatch.setattr(consolidate, "load_json_file", lambda _: payload)
         assert parse_calendar_file(tmp_path / "fake.json").empty
+
+
+# --- consolidate(): end-to-end through resample/dropna --------------------
+
+class TestConsolidateEndToEnd:
+    """The provenance column has to survive the whole pipeline, not just the parser.
+
+    `consolidate` runs `df.resample("h").mean()` over every column, which is
+    exactly why `price_is_entsoe` is a float flag and not a source label — an
+    object column raises there. This exercises the real function so that
+    constraint cannot be quietly broken by a later edit.
+    """
+
+    def _run(self, monkeypatch, tmp_path, inner):
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "260609_180000_energy_price_forecast.json").write_text("{}")
+        monkeypatch.setattr(consolidate, "load_json_file", lambda _: {"data": inner})
+        out = tmp_path / "hist.parquet"
+        consolidate.consolidate(data_dir, out)
+        return pd.read_parquet(out)
+
+    def test_entsoe_hours_are_kept_and_flagged(self, monkeypatch, tmp_path):
+        inner = {"entsoe": {"metadata": {"units": "EUR/MWh"},
+                            "data": {"2026-06-09T00:00:00+00:00": 50.0,
+                                     "2026-06-09T01:00:00+00:00": 55.0}}}
+        df = self._run(monkeypatch, tmp_path, inner)
+        assert list(df["price_eur_mwh"]) == [50.0, 55.0]
+        assert list(df["price_is_entsoe"]) == [1.0, 1.0]
+
+    def test_epex_only_hour_is_dropped_not_imported(self, monkeypatch, tmp_path):
+        """The 50 real hours that had epex and nothing else become absent, not wrong."""
+        inner = {
+            "entsoe": {"metadata": {"units": "EUR/MWh"},
+                       "data": {"2026-06-09T00:00:00+00:00": 50.0}},
+            "epex": {"metadata": {"units": "EUR/MWh"},
+                     "data": {"2026-06-09T01:00:00+00:00": 120.0}},
+        }
+        df = self._run(monkeypatch, tmp_path, inner)
+        assert len(df) == 1
+        assert df["price_eur_mwh"].iloc[0] == 50.0
+        assert 120.0 not in list(df["price_eur_mwh"])
+
+    def test_elspot_filled_hour_is_kept_and_flagged_zero(self, monkeypatch, tmp_path):
+        inner = {
+            "entsoe": {"metadata": {"units": "EUR/MWh"},
+                       "data": {"2026-06-09T00:00:00+00:00": 50.0}},
+            "elspot": {"metadata": {"units": "EUR/MWh"},
+                       "data": {"2026-06-09T01:00:00+00:00": 31.0}},
+        }
+        df = self._run(monkeypatch, tmp_path, inner)
+        assert list(df["price_eur_mwh"]) == [50.0, 31.0]
+        assert list(df["price_is_entsoe"]) == [1.0, 0.0]
+
+    def test_fallback_hours_are_logged_loudly(self, monkeypatch, tmp_path, caplog):
+        inner = {
+            "entsoe": {"metadata": {"units": "EUR/MWh"},
+                       "data": {"2026-06-09T00:00:00+00:00": 50.0}},
+            "elspot": {"metadata": {"units": "EUR/MWh"},
+                       "data": {"2026-06-09T01:00:00+00:00": 31.0}},
+        }
+        with caplog.at_level(logging.WARNING):
+            self._run(monkeypatch, tmp_path, inner)
+        assert any("price provenance" in r.message and "NOT fully ENTSO-E" in r.message
+                   for r in caplog.records)
