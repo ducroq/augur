@@ -332,8 +332,20 @@ ARF_STATUS="ARF OK"
 SMOKE_MARKER=""
 [ "${SMOKE_OK:-1}" = "0" ] && SMOKE_MARKER=" [ALARM: smoke tests failed]"
 
+# Verdict from scripts/wait_for_edh.sh (ExecStartPre). It rides the commit
+# subject like every other alarm here, because that is the only channel the
+# heartbeat reads. Consumed and CLEARED: a verdict left over from a previous
+# run must never leak into a later manual invocation that skipped the gate.
+EDH_MARKER=""
+EDH_VERDICT_FILE="${EDH_GATE_VERDICT:-$AUGUR_DIR/logs/.edh_gate_verdict}"
+if [ -f "$EDH_VERDICT_FILE" ]; then
+    EDH_MARKER=$(cat "$EDH_VERDICT_FILE" 2>/dev/null || true)
+    : > "$EDH_VERDICT_FILE" 2>/dev/null || true
+    [ -n "$EDH_MARKER" ] && echo "EDH gate verdict:${EDH_MARKER}"
+fi
+
 git diff --cached --quiet && echo "No changes to commit" || {
-    git commit -m "Daily update $(date -u '+%Y-%m-%d') — ${ARF_STATUS} | ${SHADOW_STATUS}${STALE_MARKER}${DEP_MARKER}${SMOKE_MARKER}${ARF_EMPTY_MARKER}${EVAL_STALE_MARKER}${T0_MARKER}"
+    git commit -m "Daily update $(date -u '+%Y-%m-%d') — ${ARF_STATUS} | ${SHADOW_STATUS}${STALE_MARKER}${DEP_MARKER}${SMOKE_MARKER}${ARF_EMPTY_MARKER}${EVAL_STALE_MARKER}${T0_MARKER}${EDH_MARKER}"
     git push
 }
 

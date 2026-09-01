@@ -10,10 +10,14 @@ User=jeroen
 Group=jeroen
 WorkingDirectory=/home/jeroen/local_dev/augur
 
-# Wait for EDH to publish today's data_quality_report.json before running.
-# Polls every 2 minutes for up to 4 hours; proceeds anyway on timeout so the
-# nightly run never fails-closed. Sentinel: top-level "timestamp" field must
-# be from the current UTC date.
+# Wait for EDH to publish a USABLE dataset before running. Rewritten
+# 2026-09-01: readiness is now a content contract read from
+# data_quality_report.json (report strictly newer than the last consumed, and
+# the entsoe dataset at full size vs the median of recent publishes), not a
+# clock window. GitHub defers this cron unpredictably -- observed starts span
+# 00:18-21:14 UTC -- so the old fixed 16:30+4h window could shut before a
+# perfectly good publish landed. Polls to a 03:00 UTC deadline, then proceeds
+# anyway: this gate never fails closed.
 ExecStartPre=/home/jeroen/local_dev/augur/scripts/wait_for_edh.sh
 
 # Main job: the existing script, untouched.
@@ -33,10 +37,14 @@ StandardError=append:/home/jeroen/local_dev/augur/logs/daily_update.log
 # Match the umask the script itself sets at the top.
 UMask=0027
 
-# Allow up to 90 min for the whole pull/train/eval cycle (incl. up to 4h
-# wait — TimeoutStartSec includes ExecStartPre per systemd semantics; bumped
-# accordingly to 5h30m).
-TimeoutStartSec=19800
+# TimeoutStartSec covers ExecStartPre + ExecStart per systemd semantics. The
+# gate now polls from 16:30 UTC to a 03:00 UTC deadline (10.5h) and the run
+# itself needs up to 90 min, so 12.5h. NOTE for whoever reads `systemctl
+# status` and worries: this unit being "activating" for many hours overnight is
+# NORMAL — it is waiting on EDH, not hung. It also means OnFailure= cannot fire
+# for a stall until the timeout expires; the 06:00 UTC heartbeat is what covers
+# that gap.
+TimeoutStartSec=45000
 
 [Install]
 WantedBy=multi-user.target
