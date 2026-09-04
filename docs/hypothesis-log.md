@@ -289,6 +289,29 @@ Position confirmed if the hold-back appears on ≤1 of the 7 days and `#51` is c
 
 **Pre-registered prediction (from the EDH session, stated 2026-09-04 09:59 CEST before the fact).** A direct ENTSO-E A65 probe found **NL recovered to 192/2 days while DE_LU is still 96/1**, with widening the request to +3d changing nothing and `DE_LU`-tomorrow-alone raising `NoMatchingDataError` — so tomorrow's NL data exists and tomorrow's DE_LU data does not. Their parser check (`_parse_response` in `collectors/entsoe_load.py` builds each zone's index from its own series, no cross-zone intersection) rules out a short DE_LU truncating NL, so the 08-28..08-30 96/96 was both zones genuinely short at once. Revised timeline: **through 08-26 both 192 · 08-28..08-30 both 96 · 09-04 NL 192, DE_LU 96.** Prediction for tonight's ~19:00 UTC scheduled publish: load NL **192/2**, DE_LU **96/1**, price entsoe **192/2**. Augur-side check: `t0_held_back_hours` → 0 and `t0_short_feeds` drops `load_forecast`.
 
+**RESOLVED ON THE LOAD SIDE 2026-09-04, from a published vintage rather than a probe.** EDH's second dispatch of the day, `260904_081356` (08:14 UTC / 10:14 CEST), decrypted and measured:
+
+| feed | pts | days |
+|---|---|---|
+| load NL | **192** | 2026-09-04, 2026-09-05 |
+| load DE_LU | **192** | 2026-09-04, 2026-09-05 |
+| price entsoe | 96 | 2026-09-04 |
+| price entsoe_de | 96 | 2026-09-04 |
+
+**Alternative 1 ("new steady state") is FALSIFIED, and falsified before its signal could accumulate** — the pre-committed threshold was three consecutive normal-hour publishes at price 192 / **load 96**, and `load` is now back at 192, so that sequence can never complete. It never got past one (`260830_190255`). The price leg at 96 here is *not* the divergence this entry tracks: an 08:14 UTC collection precedes the ~12:00 CET day-ahead auction, so same-day-only price is correct and expected.
+
+**The DE_LU timing confound is confirmed real, and it was the EDH session's own flagged uncertainty.** Their direct A65 probe at 09:59 CEST (07:59 UTC) found DE_LU at 96; this publish 15 minutes later has it at 192. German day-ahead load publishes later in the day than Dutch, so a morning DE_LU short reading is benign. Their pre-registered prediction of *DE_LU 96/1 tonight* is therefore expected to fail while its NL and price legs stand — recorded because it was stated in advance, which is what makes it scoreable.
+
+**Reconciled timeline (supersedes the single-vintage and probe-only readings, both of which were wrong in different directions):**
+
+| period | NL | DE_LU | reading |
+|---|---|---|---|
+| through 08-26 | 192 | 192 | healthy |
+| 08-28..08-30 | 96 | 96 | **genuine both-zone upstream A65 gap** — `260830_190255` at 19:02 was still short, far later than today's ~10:14 recovery, so this was not a timing artifact |
+| 09-04 | 192 | 192 by 10:14 | both recovered; DE_LU's morning 96 is publication timing, not a gap |
+
+So: a real multi-day A65 gap that has healed, costing three vintages of forecast reach — **resolved-upstream, not transient-misreading**. energydatahub#51 should close on that basis after tonight's normal-hour publish, not as "transient".
+
 **⚠️ How to score tonight, because the two outcomes are easy to conflate.** If NL returns 192, **Alternative 1 is falsified before its signal could accumulate** — that is *not* "signal met, alternative confirmed", and it is not "nothing happened either": the 08-28..08-30 gap was real, cost reach, and will be invisible once NL is back at 192. Record it as falsified-with-the-gap-on-record. If NL returns 96, the probe caught a transient and the accumulation toward Alternative 1 continues. The DE_LU timing confound the EDH session flagged (German TSOs possibly publishing day-ahead load later) cannot affect this scoring either way, given the NL-only finding above.
 
 **Status:** open — Augur-side fix deployed 2026-08-31; this hypothesis is about the upstream behaviour, not the fix. **Evidence added 2026-09-04 (above): Position's basis confirmed, its "one-off" conclusion superseded, Alternative 1 indicated but formally short. Narrowed the same day to NL-only, and a pre-registered probe predicts NL recovery — so the likely resolution is Alternative 1 FALSIFIED on the zone we use, decided by tonight's normal-hour publish rather than by the ≈2026-09-07 calendar trigger.**
