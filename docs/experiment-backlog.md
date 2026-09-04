@@ -14,7 +14,7 @@ Different from its neighbours:
 
 **Written 2026-08-29**, immediately after EXP-021 (foundation model beats the incumbent by 20.3% QS) and EXP-022 (~12 of those points are pretrained prior, ~8 are context volume; the calibration half is *entirely* prior). Every entry below descends from those two results.
 
-**Standing calendar these must not collide with:** EXP-018a Stage 1 fires ≈2026-09-09 and has priority on the fresh-vintage window (`t0 ≥ 2026-08-25`); EXP-021a Stage 1 runs after it; the t0-guard review is ≈2026-09-11. **Everything in this backlog runs on the existing 260-vintage historical window and consumes none of those fresh vintages.**
+**Standing calendar these must not collide with** (dates revised 2026-09-04 — **count vintages, do not read dates**; the 2026-08-30..09-04 EDH publish outage cost five vintages and moved every threshold-based trigger by ≥5 days): EXP-018a Stage 1 fires **≈2026-09-14 at the earliest** and has priority on the fresh-vintage window (`t0 ≥ 2026-08-25`); EXP-021a Stage 1 runs after it; EXP-028a ≈09-28; the t0-guard review is ≈2026-09-11 and is *unaffected*, since its criteria concern `calibration_history` gaps having a matching alarm and the outage days are legitimate data for that. These are floors, not estimates — EDH published on 31 of 35 days over 2026-07-25..08-28, so a further miss moves them again. See the warning block at the top of `docs/hypothesis-log.md` `## Open` for the vintage-count one-liner. **Everything in this backlog runs on the existing 260-vintage historical window and consumes none of those fresh vintages.**
 
 **Suggested order** — by decision value per unit cost, and by what blocks what:
 

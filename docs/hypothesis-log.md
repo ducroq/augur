@@ -21,6 +21,23 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 
 ## Open
 
+> ⚠️ **Every "≈date" below is stale by at least 5 days (added 2026-09-04). Count vintages, do not read dates.**
+> EDH published nothing from 2026-08-30T19:03 to 2026-09-04, so Augur's `t0` sat at 2026-08-31 for five
+> consecutive runs and **five vintages in the `t0 ≥ 2026-08-25` window never existed**. Every trigger phrased
+> as "≥N vintages with `t0 ≥ …`, ≈<date>" has its N unchanged and its date wrong: EXP-018a Stage 1 and
+> EXP-021a move from ≈09-09 to **≈09-14 at the earliest**, EXP-028a from ≈09-23 to **≈09-28**, EXP-023a
+> Stage B from ≈10-09 to **≈10-14**. These are floors, not estimates — a further EDH miss moves them again,
+> and their publish reliability over 2026-07-25..08-28 was 31 of 35 days.
+>
+> **Check the real count on sadalsuud** (`/home/jeroen/local_dev/augur`), never the local parquet, which is
+> gitignored and stale:
+> `` .venv/bin/python -c "import pandas as pd; d=pd.read_parquet('ml/data/training_history.parquet'); print((d.index>='2026-08-25').sum(),'hours;',d.index.max())" ``
+>
+> The exception is the **feed-divergence** entry, whose trigger was *re-specified* rather than merely delayed
+> (it now needs two normal-hour EDH publishes, not 7 calendar days) — see its own note. The **t0-guard**
+> entry's 14-run window is also unaffected in kind: its criteria are about `calibration_history` gaps having
+> a matching alarm, and the five outage days are legitimate data for exactly that.
+
 ### [2026-08-30] EXP-023a: the 112-day window's 3.0% gain is real and survives on vintages the sweep never scored
 
 **Position (provisional):** EXP-023 found a 112-day training window beats production's 56 by 3.0% quantile score (DM p<0.0001), with better coverage on both sides and better Winkler — all four pre-committed gates passing. Position: this is a real generalisation gain, and it reproduces both on historical vintages the discovery sweep never touched and on vintages that did not exist when it was measured.
