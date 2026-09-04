@@ -239,13 +239,36 @@ Position confirmed if the hold-back appears on ≤1 of the 7 days and `#51` is c
 
 **Cost of being wrong is asymmetric and worth stating:** if the Position holds, doing nothing is correct and the marker self-clears. If Alternative 1 holds and we assume the Position, we run a permanently degraded forecast while a nightly alarm trains us to ignore it — the classic alert-fatigue path. So the failure mode to watch for is *not noticing the marker stopped being informative*.
 
-**Revisit trigger:** 7 daily runs, ≈2026-09-07 — the same date EXP-018a Stage 1 unblocks, so resolve this first: EXP-018a's verdict on `load_forecast` is cleaner if we know whether the column is reliably present. Surface in `/curate`.
+**Revisit trigger (corrected 2026-09-04 — was "7 daily runs, ≈2026-09-07", which is the wrong instrument):** **two further NORMAL-HOUR EDH publishes**, regardless of calendar date. Alternative 1's signal is three consecutive normal-hour publishes at price 192 / load 96, and exactly one exists (`260830_190255`, 19:02). Daily *Augur* runs do not advance this test — during 08-31..09-04 there were five of them and zero usable publishes. Early-hour publishes do not count either: they are short in the benign, long-standing way (see the evidence table). Still resolve this **before** EXP-018a Stage 1, for the original reason — its verdict on `load_forecast` is cleaner if we know whether the column is reliably present — and Stage 1 has itself slipped ~5 days from the same outage. Surface in `/curate`.
 
 **Review by:** 2026-09-30.
 
 **Domain:** upstream data reliability, `update_shadow.py:latest_feasible_t0`, `ml/data/consolidate.py`, energydatahub#51, energydatahub#33, EXP-018a.
 
-**Status:** open — Augur-side fix deployed 2026-08-31; this hypothesis is about the upstream behaviour, not the fix.
+**Evidence added 2026-09-04 — the Position's basis is confirmed and the Position itself is now the losing side, but the pre-committed signal is formally short.** Every `load_forecast` vintage on EDH `origin/main` was decrypted and counted by **distinct calendar days** as well as points, so a resolution change cannot be confused with a horizon change:
+
+| vintage | publish hour | load NL | days | price entsoe | days |
+|---|---|---|---|---|---|
+| 260815_161800 | 16:18 | 192 | 2 | 192 | 2 |
+| 260820_162737 | 16:27 | 192 | 2 | 192 | 2 |
+| 260822_161734 | 16:17 | 192 | 2 | — | — |
+| 260824_062847 | 06:28 | 96 | 1 | — | — |
+| 260824_163211 | 16:32 | 192 | 2 | 192 | 2 |
+| 260826_164411 | 16:44 | 192 | 2 | 96 | 1 |
+| 260828_004401 | 00:44 | 96 | 1 | — | — |
+| 260829_002024 | 00:20 | 96 | 1 | 96 | 1 |
+| **260830_190255** | **19:02** | **96** | **1** | **192** | **2** |
+| 260904_065333 | 06:53 | 96 | 1 | 96 | 1 |
+
+**The Position's basis holds** — normal is 192/2 days, for months, so this is not a same-day feed and the 18h hold-back is a real loss of reach rather than a structural cost to design around. **The Position's conclusion does not** — "one-off, will not recur" is now four consecutive short publishes with no return to 192 since 08-26.
+
+**The discriminator neither side had until now is publish hour.** Every 96/1 vintage *before* 08-28 is an early-hour run that recovered to 192 on the same day's normal-hour run (08-09 05:56→96 then 16:27→192; 08-24 06:28→96 then 16:32→192). So short-at-early-hour is the benign, long-standing pattern, and only a **normal-hour** short vintage is evidence. There is exactly one: `260830_190255` at 19:02. `260904_065333` is an early-hour manual dispatch and **does not count**.
+
+**So Alternative 1 is strongly indicated and formally short of its signal** (three or more consecutive normal-hour publishes at price 192 / load 96): the 08-31..09-04 EDH publish outage denied us the normal-hour publishes the test requires. Recorded as indicative, **not** confirmed — resolve on the next two scheduled EDH runs rather than on the calendar trigger. Corroboration from the EDH session's own archive read: `metadata.end_time` declares +2 days on every short vintage, so EDH's request window is unchanged and the envelope over-declares its coverage; DE_LU tracks NL exactly, so it is not zone-specific. Locates the cause in **upstream ENTSO-E A65 availability**. **energydatahub#51 must not be closed as transient on this evidence.**
+
+**Alternative 3 gains a concrete instance, in the other direction.** The mechanism generalises further than "another feed truncates": `load_forecast` is in EDH's `CRITICAL_FEEDS` and delivered half its horizon for four publishes **without their drift tripwire objecting**, because a shape signature captures structure and not span — 96 and 192 records have identical shape. No `CRITICAL_FEEDS` membership fixes that; a horizon/span check is a different instrument and neither repo has one. Augur's `t0` hold-back alarm was the only detector that fired. Told to EDH 2026-09-04; unowned on both sides.
+
+**Status:** open — Augur-side fix deployed 2026-08-31; this hypothesis is about the upstream behaviour, not the fix. **Evidence added 2026-09-04 (above): Position's basis confirmed, its "one-off" conclusion superseded, Alternative 1 indicated but formally short. Resolve on two normal-hour EDH publishes, not on the ≈2026-09-07 calendar trigger.**
 
 ### [2026-08-25] EXP-018a: removing the six rolling-stat features (and the three exogenous) beats the 24-feature production set out of sample
 
