@@ -30,6 +30,11 @@ header.
 
 ---
 
+### A failure detector that lives inside the thing it watches cannot see a non-start (2026-09-04) [RESOLVED]
+**Problem**: EDH shipped publish-failure alerting, and I recorded it in the always-loaded index as the signal to check *before* Augur's own alarms. That inverted the hierarchy and would have demoted our only detector for the worse failure.
+**Root cause**: the `alert:` job sits in `collect-data.yml` with `needs: [collect-and-publish, deploy]`, and that workflow triggers only on `schedule` and `workflow_dispatch`. A run that never fires runs no alert job — so a dropped cron, a queue outage or a disabled workflow yields silence *and a clean issue tracker* while nothing publishes. It detects the **presence of a failed run**; it cannot detect the **absence of a run**.
+**Fix**: classify every monitor as detecting presence-of-failure or absence-of-success, and never let one substitute for the other. Ours (`t0` hold-back, heartbeat) detects absence and covers the worse case; theirs diagnoses a run that fired and failed. **Our alarm firing with no upstream issue is worse news than an issue existing.** A liveness check cannot live inside the workflow it watches — structurally, the same reason Augur's heartbeat cannot report sadalsuud being down. Generalises the {presence, structure, span, values} rule from data gates to monitors, and note that the credential split (create needs issues-write, close needs read) was the same shape one level in: works on every day it is exercised, absent on the day the failure takes another form.
+
 ### Work announced by a peer becomes a dependency in my records that outlives the work (2026-09-04) [RESOLVED]
 **Problem**: the EDH session described a time-boxed drift block as implemented and in review. I recorded Augur's gate widening as "sequenced after it lands". It was then abandoned unshipped — so my note held a dependency on something that would never exist, and the widening was silently reclassified from "unscheduled" to "waiting", which is the state in which work quietly never happens.
 **Root cause**: cross-session status arrives with the confidence of a commit and the durability of a plan. I wrote it into a durable register on the strength of a peer's in-flight description, without marking it unreviewed.
