@@ -30,6 +30,11 @@ header.
 
 ---
 
+### Naming a confound and then predicting through it anyway (2026-09-04) [RESOLVED]
+**Problem**: the EDH session pre-registered a three-part prediction, having explicitly written "one confound I cannot rule out from a 09:59 probe: German TSOs may simply publish day-ahead load later in the day" — and then predicted `DE_LU 96/1` regardless. The DE_LU leg failed; its own publish 15 minutes after its probe showed 192.
+**Root cause**: a measurement at one instant cannot separate "absent" from "not published yet" for a source whose schedule you do not know. Naming that and predicting anyway is *worse* than not noticing it, because it converts an acknowledged unknown into a stated claim that then gets cited. The evidence was already on disk — the honest move was to predict the two legs the probe could support and withhold the third.
+**Fix**: **applies directly to ADR-007 pre-commits in `docs/hypothesis-log.md`.** When writing an Alternative's signal, ask whether the measurement can actually *discriminate* between the alternatives, not merely whether it can be taken. If a caveat has to be attached to a criterion, the criterion is wrong — either fix the measurement or drop that leg. A pre-commitment's value is that it cannot be loosened later, which makes an undiscriminating criterion permanent rather than provisional. Related: this entry's own subject was itself measured from a *published vintage* rather than a live probe, which is what settled it — see the artifact-over-summary note under the peer-dependency entry.
+
 ### A failure detector that lives inside the thing it watches cannot see a non-start (2026-09-04) [RESOLVED]
 **Problem**: EDH shipped publish-failure alerting, and I recorded it in the always-loaded index as the signal to check *before* Augur's own alarms. That inverted the hierarchy and would have demoted our only detector for the worse failure.
 **Root cause**: the `alert:` job sits in `collect-data.yml` with `needs: [collect-and-publish, deploy]`, and that workflow triggers only on `schedule` and `workflow_dispatch`. A run that never fires runs no alert job — so a dropped cron, a queue outage or a disabled workflow yields silence *and a clean issue tracker* while nothing publishes. It detects the **presence of a failed run**; it cannot detect the **absence of a run**.
