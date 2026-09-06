@@ -59,7 +59,7 @@ Per the 2026-05-18 mid-window preview, criterion (a)'s 72-hour aggregation
 means the low-price slice is dominated by long-horizon hours. The supplementary
 horizon decomposition from `shadow_state.json:calibration_history`:
 
-| Horizon group | n_low hours | LGBM `|p50 − realized|` mean | median |
+| Horizon group | n_low hours | LGBM `\|p50 − realized\|` mean | median |
 |---|---|---|---|
 | h ≤ 24 | **0** | n/a | n/a |
 | h > 24 | 200 | 71.21 EUR/MWh | 76.57 EUR/MWh |

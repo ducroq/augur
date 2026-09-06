@@ -5,30 +5,26 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 - **Stack**: Python 3.12 (ML pipeline), Hugo + Plotly.js (dashboard), **LightGBM-Quantile multi-horizon (production — promoted EXP-014 2026-05-29 after a five-iteration metric-redesign arc)** + River ARF (kept running as backup signal for one rolling-window cycle; retired as a model 2026-04-28 but its cron output still feeds the Model tab metrics)
 - **Status**: Production — dashboard live, ML pipeline daily on sadalsuud
 - **Repo**: github.com/ducroq/augur
-- **agent-ready-projects**: v1.9.0
+- **agent-ready-projects**: v1.37.0
 
 ## Before You Start
 
+<!-- Grouped 2026-09-06: this table was 19 rows against docs/GUIDE.md's ~8-row
+     guidance. Rows were merged only where they shared BOTH a trigger family and
+     a target; every original trigger phrase is preserved in bold inside its
+     cell, because for a row that fires on a situation the wording is the artifact. -->
+
 | When | Read |
 |------|------|
-| Working on ML features or training | `ml/features/online_features.py` — feature engineering, `ml/training/warmup.py` — model lifecycle |
-| Changing the dashboard or chart rendering | `static/js/modules/` — modular ES6 code |
-| Changing deployment or build pipeline | `docs/RUNBOOK.md` — Netlify build, --force flag, webhook flow |
-| Making architectural decisions | `docs/decisions/` — ADR index |
 | **Starting a session — orient first** | `memory/MEMORY.md` — the memory index: current state, standing findings, open bets, deferred items. It is *not* auto-loaded; read it before reconstructing state from the deeper registers. Kept fresh at `/curate`. |
-| Stuck or debugging something weird | `memory/gotcha-log.md` — problem-fix archive |
-| Questioning ML architecture choices | `memory/ml-decisions.md` (week-ahead, River ARF, feature strategy) + `docs/river-arf-retrospective.md` (why ARF is being retired and what replaces it) |
-| Working with energyDataHub data formats | `memory/data-formats.md` — schema v2.1, units, timezone conventions |
-| Changing ML pipeline, model, or forecast logic | `docs/model-progress-log.md` — add dated entry with rationale, evidence, and outcome |
-| **Before proposing model work** | `docs/experiment-results.md` **Decision state** section — what is closed (do not re-run), what is live, what is standing evidence. Derived from the registry, so it cannot drift. Then `memory/MEMORY.md` → *Standing conclusions* for the judgement layer |
-| **Reading experiment results** | `docs/experiment-results.md` — every experiment's hypothesis, outcome, full metrics and caveats in one readable page. **Generated** from `experiments/registry.jsonl` by `scripts/render_results.py`; never hand-edit, regenerate after appending |
-| **Verifying the experiment record** | `scripts/audit_registry.py` — schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed. Exits non-zero on failure; run it at `/curate` |
-| Logging or citing an experiment (A/B, warmup, ablation) | `experiments/registry.jsonl` — append one line per experiment; schema in `experiments/README.md` |
-| **Picking up the next experiment** | `docs/experiment-backlog.md` — designed, pre-committed, not yet run; ordered by decision value per unit cost. EXP-025 (transplanted calibration prior) is cheapest and most actionable |
-| Taking a provisional position to revisit later | `docs/hypothesis-log.md` — Position / Alternative / Method / Revisit trigger / Review-by; surface due items in `/curate` |
-| Looking up citations or starting a literature pass | `docs/literature.md` — topic-indexed bibliography; per-topic deep-dives live as separate `docs/*.md` files (e.g. `metric-redesign-literature-review.md`) |
-| Ending a session | Run `/curate` — review gotchas, promote patterns, check doc sync |
-| Monthly or after major restructuring | Run `/audit-context` — structural health audit |
+| **Stuck or debugging something weird** | `memory/gotcha-log.md` — problem-fix archive. **An EDH publish is late, short or missing**, or you are about to cite an energydatahub issue number → `memory/upstream-edh.md`. **Checking whether something was already done** → `memory/session-archive.md`. |
+| **Anything touching experiments or model work** | **Before proposing model work** → `docs/experiment-results.md` **Decision state** — what is closed (do not re-run), live, or standing evidence; derived from the registry so it cannot drift. Then `memory/MEMORY.md` → *Standing conclusions* for the judgement layer. **Reading results** → the same page, every hypothesis/outcome/metric/caveat; **generated** by `scripts/render_results.py`, never hand-edit. **Logging or citing one** → `experiments/registry.jsonl` (schema in `experiments/README.md`). **Picking the next** → `docs/experiment-backlog.md`, ordered by decision value per unit cost. **Verifying the record** → `scripts/audit_registry.py` (schema, id order, artifacts, number traceability, sha256 proof no pre-committed Method was edited after its result). |
+| **Working on ML features, training, or forecast logic** | `ml/features/online_features.py` — feature engineering; `ml/training/warmup.py` — model lifecycle. **Questioning ML architecture choices** → `memory/ml-decisions.md` + `docs/river-arf-retrospective.md`. **Changing the pipeline, model or forecast logic** → add a dated entry to `docs/model-progress-log.md` with rationale, evidence and outcome. |
+| **Changing the dashboard or chart rendering** | `static/js/modules/` — modular ES6 code |
+| **Working with energyDataHub data formats** | `memory/data-formats.md` — schema v2.2 envelope, units, timezone conventions |
+| **Changing deployment or the build pipeline** | `docs/RUNBOOK.md` — Netlify build, `--force` flag, webhook flow |
+| **Making a decision, or parking one** | **Architectural decisions** → `docs/decisions/` (ADR index). **A provisional position to revisit** → `docs/hypothesis-log.md` (Position / Alternative / Method / Revisit trigger / Review-by; due items surface at `/curate`). **Citations or a literature pass** → `docs/literature.md`, with per-topic deep-dives as separate `docs/*.md`. |
+| **Session rhythm** | **Before committing structural changes** → `/code-review`, then `python -m pytest tests/`; if `experiments/` or `docs/experiment-results.md` changed, also `scripts/audit_registry.py` and `scripts/render_results.py --check` (both exit non-zero if the record drifted). **Ending a session** → `/curate`. **Monthly or after major restructuring** → `/audit-context`, then `/update-drift` — is this repo behind `agent-ready-projects`? The stamp above is a *number*, not a claim that it is current. |
 
 ## Hard Constraints
 
@@ -173,8 +169,8 @@ Client browser (https://energy.jeroenveen.nl):
 | `scripts/wait_for_edh.sh` | systemd `ExecStartPre` gate. **Readiness is a CONTENT contract, not a clock window (rewritten 2026-09-01, `7d0066d`)**: the EDH report must be strictly newer than the last consumed (`logs/.edh_gate_state`) **and** the primary dataset `entsoe` must carry at least the **median point count of the last N publishes** (`median_points`, fallback 192) — so an upstream resolution change is absorbed in a few days instead of reading as short forever. A short *secondary* feed (`load_forecast`) alarms but deliberately does **not** block. Polls to a 03:00 UTC deadline, then proceeds anyway: never fail-closed, and the t0-advance alarm marks it. The old `MIN_PUBLISH_HOUR_UTC=12` floor is **gone** — GitHub defers EDH's cron unpredictably (observed 00:18–21:14 UTC), so a clock floor shut the gate on good publishes. Earned its place 2026-09-04 by refusing a 06:53 UTC recovery publish whose `entsoe` held same-day prices only (96 vs 192), the day-ahead auction not having cleared. ⚠️ It asserts span on `entsoe`/`load_forecast` only and examines no other feed — `wind_speed_80m`/`solar_ghi` feeds are unchecked; see the gotcha-log Promoted table [2026-09-04]. |
 | `scripts/systemd/` | Canonical unit files; deploy via `sudo cp` to `/etc/systemd/system/` (install + rollback in its README). `augur-daily.{service,timer}` plus, since 2026-08-30, `augur-alert@.service` (OnFailure template, runs as `jeroen`), `augur-daily.service.d/alert.conf` (the `OnFailure=` drop-in — a drop-in, not an edit, so it detaches without touching the ExecStartPre ordering), and `augur-heartbeat.{service,timer}`. |
 | `scripts/alert_failure.sh` | `OnFailure=` handler for `augur-daily.service`. Covers the **hard** case only: a unit that dies before committing, which emits nothing because every in-script ALARM rides in the commit subject. Logs to `logs/alerts.log`, emails via `notify_email.py`, 3h burst guard armed only after a confirmed send. Always exits 0 — it runs inside systemd's failure handling. |
-| `scripts/heartbeat_check.sh` | Daily 06:00 UTC liveness check (`augur-heartbeat.timer`). Covers what `OnFailure=` structurally **cannot**: `daily_update.sh` ends with `git diff --cached --quiet && echo "No changes to commit" || {commit; push;}`, so a run producing nothing exits 0 and the unit *succeeds*; likewise a disabled timer or a down box. Alarms on no `Daily update` commit in >30h, timer not enabled/active, or unpushed commits. Exits 0 when it *sends* an alert (its own `OnFailure=` is reserved for a broken watchman). Blind spot, by design: it runs on sadalsuud, so it cannot report sadalsuud being down — that needs an off-host dead-man's switch, i.e. a new service, declined 2026-07-17. |
-| `scripts/notify_email.py` | Shared alert sender, stdlib only. Reads `[email_credentials]` from FluxusSource's gitignored `secrets.ini` on sadalsuud — the same channel `nexusmind-alert@.service` uses; no new notification service. Missing/incomplete creds degrade to log-only and still exit 0. `AUGUR_NOTIFY_SECRETS` overrides the path so a dev-box dry-run can't send a real email. |
+| `scripts/heartbeat_check.sh` | Daily 06:00 UTC liveness check (`augur-heartbeat.timer`). Covers what `OnFailure=` structurally **cannot**: `daily_update.sh` ends with `git diff --cached --quiet && echo "No changes to commit" \|\| {commit; push;}`, so a run producing nothing exits 0 and the unit *succeeds*; likewise a disabled timer or a down box. Alarms on no `Daily update` commit in >30h, timer not enabled/active, or unpushed commits. Exits 0 when it *sends* an alert (its own `OnFailure=` is reserved for a broken watchman). Blind spot, by design: it runs on sadalsuud, so it cannot report sadalsuud being down — that needs an off-host dead-man's switch, i.e. a new service, declined 2026-07-17. |
+| `scripts/notify_email.py` | Shared alert sender, stdlib only. Reads `[email_credentials]` from FluxusSource's gitignored secrets.ini on sadalsuud — the same channel `nexusmind-alert@.service` uses; no new notification service. Missing/incomplete creds degrade to log-only and still exit 0. `AUGUR_NOTIFY_SECRETS` overrides the path so a dev-box dry-run can't send a real email. |
 | `netlify.toml` | Build pipeline: decrypt → hugo |
 
 **Process + experiments**:
