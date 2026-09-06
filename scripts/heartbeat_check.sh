@@ -96,6 +96,7 @@ marker_kinds() {
         s/.*t0 +went +BACKWARDS.*/t0-backwards/
         s/.*t0 +stale.*/t0-stale/
         s/.*eval +stale.*/eval-stale/
+        s/.*naive +unscored.*/naive-unscored/
         s/.*ARF +forecast.*/arf-forecast-short/
         s/.*ARF FAIL.*/arf-fail/
         s/^ *rc=skip *$/rc-skip/

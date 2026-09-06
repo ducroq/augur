@@ -4,6 +4,47 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
+## 2026-09-06 (latest) — The eval harness had no floor in it: the production model does not reliably beat "yesterday, same hour"
+
+**What prompted it.** The pipeline recovered from the 2026-08-30..09-04 EDH outage and every health signal was green — clean commit subject, `t0` held back 0.0h, coverage healing. The observation that started this was not a metric: *the dashboard still isn't producing useful forecasts.* It wasn't, and nothing in the project could have said so.
+
+**The structural blind spot.** Every instrument here is **relative**. `eval_log.jsonl` scores LightGBM against ARF; `experiments/registry.jsonl` scores variants against production; `metrics.diebold_mariano` compares two candidates. The case where *every arm is worse than a trivial baseline* is invisible to all of them — it reads as a healthy log with a clear winner. Two models racing each other to last place look exactly like progress.
+
+**Measurement 1 — the live record.** Horizon-matched, production `p50` vs seasonal-naive ("same clock hour, last day available at t0") on identical timestamps from `calibration_history`, 24 eval days, `t0 ∈ [2026-07-30, 2026-08-24]`:
+
+| horizon | n | LGBM p50 | naive | winner |
+|---|---|---|---|---|
+| 1–24h | 576 | 26.92 | **23.34** | naive |
+| 25–48h | 576 | 33.87 | **28.94** | naive |
+| 49–72h | 552 | 36.92 | **32.71** | naive |
+
+Over 96 mixed-horizon eval days back to 2026-05-08 the model leads on 42 — **44%**.
+
+**Measurement 2 — EXP-035, the offline vintages, and a correction to measurement 1's reading.** Re-scoring every stored EXP-018/EXP-021 arm against the same floor on 260 vintages (2025-12-05..2026-08-21), no GPU and no fresh vintages consumed — ADR-007 layer 2:
+
+| arm | MAE | naive | skill | DM p |
+|---|---|---|---|---|
+| chronos_bolt_base | 22.72 | 30.31 | **+0.250** | <1e-6 |
+| lgbm_drop_rolling | 27.07 | 30.31 | +0.107 | 3.2e-5 |
+| lgbm_full (production) | 28.76 | 30.31 | +0.051 | 0.033 |
+| lgbm_drop_calendar | 30.82 | 30.31 | −0.017 | 0.720 |
+
+**"Never better than a coin flip" was too strong.** Across the full year LightGBM does edge naive, by 5%. The true statement is narrower and worse: the edge is **regime-dependent**, and it collapses where a forecast is actually worth having. `lgbm_full` is below naive in 2 of 9 months, and in **August 2026 — the regime the live pipeline is in — all eight LightGBM variants are below naive** (best `drop_rolling` −0.104). Chronos-bolt-base is above naive in **9 of 9 months** and at every horizon group.
+
+**The correction runs against the incumbent, not for it.** EXP-021's headline −20.3% QS was measured against a model barely above a free baseline, so the model-class gap is *larger* than the registry states. This is the reverse of the usual direction a caveat travels, and worth saying out loud.
+
+**Shipped.** `evaluate_shadow.py` logs six new fields per row (`n_naive_hours`, `naive_mae`, `lightgbm_mae_on_naive_hours`, `lightgbm_skill_vs_naive`, `naive_min/max_horizon_h`). The baseline may only read `24*ceil(h/24)` hours back — for a 72h vintage always the single window `[t0-23h, t0]`. LGBM is re-scored on only the paired hours, so a gappy baseline cannot manufacture skill. Any unusable input leaves the fields **null, never 0.0**: "not computed" must not read as "no edge", which is the exact ambiguity that hid this for four months.
+
+**A bug the code review caught, worth recording because of its direction.** The first implementation inferred the anchor as `min(timestamp) - 1h` over `calibration_history` — which holds **realised rows only** (`backfill_realized` never promotes unrealised or non-ENTSO-E hours). A vintage whose *leading* hours were withheld would infer an anchor too late and source prices from after the true `t0`. That leak biases skill **downward — toward the very conclusion the field exists to test.** Fixed by recording `t0_utc` at prediction time (`update_shadow.py` step 7) and refusing to score rather than infer when it is absent and the leading hours are gone. Two related lessons: my test fixtures were day-aligned rather than production-shaped (72 rows spanning three dates, all tagged with t0's date), which is *why* it passed CI; and I had described the guard in the pre-committed Method as "pinned" by a test that hands the true `t0` in as an argument and can therefore only ever check arithmetic. Both corrected before any `naive_*` row landed — the only window in which editing a Method is legitimate under ADR-007.
+
+**Not done, deliberately.** The first ~24 forecast hours predict a day-ahead auction that clears ~4h *before* the run starts, and `api-client.js:226` already fetches those published prices for today, tomorrow and the day after. `data-processor.js:256` draws the forecast line across them anyway, so the chart shows a ~27 EUR/MWh error on top of the correct answer. That is a **product** change, not a model finding, it needs its own pre-commitment, and it hinges on whether EDH's file already carries tomorrow's prices — unverifiable on a box without decryption keys. Filed as augur#30 (the skill-floor verdict itself is augur#29).
+
+**What this does not change.** Nothing is deployed differently. EXP-035 is `parked` (matching EXP-022's treatment of a mechanism diagnostic): no calibration guardrail is evaluated and ADR-007 requires one for a swap. It discharges neither EXP-018a nor EXP-021a — both remain gated on 14 fresh vintages, **7 counted 2026-09-06**. The live verdict is pre-committed in `docs/hypothesis-log.md` [2026-09-06] on ≥21 rows carrying non-null `lightgbm_skill_vs_naive`, ≈2026-09-27.
+
+**Tests**: `TestT0Resolution` (6), `TestNaiveSourceTimestamp` (6), `TestLoadPriceHistory` (4), `TestNaiveSkillInRow` (9). Suite 285 → 310.
+
+---
+
 ## 2026-08-31 — Production model down a night: t0 followed the longest feed, not the shortest
 
 **What happened.** The 2026-08-30 nightly run crashed inside `predict_72h` with `No clean feature row at t0=Timestamp('2026-08-31 21:00:00+0000') (NaNs in lags)`. `shadow rc=1/eval rc=skip`. No forecast was written, the dashboard served 2026-08-29's forecast for ~24h, and the 2026-08-30 vintage is permanently lost. `shadow_state.json` was untouched (`last_t0` still `2026-08-29T21:00`) because the crash preceded the state write — nothing was corrupted.
@@ -35,7 +76,7 @@ The upstream trigger deserves recording too: EDH's 08-29 publish came at 00:20 U
 
 ---
 
-## 2026-08-30 (latest) — Failure alerting built: the OnFailure gap, and the larger gap OnFailure cannot see
+## 2026-08-30 — Failure alerting built: the OnFailure gap, and the larger gap OnFailure cannot see
 
 **Context.** `OnFailure=` alerting on `augur-daily.service` was parked 2026-07-03 as a monitoring nicety. It stopped being one on 2026-08-29: EXP-018a, EXP-021a and EXP-028a are all gated on an *uninterrupted* run of fresh vintages from `t0 >= 2026-08-25`, so a silent freeze no longer costs a day of dashboard data — it costs a week of the September schedule, unrecoverably (there is no backfill; a reconstructed vintage built from fresher exogenous is not comparable with the live ones beside it — augur#14).
 

@@ -250,6 +250,84 @@ if [ "${EVAL_LAG_DAYS:-999}" -gt 2 ]; then
     EVAL_STALE_MARKER=" [ALARM: eval stale ${EVAL_LAG_DAYS}d]"
 fi
 
+# Seasonal-naive floor reader (2026-09-06). evaluate_shadow.py logs
+# `lightgbm_skill_vs_naive` per eval row; without a consumer that assertion
+# would repeat the promoted rule in memory/gotcha-log.md -- "an assertion is
+# not done when it is emitted, it is done when something reads it".
+#
+# TWO signals, deliberately split, because they are different KINDS of thing and
+# the first draft (2026-09-06, caught in review the same hour) conflated them:
+#
+#   NOTE   the model is below the floor         -> a RESULT. Not a fault. Must
+#                                                  NOT enter the ALARM path:
+#                                                  heartbeat_check.sh treats any
+#                                                  `ALARM:` as a SOFT FAILURE and
+#                                                  mails "pipeline FAILED". All
+#                                                  eight LightGBM variants are
+#                                                  currently below the floor in
+#                                                  the August regime, so that
+#                                                  would have mailed a failure
+#                                                  nightly for a non-failure --
+#                                                  and contradicted the runbook
+#                                                  row added in the same commit.
+#   ALARM  the floor stopped being SCORED       -> a genuine FAULT. eval rows are
+#                                                  landing but carry no naive
+#                                                  field, so the instrument broke
+#                                                  (absent/unreadable parquet, no
+#                                                  price column, duplicate
+#                                                  timestamps, unresolvable
+#                                                  t0_utc). Silence here is
+#                                                  exactly the failure the reader
+#                                                  exists to prevent.
+#
+# The verdict itself stays pre-committed in docs/hypothesis-log.md [2026-09-06]
+# on >=21 rows and reads a MEAN, not a streak. This is visibility, not a gate.
+NAIVE_STATS=$(python3 -c "
+import json
+try:
+    scored, unscored = [], 0
+    with open('$AUGUR_DIR/ml/shadow/eval_log.jsonl') as f:
+        rows = []
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except Exception:
+                continue
+    # Only rows written since the field existed can be unscored-by-fault; older
+    # rows simply predate it and must not be counted as a broken instrument.
+    for r in rows[-10:]:
+        v = r.get('lightgbm_skill_vs_naive')
+        if v is not None:
+            scored.append(float(v))
+        elif 'n_naive_hours' in r:
+            unscored += 1
+        else:
+            unscored = 0  # a pre-2026-09-06 row resets the run
+    w = scored[-7:]
+    print(f'{len(w)} {sum(1 for v in w if v < 0)} {unscored}')
+except Exception:
+    print('0 0 0')
+" 2>/dev/null || echo "0 0 0")
+NAIVE_N=$(echo "$NAIVE_STATS" | cut -d' ' -f1)
+NAIVE_LOSSES=$(echo "$NAIVE_STATS" | cut -d' ' -f2)
+NAIVE_UNSCORED=$(echo "$NAIVE_STATS" | cut -d' ' -f3)
+NAIVE_MARKER=""
+# Full 7-row window only. A 5-of-5 vs 5-of-7 ramp-up made the bar 100% on day 5
+# and 71% by day 7 -- inconsistent sensitivity for the same word.
+if [ "${NAIVE_N:-0}" -ge 7 ] && [ "${NAIVE_LOSSES:-0}" -ge 5 ]; then
+    echo "NOTE: LightGBM below the seasonal-naive floor on ${NAIVE_LOSSES} of the last ${NAIVE_N} scored days (a result, not a fault — see augur#29)."
+    NAIVE_MARKER=" [NOTE: sub-naive ${NAIVE_LOSSES}/${NAIVE_N}]"
+elif [ "${NAIVE_N:-0}" -gt 0 ]; then
+    echo "Seasonal-naive floor: below baseline on ${NAIVE_LOSSES} of the last ${NAIVE_N} scored days."
+fi
+if [ "${NAIVE_UNSCORED:-0}" -ge 3 ]; then
+    echo "ALARM: ${NAIVE_UNSCORED} recent eval row(s) carry no seasonal-naive score — the floor is no longer being computed (check the parquet and t0_utc)."
+    NAIVE_MARKER="${NAIVE_MARKER} [ALARM: naive unscored ${NAIVE_UNSCORED}]"
+fi
+
 # t0-advance guard (2026-08-28). update_shadow.py records how many calendar
 # days t0 moved since the previous run; anything but 1 means the vintage
 # stream broke. This is the UPSTREAM signal for the eval-stale alarm above:
@@ -345,7 +423,7 @@ if [ -f "$EDH_VERDICT_FILE" ]; then
 fi
 
 git diff --cached --quiet && echo "No changes to commit" || {
-    git commit -m "Daily update $(date -u '+%Y-%m-%d') — ${ARF_STATUS} | ${SHADOW_STATUS}${STALE_MARKER}${DEP_MARKER}${SMOKE_MARKER}${ARF_EMPTY_MARKER}${EVAL_STALE_MARKER}${T0_MARKER}${EDH_MARKER}"
+    git commit -m "Daily update $(date -u '+%Y-%m-%d') — ${ARF_STATUS} | ${SHADOW_STATUS}${STALE_MARKER}${DEP_MARKER}${SMOKE_MARKER}${ARF_EMPTY_MARKER}${EVAL_STALE_MARKER}${NAIVE_MARKER}${T0_MARKER}${EDH_MARKER}"
     git push
 }
 
