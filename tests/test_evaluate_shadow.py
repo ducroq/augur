@@ -17,6 +17,9 @@ from ml.shadow.evaluate_shadow import (
     find_arf_archive_for_day,
     find_eligible_eval_days,
     load_arf_predictions,
+    load_price_history,
+    naive_source_timestamp,
+    t0_for_eval_day,
     read_logged_days,
     run_evaluation,
 )
@@ -320,3 +323,248 @@ class TestRunEvaluation:
             eval_log_path=eval_log,
         )
         assert appended2 == []
+
+
+# ---------- seasonal-naive baseline (2026-09-06) ----------------------------
+
+
+def _vintage(
+    t0: pd.Timestamp,
+    lgbm_pred: float,
+    realised: float,
+    record_t0: bool = True,
+) -> list[dict]:
+    """A production-shaped vintage: 72 hours from t0+1h, `eval_day` == t0's DATE.
+
+    This is the shape update_shadow actually writes (step 4/7): the rows span
+    three calendar dates and are all tagged with t0's date, not their own. A
+    fixture aligned to a single calendar day cannot exercise the 48h/72h
+    lookback branches, and hides anchor-inference bugs entirely.
+    """
+    day = t0.strftime("%Y-%m-%d")
+    rows = []
+    for h in range(1, 73):
+        row = _calib_row(t0 + pd.Timedelta(hours=h), day, 0.0, lgbm_pred, 999.0, realised)
+        if record_t0:
+            row["t0_utc"] = t0.isoformat()
+        rows.append(row)
+    return rows
+
+
+def _flat_history(start: pd.Timestamp, hours: int, value: float) -> pd.Series:
+    idx = pd.date_range(start, periods=hours, freq="h")
+    return pd.Series([value] * hours, index=idx)
+
+
+class TestNaiveSourceTimestamp:
+    """The baseline may only use hours that were already known at t0."""
+
+    def test_first_horizon_day_looks_back_24h(self):
+        t0 = pd.Timestamp("2026-05-01T21:00:00Z")
+        ts = t0 + pd.Timedelta(hours=1)
+        assert naive_source_timestamp(ts, t0) == ts - pd.Timedelta(hours=24)
+
+    def test_hour_24_still_looks_back_24h(self):
+        t0 = pd.Timestamp("2026-05-01T21:00:00Z")
+        ts = t0 + pd.Timedelta(hours=24)
+        assert naive_source_timestamp(ts, t0) == ts - pd.Timedelta(hours=24)
+
+    def test_second_horizon_day_looks_back_48h(self):
+        t0 = pd.Timestamp("2026-05-01T21:00:00Z")
+        for h in (25, 36, 48):
+            ts = t0 + pd.Timedelta(hours=h)
+            assert naive_source_timestamp(ts, t0) == ts - pd.Timedelta(hours=48)
+
+    def test_third_horizon_day_looks_back_72h(self):
+        t0 = pd.Timestamp("2026-05-01T21:00:00Z")
+        for h in (49, 60, 72):
+            ts = t0 + pd.Timedelta(hours=h)
+            assert naive_source_timestamp(ts, t0) == ts - pd.Timedelta(hours=72)
+
+    def test_source_is_never_after_t0(self):
+        """The whole point: no peeking at prices the model could not have seen."""
+        t0 = pd.Timestamp("2026-05-01T21:00:00Z")
+        for h in range(1, 73):
+            ts = t0 + pd.Timedelta(hours=h)
+            assert naive_source_timestamp(ts, t0) <= t0
+
+    def test_preserves_clock_hour(self):
+        t0 = pd.Timestamp("2026-05-01T21:00:00Z")
+        for h in (1, 25, 49, 72):
+            ts = t0 + pd.Timedelta(hours=h)
+            assert naive_source_timestamp(ts, t0).hour == ts.hour
+
+
+class TestLoadPriceHistory:
+    def test_missing_parquet_returns_none(self, tmp_path):
+        assert load_price_history(tmp_path / "nope.parquet") is None
+
+    def test_unreadable_parquet_returns_none(self, tmp_path):
+        bad = tmp_path / "bad.parquet"
+        bad.write_text("not a parquet")
+        assert load_price_history(bad) is None
+
+    def test_excludes_non_entsoe_hours(self, tmp_path):
+        idx = pd.date_range(pd.Timestamp("2026-05-01T00:00:00Z"), periods=4, freq="h")
+        df = pd.DataFrame(
+            {"price_eur_mwh": [10.0, 20.0, 30.0, 40.0],
+             "price_is_entsoe": [1.0, 0.0, 1.0, float("nan")]},
+            index=idx,
+        )
+        path = tmp_path / "h.parquet"
+        df.to_parquet(path)
+        out = load_price_history(path)
+        assert list(out.to_numpy()) == [10.0, 30.0]
+
+    def test_naive_index_is_localised_to_utc(self, tmp_path):
+        idx = pd.date_range("2026-05-01", periods=3, freq="h")  # tz-naive
+        df = pd.DataFrame({"price_eur_mwh": [1.0, 2.0, 3.0]}, index=idx)
+        path = tmp_path / "h.parquet"
+        df.to_parquet(path)
+        out = load_price_history(path)
+        assert str(out.index.tz) == "UTC"
+
+
+class TestT0Resolution:
+    """The anchor must be known exactly, or not used at all.
+
+    `eval_day` IS `t0.strftime("%Y-%m-%d")` in production (update_shadow step 4),
+    and `calibration_history` holds realised rows ONLY — so inferring the anchor
+    from surviving rows breaks precisely when leading hours were withheld.
+    """
+
+    def test_prefers_recorded_t0(self):
+        t0 = pd.Timestamp("2026-05-01T21:00:00Z")
+        calib = _vintage(t0, lgbm_pred=100.0, realised=100.0, record_t0=True)
+        assert t0_for_eval_day(calib, "2026-05-01") == t0
+
+    def test_recorded_t0_wins_over_a_gap_in_leading_hours(self):
+        """The whole point: withheld leading hours no longer move the anchor."""
+        t0 = pd.Timestamp("2026-05-01T21:00:00Z")
+        calib = _vintage(t0, 100.0, 100.0, record_t0=True)[30:]  # first 30h withheld
+        assert t0_for_eval_day(calib, "2026-05-01") == t0
+
+    def test_legacy_rows_infer_when_leading_hours_are_intact(self):
+        t0 = pd.Timestamp("2026-05-01T21:00:00Z")
+        calib = _vintage(t0, 100.0, 100.0, record_t0=False)
+        assert t0_for_eval_day(calib, "2026-05-01") == t0
+
+    def test_legacy_rows_refuse_to_infer_when_leading_hours_are_gone(self):
+        """The bug this guard exists for — must be None, not a shifted anchor."""
+        t0 = pd.Timestamp("2026-05-01T21:00:00Z")
+        calib = _vintage(t0, 100.0, 100.0, record_t0=False)[30:]
+        assert t0_for_eval_day(calib, "2026-05-01") is None
+
+    def test_disagreeing_recorded_t0_is_refused(self):
+        t0 = pd.Timestamp("2026-05-01T21:00:00Z")
+        calib = _vintage(t0, 100.0, 100.0, record_t0=True)
+        calib[5] = {**calib[5], "t0_utc": pd.Timestamp("2026-04-30T21:00:00Z").isoformat()}
+        assert t0_for_eval_day(calib, "2026-05-01") is None
+
+    def test_unknown_day_is_none(self):
+        t0 = pd.Timestamp("2026-05-01T21:00:00Z")
+        assert t0_for_eval_day(_vintage(t0, 100.0, 100.0), "2026-01-01") is None
+
+
+class TestNaiveSkillInRow:
+    """End-to-end on production-shaped vintages: 72h from t0, eval_day == t0's date."""
+
+    T0 = pd.Timestamp("2026-05-01T21:00:00Z")
+    DAY = "2026-05-01"
+
+    def test_perfect_model_scores_skill_one(self):
+        calib = _vintage(self.T0, lgbm_pred=100.0, realised=100.0)
+        history = _flat_history(self.T0 - pd.Timedelta(days=4), hours=24 * 5, value=50.0)
+        row = evaluate_one_day(self.DAY, calib, None, history)
+        assert row["n_naive_hours"] == 72
+        assert row["naive_mae"] == 50.0
+        assert row["lightgbm_skill_vs_naive"] == 1.0
+
+    def test_model_worse_than_naive_gives_negative_skill(self):
+        """The case that motivated the field — it must be visible, not hidden."""
+        calib = _vintage(self.T0, lgbm_pred=80.0, realised=100.0)
+        history = _flat_history(self.T0 - pd.Timedelta(days=4), hours=24 * 5, value=90.0)
+        row = evaluate_one_day(self.DAY, calib, None, history)
+        assert row["naive_mae"] == 10.0
+        assert row["lightgbm_mae_on_naive_hours"] == 20.0
+        assert row["lightgbm_skill_vs_naive"] == -1.0
+
+    def test_every_horizon_day_sources_the_same_final_known_day(self):
+        """All 72 horizons draw from `[t0-23h, t0]` — the last day known at t0.
+
+        Not an accident of the fixture: h=1..24 looks back 24h, h=25..48 looks
+        back 48h, h=49..72 looks back 72h, and all three land in the same window.
+        Pinned because it is the property that makes the baseline honest — no
+        horizon ever reads a day the forecaster had not yet seen.
+        """
+        calib = _vintage(self.T0, lgbm_pred=100.0, realised=100.0)
+        idx = pd.date_range(self.T0 - pd.Timedelta(days=3), periods=24 * 4, freq="h")
+        # 40.0 across the last known day [t0-23h, t0]; 10.0 everywhere earlier.
+        # Any horizon reaching further back would drag the mean off 60.0.
+        window_start = self.T0 - pd.Timedelta(hours=23)
+        history = pd.Series(
+            [40.0 if window_start <= t <= self.T0 else 10.0 for t in idx], index=idx
+        )
+        row = evaluate_one_day(self.DAY, calib, None, history)
+        assert row["n_naive_hours"] == 72
+        assert row["naive_min_horizon_h"] == 1
+        assert row["naive_max_horizon_h"] == 72
+        assert row["naive_mae"] == 60.0  # |100 realised - 40|, on all 72 hours
+
+    def test_horizon_span_reflects_withheld_leading_hours(self):
+        """A row covering h=31..72 must say so — naive MAE is horizon-dependent."""
+        calib = _vintage(self.T0, 100.0, 100.0, record_t0=True)[30:]
+        history = _flat_history(self.T0 - pd.Timedelta(days=4), hours=24 * 5, value=90.0)
+        row = evaluate_one_day(self.DAY, calib, None, history)
+        assert row["naive_min_horizon_h"] == 31
+        assert row["naive_max_horizon_h"] == 72
+
+    def test_legacy_gappy_vintage_leaves_fields_null_rather_than_leaking(self):
+        """No recorded t0 and no leading hours: refuse, do not guess."""
+        calib = _vintage(self.T0, 100.0, 100.0, record_t0=False)[30:]
+        history = _flat_history(self.T0 - pd.Timedelta(days=4), hours=24 * 5, value=90.0)
+        row = evaluate_one_day(self.DAY, calib, None, history)
+        assert row["n_naive_hours"] == 0
+        assert row["naive_mae"] is None
+        assert row["lightgbm_skill_vs_naive"] is None
+
+    def test_absent_history_leaves_fields_null_not_zero(self):
+        """Null means 'not computed'; 0.0 would read as 'no edge'."""
+        calib = _vintage(self.T0, lgbm_pred=80.0, realised=100.0)
+        row = evaluate_one_day(self.DAY, calib, None, None)
+        assert row["n_naive_hours"] == 0
+        assert row["naive_mae"] is None
+        assert row["lightgbm_skill_vs_naive"] is None
+
+    def test_lgbm_is_restricted_to_the_paired_hours(self):
+        """A gappy baseline must not be compared against a full-day LGBM MAE.
+
+        History holds 12 of the 24 usable source hours; each maps to one horizon
+        per horizon-day, so 36 of 72 rows pair.
+        """
+        calib = _vintage(self.T0, lgbm_pred=80.0, realised=100.0)
+        history = _flat_history(self.T0 - pd.Timedelta(hours=23), hours=12, value=90.0)
+        row = evaluate_one_day(self.DAY, calib, None, history)
+        assert row["n_naive_hours"] == 36
+        assert row["n_overlap_hours"] == 72
+        assert row["lightgbm_mae_on_naive_hours"] == 20.0
+
+    def test_baseline_never_reads_the_forecast_own_future(self):
+        """History stamped strictly after t0 is unusable, however accurate it is."""
+        calib = _vintage(self.T0, lgbm_pred=100.0, realised=100.0)
+        idx = pd.date_range(self.T0 + pd.Timedelta(hours=1), periods=72, freq="h")
+        history = pd.Series([100.0] * 72, index=idx)  # exact, and entirely post-t0
+        row = evaluate_one_day(self.DAY, calib, None, history)
+        assert row["n_naive_hours"] == 0
+        assert row["naive_mae"] is None
+
+    def test_hour_24_may_source_t0_itself(self):
+        """t0 is the last hour known when the forecast was made — fair game."""
+        calib = _vintage(self.T0, lgbm_pred=100.0, realised=100.0)
+        history = pd.Series([42.0], index=pd.DatetimeIndex([self.T0]))
+        row = evaluate_one_day(self.DAY, calib, None, history)
+        # h=24, 48 and 72 all source exactly t0.
+        assert row["n_naive_hours"] == 3
+        assert row["naive_mae"] == 58.0
+        assert row["naive_min_horizon_h"] == 24
+        assert row["naive_max_horizon_h"] == 72

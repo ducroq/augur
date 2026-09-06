@@ -637,6 +637,14 @@ def run_shadow_update(
         {
             "timestamp_utc": pd.Timestamp(row["timestamp_utc"]).isoformat(),
             "eval_day": today,
+            # The anchor, recorded rather than left to be re-derived. evaluate_shadow's
+            # seasonal-naive baseline needs the horizon of every hour, and inferring t0
+            # from the surviving rows is unsafe: only REALISED hours reach
+            # calibration_history, so a vintage whose leading hours were withheld
+            # (unrealised, or non-ENTSO-E per backfill_realized) would infer an anchor
+            # LATER than the truth and hand the baseline prices from after t0.
+            # Added 2026-09-06; rows written before then have no t0_utc.
+            "t0_utc": t0.isoformat(),
             "p10": float(row["p10_cqr"]),
             "p50": float(row["p50"]),
             "p90": float(row["p90_cqr"]),

@@ -38,6 +38,58 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 > entry's 14-run window is also unaffected in kind: its criteria are about `calibration_history` gaps having
 > a matching alarm, and the five outage days are legitimate data for exactly that.
 
+### [2026-09-06] The production model has no demonstrated skill over a seasonal-naive baseline, and the eval harness could not have told us
+
+**Position (provisional):** LightGBM-Quantile's point forecast does not beat "same clock hour, last day available at t0" — not at any horizon, and not on average over the record. The 20-odd experiments since EXP-018 have been optimising deltas against a reference that itself loses to one line of pandas. Until a skill-vs-naive floor is in the log, no model comparison here is interpretable.
+
+**Why this went unseen for four months:** `eval_log.jsonl` scores LightGBM against ARF, `docs/experiment-results.md` scores variants against production, and `metrics.py`'s Diebold-Mariano compares two candidates. Every instrument in the project is *relative*. Both models being worse than naive is invisible to all of them — it reads as a healthy log with a clear winner. ADR-007 pre-commits how we decide *what to change*; it never pinned what "good" is measured against.
+
+**Evidence (measured 2026-09-06, before this entry was written):**
+
+- Horizon-matched, model `p50` vs naive on identical timestamps from `calibration_history` (24 eval days, `t0 ∈ [2026-07-30, 2026-08-24]` — the full extent of the paired data):
+
+  | horizon | n | LGBM p50 MAE | naive MAE | winner |
+  |---|---|---|---|---|
+  | 1–24h | 576 | 26.92 | **23.34** | naive |
+  | 25–48h | 576 | 33.87 | **28.94** | naive |
+  | 49–72h | 552 | 36.92 | **32.71** | naive |
+  | all | 1704 | 32.51 | **28.27** | naive |
+
+- Longer but mixed-horizon (96 eval days, 2026-05-08..08-24, `eval_log` MAE vs daily naive-24h): LGBM 27.11 vs naive 26.66, **model ahead on 42 of 96 days (44%)**.
+- Band coverage over the last 30 eval days averages **0.653** (14d: 0.627) against an 0.80 target — chronic, and predating the 2026-08-30..09-04 outage that produced 09-04's 0.083.
+
+**Alternatives (failure-mode signals):**
+
+1. **The comparison window is the August level shift, not the model.** Jul–Aug 2026 was the highest-price, highest-variance stretch in the parquet, and a trailing-56-day learner is worst exactly there while a naive carry is at its best. **Signal:** skill turns positive over a calmer stretch once `n_naive_hours` accumulates across a regime change. Then the finding is regime-conditional and the fix is an adaptive window (which is EXP-023a's territory), not a model-class change.
+2. **The baseline is accidentally cheating.** **Signal:** the baseline sources an hour later than `24 * ceil(h/24)` back, or the parquet carries revised rather than as-published prices. Two failure surfaces, and only one is pinned:
+   - *Arithmetic* — `TestNaiveSourceTimestamp::test_source_is_never_after_t0` covers it, but only by handing the true `t0` in as an argument, so it validates the formula and nothing else.
+   - *Anchor resolution* — the realistic way this cheats, and **the way it actually did**. Code review on 2026-09-06 (before any `naive_*` row was written) found the first implementation inferring `t0` as `min(timestamp) - 1h` over `calibration_history`, which holds **realised rows only**: a vintage whose leading hours were withheld by `backfill_realized` would infer an anchor too late and source prices from after the true `t0` — a leak biasing skill *downward*, toward this entry's own conclusion. Fixed by recording `t0_utc` at prediction time (`update_shadow.py` step 7) and refusing to score rather than infer when it is absent and the leading hours are gone. Pinned by `TestT0Resolution` (6 tests).
+   - *Still unpinned:* ENTSO-E price revisions. If the parquet carries revised rather than as-published values, the baseline is scored on numbers nobody had at `t0`, and it would be flattered. Not currently checkable — `consolidate.py` keeps last-write-wins per timestamp with no revision trail.
+3. **MAE is the wrong lens for the product.** Augur exists for load shifting, where what matters is ranking the cheap hours within a day, not the level. **Signal:** a rank-correlation or cheapest-k-hours-hit-rate metric shows the model ahead of naive even where MAE is behind. That would make this entry's verdict narrow rather than wrong — and it would mean the dashboard should be scored on that instead. **Untested; the cheapest thing on this list.**
+4. **It is real and it is the model class.** **Signal:** EXP-021's Chronos-Bolt arm, re-scored against the same naive floor, clears it while LightGBM does not. EXP-021 measured −20.3% QS *against the incumbent*; that number means something entirely different if the incumbent is sub-naive.
+
+**Method (pre-committed 2026-09-06, before any of the above is re-run):**
+
+*Step 1 — instrument, shipped with this entry.* `evaluate_shadow.py` gains six fields per row: `n_naive_hours`, `naive_mae`, `lightgbm_mae_on_naive_hours`, `lightgbm_skill_vs_naive` (`1 - lgbm/naive` on the paired hours, positive = model better), and `naive_min_horizon_h` / `naive_max_horizon_h`. The baseline may only read `24 * ceil(h/24)` hours back — which, for a 72h vintage, is always the single window `[t0-23h, t0]`. LGBM is restricted to the same hours so a gappy baseline cannot manufacture skill. Any unusable input leaves the fields **null, never 0.0** — "not computed" must not read as "no edge". `update_shadow.py` additionally records `t0_utc` per prediction so the anchor is never re-derived. 25 tests in `tests/test_evaluate_shadow.py`.
+
+The horizon-span fields exist because a vintage becomes eligible at 24 of 72 realised hours and *which* 24 varies, while naive MAE is strongly horizon-dependent (23.3 / 28.9 / 32.7 by the table above). **Step 2's mean is therefore taken over rows sharing a comparable span; rows whose span differs materially are reported separately rather than averaged in.**
+
+*Step 2 — the verdict, on fresh vintages only.* Do not re-litigate this on the 24 days above; they are how the hypothesis was formed. After **≥21 vintages carrying non-null `lightgbm_skill_vs_naive`**, read the mean skill:
+
+- mean skill **< 0** → confirmed. The model class is the problem, EXP-021a inherits first claim, and `docs/experiment-results.md` gets a Decision-state line saying every pre-2026-09-06 effect size is measured against a sub-naive reference.
+- mean skill **∈ [0, 0.05]** → the model is a rounding error above a free baseline. Same practical conclusion, but keep the incumbent while EXP-021a runs.
+- mean skill **> 0.05** → the August window was the confound (Alternative 1). Re-read this entry against the regime, and treat the 24-day evidence as regime-conditional.
+
+Whichever bucket lands, **run Alternative 3's rank metric before acting** — if the model ranks hours well while missing levels, the dashboard's problem is presentation, not prediction, and that changes what gets built.
+
+*Step 3 — what is NOT pre-committed here.* Dropping the 1–24h horizon. That is a product change (the day-ahead auction publishes those hours ~4h before the run starts, and `api-client.js:226` already fetches them from Energy Zero), not a model finding, and it needs its own entry once it is known whether EDH's file already carries tomorrow's prices — unverifiable on the dev box, which has no keys. Filed as an open question, not a decision.
+
+**Revisit trigger:** ≥21 eval rows with non-null `lightgbm_skill_vs_naive` — the field starts populating on the next sadalsuud run, so ≈2026-09-27 at one row/day. **Does not consume fresh vintages** and does not block EXP-018a Stage 1 or EXP-021a; it re-frames how both are read. Surface in `/curate`.
+
+**Review by:** 2026-10-20.
+
+---
+
 ### [2026-08-30] EXP-023a: the 112-day window's 3.0% gain is real and survives on vintages the sweep never scored
 
 **Position (provisional):** EXP-023 found a 112-day training window beats production's 56 by 3.0% quantile score (DM p<0.0001), with better coverage on both sides and better Winkler — all four pre-committed gates passing. Position: this is a real generalisation gain, and it reproduces both on historical vintages the discovery sweep never touched and on vintages that did not exist when it was measured.
