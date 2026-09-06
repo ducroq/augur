@@ -2,7 +2,7 @@
 
 **Generated file — do not edit.** Rendered from `experiments/registry.jsonl` and the `summary.json` artifacts it references, by `scripts/render_results.py`. Regenerate after appending to the registry; `--check` fails if this file is stale.
 
-Registry state: **32 entries**, rendered at `acfcd96`. Integrity of the underlying record is verified separately by `scripts/audit_registry.py` (schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed).
+Registry state: **33 entries**, rendered at `be3deb6`. Integrity of the underlying record is verified separately by `scripts/audit_registry.py` (schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed).
 
 Decision values: `kept` (evidence stands / in production) · `parked` (works, not adopted, revisit) · `rejected` (does not work) · `rolled_back` · `superseded`.
 
@@ -40,6 +40,7 @@ The registry records *what was found*; the **revisit trigger and review-by date 
 | EXP-023 | Window-length sweep | All four pre-committed gates PASS at 112 days: DM p<0.0001, QS 3.0% better than 56d, coverage better on both sides (lower 0.857->0.877, upper 0.761->0.776), Winkler better (173.2->169.4) |
 | EXP-028 | Covariates DO help a covariate-capable foundation model | The Position's skill claim is CONFIRMED and the exogenous question genuinely re-opens with model class. chronos-2 with the seven known-future covariates scores QS 7.30 vs 7.96 univariate — 8.3%… |
 | EXP-032 | EXP-023a Stage A | The advantage does NOT reproduce |
+| EXP-035 | Every stored arm re-scored against a seasonal-naive floor | PARKED, matching EXP-022's treatment of a mechanism diagnostic: this changes no production path and authorises no swap |
 
 ### Standing evidence — `kept`
 
@@ -97,6 +98,7 @@ The registry records *what was found*; the **revisit trigger and review-by date 
 | EXP-031 | 2026-08-30 | **kept** | `untraceable_before`=19<br>`untraceable_after`=0<br>`numeric_metrics_checked`=241 | Documentation-integrity audit of EXP-021..030: 19 registry numbers were untraceable to any artifact; all now regenerable, and the check is automated |
 | EXP-032 | 2026-08-30 | parked | — | EXP-023a Stage A: the 112-day window's advantage does NOT reproduce on unscored vintages |
 | EXP-033 | 2026-08-30 | **kept** | — | EXP-021a Stage 2 latency gate discharged on the real host: chronos-bolt-base runs a 72h forecast in 1.16s on sadalsuud |
+| EXP-035 | 2026-09-06 | parked | — | Every stored arm re-scored against a seasonal-naive floor: the foundation model clears it in all 9 months, no LightGBM configuration clears it in August |
 
 ## EXP-001 — Initial ARF warmup baseline (pre-backfill)
 
@@ -1360,5 +1362,47 @@ The registry records *what was found*; the **revisit trigger and review-by date 
 **Artifacts.** `scripts/exp026_cpu_latency.py` · `ml/shadow/exp026_size_ladder/cpu_latency_sadalsuud.json`
 
 **Commits.** `acfcd96`
+
+---
+
+## EXP-035 — Every stored arm re-scored against a seasonal-naive floor: the foundation model clears it in all 9 months, no LightGBM configuration clears it in August
+
+**parked** · 2026-09-06 · model: re-scoring only, no training: chronos-bolt-base zero-shot (EXP-021) and 8 LightGBM-Quantile ablation variants (EXP-018) vs seasonal-naive
+
+**Hypothesis.** Opened by docs/hypothesis-log.md [2026-09-06]: every comparison in this project is relative (eval_log scores LightGBM vs ARF, the registry scores variants vs production, DM compares two candidates), so the case where all arms are worse than a trivial baseline is invisible to all of them. On the live production record LightGBM's p50 lost to seasonal-naive at every horizon over t0 in [2026-07-30, 2026-08-24]. Prediction: the same floor applied to the 260 stored offline vintages separates the arms — and if EXP-021's 20.3% QS win over the incumbent is real skill rather than a low bar, chronos-bolt-base clears the floor where LightGBM does not. ADR-007 layer 2 (apply the criterion to existing data before opening a new shadow window).
+
+**Outcome.** PARKED, matching EXP-022's treatment of a mechanism diagnostic: this changes no production path and authorises no swap. Chronos-bolt-base clears the naive floor by 25.0% (DM p<1e-6) and does so in ALL NINE months, skill 0.144-0.364, and at every horizon group. LightGBM full clears it by only 5.1% (DM p=0.033) and is BELOW naive in 2 of 9 months. In August 2026 — the high-price regime the live pipeline is currently in, mean 131.9 EUR/MWh — ALL EIGHT LightGBM variants are below naive, best being drop_rolling at -0.104, while chronos still returns +0.196. This confirms the live-record finding on independent offline vintages and answers Alternative 1 of the hypothesis-log entry: LightGBM's edge over naive is real on the full year but thin and REGIME-DEPENDENT, collapsing exactly where prices are high and moving. Chronos's edge is not regime-dependent. Consequence for the record: EXP-021's headline -20.3% QS was measured against an incumbent that is itself barely above a free baseline, which makes the model-class gap larger than stated, not smaller. Does NOT discharge EXP-021a — that is pre-committed on 14 FRESH vintages and these are the same offline ones EXP-021 used. Does NOT authorise a swap: no calibration guardrail is evaluated here and ADR-007 requires one. Standing evidence, not a decision. Secondary: drop_rolling is the best LightGBM arm against the floor (0.107, double full's 0.051), consistent with EXP-018a's pre-committed direction; drop_calendar is the only arm below naive over the whole window (-0.017), so the calendar block is the one feature group carrying its weight.
+
+<details><summary>All recorded metrics (21)</summary>
+
+| metric | value |
+|---|---|
+| `naive_mae` | 30.3097 |
+| `chronos_bolt_base_mae` | 22.7218 |
+| `chronos_bolt_base_skill_vs_naive` | 0.2503 |
+| `chronos_bolt_base_dm_p` | 0 |
+| `lgbm_full_mae` | 28.757 |
+| `lgbm_full_skill_vs_naive` | 0.0512 |
+| `lgbm_full_dm_p` | 0.0331 |
+| `lgbm_drop_rolling_skill_vs_naive` | 0.1068 |
+| `lgbm_drop_calendar_skill_vs_naive` | -0.017 |
+| `chronos_skill_h1_24` | 0.2591 |
+| `chronos_skill_h25_48` | 0.2444 |
+| `chronos_skill_h49_72` | 0.249 |
+| `lgbm_full_skill_h1_24` | 0.1061 |
+| `lgbm_full_skill_h25_48` | 0.0218 |
+| `lgbm_full_skill_h49_72` | 0.0362 |
+| `aug2026_skill_lgbm_full` | -0.1574 |
+| `aug2026_skill_lgbm_drop_rolling` | -0.1044 |
+| `aug2026_skill_chronos_bolt_base` | 0.1959 |
+| `n_months_lgbm_full_below_naive` | 2 |
+| `n_months_chronos_below_naive` | 0 |
+| `n_lgbm_variants_below_naive_in_aug2026` | 8 |
+
+</details>
+
+**Caveats.** No GPU and no fresh vintages: pure re-scoring of predictions already stored by EXP-018 and EXP-021 on the identical 260-vintage set (2025-12-05..2026-08-21), so the arms are paired row-for-row. The naive prices are read from the FM's own context tape rather than the training parquet, which makes 'the baseline saw less than the model' true by construction instead of by argument. Reproduce with scripts/exp035_naive_floor.py. Caveat: the LightGBM arms here are the EXP-018 harness's walk-forward rebuilds, production-shaped but not the literal production model; the live-record measurement in the hypothesis-log entry is the one that speaks for the deployed system.
+
+**Artifacts.** `ml/shadow/exp035_naive_floor/summary.json` · `scripts/exp035_naive_floor.py`
 
 ---

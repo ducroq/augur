@@ -1,0 +1,620 @@
+{
+  "baseline": "seasonal-naive, 24*ceil(h/24) lookback, sourced from the FM context tape",
+  "hac_lags": 71,
+  "arms": {
+    "fm_chronos_bolt_base": {
+      "n": 18342,
+      "mae": 22.7218,
+      "naive_mae": 30.3081,
+      "skill_vs_naive": 0.2503,
+      "dm_statistic": -11.2318,
+      "dm_p_one_sided": 0.0,
+      "vintages": 260,
+      "skill_h1_24": 0.2591,
+      "skill_h25_48": 0.2444,
+      "skill_h49_72": 0.249
+    },
+    "lgbm_drop_calendar": {
+      "n": 18340,
+      "mae": 30.8246,
+      "naive_mae": 30.3097,
+      "skill_vs_naive": -0.017,
+      "dm_statistic": 0.5838,
+      "dm_p_one_sided": 0.72032,
+      "vintages": 260,
+      "skill_h1_24": 0.0063,
+      "skill_h25_48": -0.0285,
+      "skill_h49_72": -0.0243
+    },
+    "lgbm_drop_exog": {
+      "n": 18340,
+      "mae": 28.7693,
+      "naive_mae": 30.3097,
+      "skill_vs_naive": 0.0508,
+      "dm_statistic": -1.8048,
+      "dm_p_one_sided": 0.035557,
+      "vintages": 260,
+      "skill_h1_24": 0.0925,
+      "skill_h25_48": 0.0313,
+      "skill_h49_72": 0.0366
+    },
+    "lgbm_drop_lags": {
+      "n": 18340,
+      "mae": 28.5149,
+      "naive_mae": 30.3097,
+      "skill_vs_naive": 0.0592,
+      "dm_statistic": -2.106,
+      "dm_p_one_sided": 0.017603,
+      "vintages": 260,
+      "skill_h1_24": 0.0956,
+      "skill_h25_48": 0.0365,
+      "skill_h49_72": 0.0524
+    },
+    "lgbm_drop_load": {
+      "n": 18340,
+      "mae": 28.6862,
+      "naive_mae": 30.3097,
+      "skill_vs_naive": 0.0536,
+      "dm_statistic": -1.891,
+      "dm_p_one_sided": 0.029312,
+      "vintages": 260,
+      "skill_h1_24": 0.1071,
+      "skill_h25_48": 0.029,
+      "skill_h49_72": 0.0349
+    },
+    "lgbm_drop_rolling": {
+      "n": 18340,
+      "mae": 27.0731,
+      "naive_mae": 30.3097,
+      "skill_vs_naive": 0.1068,
+      "dm_statistic": -3.9984,
+      "dm_p_one_sided": 3.2e-05,
+      "vintages": 260,
+      "skill_h1_24": 0.1443,
+      "skill_h25_48": 0.084,
+      "skill_h49_72": 0.0992
+    },
+    "lgbm_drop_solar": {
+      "n": 18340,
+      "mae": 28.6932,
+      "naive_mae": 30.3097,
+      "skill_vs_naive": 0.0533,
+      "dm_statistic": -1.8948,
+      "dm_p_one_sided": 0.029062,
+      "vintages": 260,
+      "skill_h1_24": 0.1027,
+      "skill_h25_48": 0.0279,
+      "skill_h49_72": 0.0388
+    },
+    "lgbm_drop_wind": {
+      "n": 18340,
+      "mae": 28.6223,
+      "naive_mae": 30.3097,
+      "skill_vs_naive": 0.0557,
+      "dm_statistic": -2.0175,
+      "dm_p_one_sided": 0.021819,
+      "vintages": 260,
+      "skill_h1_24": 0.1021,
+      "skill_h25_48": 0.0306,
+      "skill_h49_72": 0.0432
+    },
+    "lgbm_full": {
+      "n": 18340,
+      "mae": 28.757,
+      "naive_mae": 30.3097,
+      "skill_vs_naive": 0.0512,
+      "dm_statistic": -1.8371,
+      "dm_p_one_sided": 0.0331,
+      "vintages": 260,
+      "skill_h1_24": 0.1061,
+      "skill_h25_48": 0.0218,
+      "skill_h49_72": 0.0362
+    }
+  },
+  "monthly": {
+    "fm_chronos_bolt_base": {
+      "2025-12": {
+        "mean_price": 83.34,
+        "mae": 16.334,
+        "naive_mae": 19.093,
+        "skill": 0.1445
+      },
+      "2026-01": {
+        "mean_price": 110.8,
+        "mae": 16.671,
+        "naive_mae": 21.559,
+        "skill": 0.2267
+      },
+      "2026-02": {
+        "mean_price": 90.92,
+        "mae": 14.962,
+        "naive_mae": 18.422,
+        "skill": 0.1878
+      },
+      "2026-03": {
+        "mean_price": 102.44,
+        "mae": 30.723,
+        "naive_mae": 38.798,
+        "skill": 0.2081
+      },
+      "2026-04": {
+        "mean_price": 78.47,
+        "mae": 30.232,
+        "naive_mae": 36.968,
+        "skill": 0.1822
+      },
+      "2026-05": {
+        "mean_price": 100.52,
+        "mae": 22.316,
+        "naive_mae": 29.528,
+        "skill": 0.2443
+      },
+      "2026-06": {
+        "mean_price": 107.46,
+        "mae": 31.133,
+        "naive_mae": 48.511,
+        "skill": 0.3582
+      },
+      "2026-07": {
+        "mean_price": 106.09,
+        "mae": 19.862,
+        "naive_mae": 31.221,
+        "skill": 0.3638
+      },
+      "2026-08": {
+        "mean_price": 131.94,
+        "mae": 21.858,
+        "naive_mae": 27.182,
+        "skill": 0.1959
+      }
+    },
+    "lgbm_drop_calendar": {
+      "2025-12": {
+        "mean_price": 83.34,
+        "mae": 17.13,
+        "naive_mae": 19.093,
+        "skill": 0.1028
+      },
+      "2026-01": {
+        "mean_price": 110.8,
+        "mae": 18.953,
+        "naive_mae": 21.559,
+        "skill": 0.1209
+      },
+      "2026-02": {
+        "mean_price": 90.92,
+        "mae": 18.403,
+        "naive_mae": 18.422,
+        "skill": 0.001
+      },
+      "2026-03": {
+        "mean_price": 102.44,
+        "mae": 37.142,
+        "naive_mae": 38.798,
+        "skill": 0.0427
+      },
+      "2026-04": {
+        "mean_price": 78.47,
+        "mae": 43.863,
+        "naive_mae": 36.968,
+        "skill": -0.1865
+      },
+      "2026-05": {
+        "mean_price": 100.52,
+        "mae": 30.823,
+        "naive_mae": 29.528,
+        "skill": -0.0438
+      },
+      "2026-06": {
+        "mean_price": 107.46,
+        "mae": 41.014,
+        "naive_mae": 48.511,
+        "skill": 0.1545
+      },
+      "2026-07": {
+        "mean_price": 106.09,
+        "mae": 33.471,
+        "naive_mae": 31.221,
+        "skill": -0.0721
+      },
+      "2026-08": {
+        "mean_price": 131.92,
+        "mae": 38.301,
+        "naive_mae": 27.198,
+        "skill": -0.4082
+      }
+    },
+    "lgbm_drop_exog": {
+      "2025-12": {
+        "mean_price": 83.34,
+        "mae": 15.12,
+        "naive_mae": 19.093,
+        "skill": 0.2081
+      },
+      "2026-01": {
+        "mean_price": 110.8,
+        "mae": 18.107,
+        "naive_mae": 21.559,
+        "skill": 0.1601
+      },
+      "2026-02": {
+        "mean_price": 90.92,
+        "mae": 17.726,
+        "naive_mae": 18.422,
+        "skill": 0.0378
+      },
+      "2026-03": {
+        "mean_price": 102.44,
+        "mae": 36.5,
+        "naive_mae": 38.798,
+        "skill": 0.0592
+      },
+      "2026-04": {
+        "mean_price": 78.47,
+        "mae": 43.148,
+        "naive_mae": 36.968,
+        "skill": -0.1672
+      },
+      "2026-05": {
+        "mean_price": 100.52,
+        "mae": 28.787,
+        "naive_mae": 29.528,
+        "skill": 0.0251
+      },
+      "2026-06": {
+        "mean_price": 107.46,
+        "mae": 38.803,
+        "naive_mae": 48.511,
+        "skill": 0.2001
+      },
+      "2026-07": {
+        "mean_price": 106.09,
+        "mae": 28.901,
+        "naive_mae": 31.221,
+        "skill": 0.0743
+      },
+      "2026-08": {
+        "mean_price": 131.92,
+        "mae": 32.32,
+        "naive_mae": 27.198,
+        "skill": -0.1883
+      }
+    },
+    "lgbm_drop_lags": {
+      "2025-12": {
+        "mean_price": 83.34,
+        "mae": 14.626,
+        "naive_mae": 19.093,
+        "skill": 0.2339
+      },
+      "2026-01": {
+        "mean_price": 110.8,
+        "mae": 17.783,
+        "naive_mae": 21.559,
+        "skill": 0.1752
+      },
+      "2026-02": {
+        "mean_price": 90.92,
+        "mae": 17.478,
+        "naive_mae": 18.422,
+        "skill": 0.0513
+      },
+      "2026-03": {
+        "mean_price": 102.44,
+        "mae": 36.386,
+        "naive_mae": 38.798,
+        "skill": 0.0622
+      },
+      "2026-04": {
+        "mean_price": 78.47,
+        "mae": 43.912,
+        "naive_mae": 36.968,
+        "skill": -0.1879
+      },
+      "2026-05": {
+        "mean_price": 100.52,
+        "mae": 28.695,
+        "naive_mae": 29.528,
+        "skill": 0.0282
+      },
+      "2026-06": {
+        "mean_price": 107.46,
+        "mae": 37.943,
+        "naive_mae": 48.511,
+        "skill": 0.2179
+      },
+      "2026-07": {
+        "mean_price": 106.09,
+        "mae": 28.513,
+        "naive_mae": 31.221,
+        "skill": 0.0867
+      },
+      "2026-08": {
+        "mean_price": 131.92,
+        "mae": 31.596,
+        "naive_mae": 27.198,
+        "skill": -0.1617
+      }
+    },
+    "lgbm_drop_load": {
+      "2025-12": {
+        "mean_price": 83.34,
+        "mae": 15.156,
+        "naive_mae": 19.093,
+        "skill": 0.2062
+      },
+      "2026-01": {
+        "mean_price": 110.8,
+        "mae": 17.882,
+        "naive_mae": 21.559,
+        "skill": 0.1706
+      },
+      "2026-02": {
+        "mean_price": 90.92,
+        "mae": 17.378,
+        "naive_mae": 18.422,
+        "skill": 0.0567
+      },
+      "2026-03": {
+        "mean_price": 102.44,
+        "mae": 36.217,
+        "naive_mae": 38.798,
+        "skill": 0.0665
+      },
+      "2026-04": {
+        "mean_price": 78.47,
+        "mae": 44.403,
+        "naive_mae": 36.968,
+        "skill": -0.2011
+      },
+      "2026-05": {
+        "mean_price": 100.52,
+        "mae": 29.072,
+        "naive_mae": 29.528,
+        "skill": 0.0155
+      },
+      "2026-06": {
+        "mean_price": 107.46,
+        "mae": 38.506,
+        "naive_mae": 48.511,
+        "skill": 0.2063
+      },
+      "2026-07": {
+        "mean_price": 106.09,
+        "mae": 28.17,
+        "naive_mae": 31.221,
+        "skill": 0.0977
+      },
+      "2026-08": {
+        "mean_price": 131.92,
+        "mae": 31.729,
+        "naive_mae": 27.198,
+        "skill": -0.1666
+      }
+    },
+    "lgbm_drop_rolling": {
+      "2025-12": {
+        "mean_price": 83.34,
+        "mae": 15.458,
+        "naive_mae": 19.093,
+        "skill": 0.1903
+      },
+      "2026-01": {
+        "mean_price": 110.8,
+        "mae": 18.089,
+        "naive_mae": 21.559,
+        "skill": 0.161
+      },
+      "2026-02": {
+        "mean_price": 90.92,
+        "mae": 16.666,
+        "naive_mae": 18.422,
+        "skill": 0.0953
+      },
+      "2026-03": {
+        "mean_price": 102.44,
+        "mae": 34.093,
+        "naive_mae": 38.798,
+        "skill": 0.1213
+      },
+      "2026-04": {
+        "mean_price": 78.47,
+        "mae": 40.758,
+        "naive_mae": 36.968,
+        "skill": -0.1025
+      },
+      "2026-05": {
+        "mean_price": 100.52,
+        "mae": 25.888,
+        "naive_mae": 29.528,
+        "skill": 0.1233
+      },
+      "2026-06": {
+        "mean_price": 107.46,
+        "mae": 37.395,
+        "naive_mae": 48.511,
+        "skill": 0.2292
+      },
+      "2026-07": {
+        "mean_price": 106.09,
+        "mae": 25.819,
+        "naive_mae": 31.221,
+        "skill": 0.173
+      },
+      "2026-08": {
+        "mean_price": 131.92,
+        "mae": 30.038,
+        "naive_mae": 27.198,
+        "skill": -0.1044
+      }
+    },
+    "lgbm_drop_solar": {
+      "2025-12": {
+        "mean_price": 83.34,
+        "mae": 15.134,
+        "naive_mae": 19.093,
+        "skill": 0.2073
+      },
+      "2026-01": {
+        "mean_price": 110.8,
+        "mae": 17.867,
+        "naive_mae": 21.559,
+        "skill": 0.1713
+      },
+      "2026-02": {
+        "mean_price": 90.92,
+        "mae": 17.555,
+        "naive_mae": 18.422,
+        "skill": 0.0471
+      },
+      "2026-03": {
+        "mean_price": 102.44,
+        "mae": 36.594,
+        "naive_mae": 38.798,
+        "skill": 0.0568
+      },
+      "2026-04": {
+        "mean_price": 78.47,
+        "mae": 42.811,
+        "naive_mae": 36.968,
+        "skill": -0.1581
+      },
+      "2026-05": {
+        "mean_price": 100.52,
+        "mae": 29.108,
+        "naive_mae": 29.528,
+        "skill": 0.0143
+      },
+      "2026-06": {
+        "mean_price": 107.46,
+        "mae": 38.781,
+        "naive_mae": 48.511,
+        "skill": 0.2006
+      },
+      "2026-07": {
+        "mean_price": 106.09,
+        "mae": 28.94,
+        "naive_mae": 31.221,
+        "skill": 0.0731
+      },
+      "2026-08": {
+        "mean_price": 131.92,
+        "mae": 31.758,
+        "naive_mae": 27.198,
+        "skill": -0.1677
+      }
+    },
+    "lgbm_drop_wind": {
+      "2025-12": {
+        "mean_price": 83.34,
+        "mae": 15.254,
+        "naive_mae": 19.093,
+        "skill": 0.2011
+      },
+      "2026-01": {
+        "mean_price": 110.8,
+        "mae": 18.237,
+        "naive_mae": 21.559,
+        "skill": 0.1541
+      },
+      "2026-02": {
+        "mean_price": 90.92,
+        "mae": 17.564,
+        "naive_mae": 18.422,
+        "skill": 0.0466
+      },
+      "2026-03": {
+        "mean_price": 102.44,
+        "mae": 36.495,
+        "naive_mae": 38.798,
+        "skill": 0.0594
+      },
+      "2026-04": {
+        "mean_price": 78.47,
+        "mae": 43.291,
+        "naive_mae": 36.968,
+        "skill": -0.1711
+      },
+      "2026-05": {
+        "mean_price": 100.52,
+        "mae": 27.946,
+        "naive_mae": 29.528,
+        "skill": 0.0536
+      },
+      "2026-06": {
+        "mean_price": 107.46,
+        "mae": 38.518,
+        "naive_mae": 48.511,
+        "skill": 0.206
+      },
+      "2026-07": {
+        "mean_price": 106.09,
+        "mae": 28.671,
+        "naive_mae": 31.221,
+        "skill": 0.0817
+      },
+      "2026-08": {
+        "mean_price": 131.92,
+        "mae": 32.152,
+        "naive_mae": 27.198,
+        "skill": -0.1821
+      }
+    },
+    "lgbm_full": {
+      "2025-12": {
+        "mean_price": 83.34,
+        "mae": 15.044,
+        "naive_mae": 19.093,
+        "skill": 0.212
+      },
+      "2026-01": {
+        "mean_price": 110.8,
+        "mae": 17.898,
+        "naive_mae": 21.559,
+        "skill": 0.1698
+      },
+      "2026-02": {
+        "mean_price": 90.92,
+        "mae": 17.495,
+        "naive_mae": 18.422,
+        "skill": 0.0503
+      },
+      "2026-03": {
+        "mean_price": 102.44,
+        "mae": 36.33,
+        "naive_mae": 38.798,
+        "skill": 0.0636
+      },
+      "2026-04": {
+        "mean_price": 78.47,
+        "mae": 43.285,
+        "naive_mae": 36.968,
+        "skill": -0.1709
+      },
+      "2026-05": {
+        "mean_price": 100.52,
+        "mae": 29.088,
+        "naive_mae": 29.528,
+        "skill": 0.0149
+      },
+      "2026-06": {
+        "mean_price": 107.46,
+        "mae": 38.909,
+        "naive_mae": 48.511,
+        "skill": 0.1979
+      },
+      "2026-07": {
+        "mean_price": 106.09,
+        "mae": 29.447,
+        "naive_mae": 31.221,
+        "skill": 0.0568
+      },
+      "2026-08": {
+        "mean_price": 131.92,
+        "mae": 31.478,
+        "naive_mae": 27.198,
+        "skill": -0.1574
+      }
+    }
+  }
+}
