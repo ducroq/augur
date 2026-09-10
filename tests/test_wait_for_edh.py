@@ -27,6 +27,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import datetime as dt
+
 import pytest
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "wait_for_edh.sh"
@@ -80,32 +82,34 @@ class Hub:
         sc.write_text("#!/usr/bin/env bash\necho '%s'\n" % timeout_value)
         sc.chmod(0o755)
 
-    def stub_gh(self, mode):
-        """Fake `gh issue list --json number,createdAt` on PATH.
+    def stub_issue_api(self, mode):
+        """Point the probe at a local fixture instead of api.github.com.
 
-        `mode` picks what the upstream alert job would look like right now:
+        `mode` picks what EDH's alert job would look like right now:
           "tonight"   an open publish-failure issue opened while we wait
           "yesterday" one still open from a previous night (EDH only closes it
                       on the next successful publish) -- must NOT count
           "none"      no open issues
-          "broken"    gh fails, as it does with no auth or no network
+          "malformed" a 200 whose body is not what we expect
+          "broken"    the read fails outright (offline, DNS, non-200)
         """
-        self.bin = self.augur / "bin"
-        self.bin.mkdir(exist_ok=True)
-        gh = self.bin / "gh"
+        fixture = self.augur / "issues.json"
+        now = dt.datetime.now(dt.timezone.utc)
         if mode == "broken":
-            body = "#!/usr/bin/env bash\necho 'gh: not authenticated' >&2\nexit 1\n"
+            self.api_url = "file://" + str(self.augur / "does-not-exist.json")
+            return
+        if mode == "malformed":
+            fixture.write_text('{"message":"rate limit exceeded"}')
         elif mode == "none":
-            body = "#!/usr/bin/env bash\necho '[]'\n"
+            fixture.write_text("[]")
         else:
-            when = ("+2 minutes" if mode == "tonight" else "-1 day")
-            body = (
-                "#!/usr/bin/env bash\n"
-                "TS=$(date -u -d '%s' +%%Y-%%m-%%dT%%H:%%M:%%SZ)\n"
-                "printf '[{\"number\":70,\"createdAt\":\"%%s\"}]\\n' \"$TS\"\n"
-            ) % when
-        gh.write_text(body)
-        gh.chmod(0o755)
+            when = now + dt.timedelta(minutes=2) if mode == "tonight" \
+                else now - dt.timedelta(days=1)
+            fixture.write_text(json.dumps([{
+                "number": 70,
+                "created_at": when.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            }]))
+        self.api_url = "file://" + str(fixture)
 
     def run(self, max_wait=2, poll=1, issue_poll_every=0):
         env = dict(os.environ)
@@ -124,6 +128,8 @@ class Hub:
         })
         if getattr(self, "bin", None):
             env["PATH"] = f"{self.bin}:{env['PATH']}"
+        if getattr(self, "api_url", None):
+            env["EDH_FAILURE_API_URL"] = self.api_url
         return subprocess.run(["bash", str(SCRIPT)], env=env,
                               capture_output=True, text=True, timeout=90)
 
@@ -333,7 +339,7 @@ class TestUpstreamFailureSignal:
         h = Hub(tmp_path)
         history(h)
         h.seed("2026-09-08T19:15:52+00:00")
-        h.stub_gh("tonight")
+        h.stub_issue_api("tonight")
         r = h.run(max_wait=30, poll=1, issue_poll_every=1)
         assert r.returncode == 0
         assert "UPSTREAM FAILED" in r.stdout
@@ -345,7 +351,7 @@ class TestUpstreamFailureSignal:
         h = Hub(tmp_path)
         history(h)
         h.seed("2026-09-08T19:15:52+00:00")
-        h.stub_gh("tonight")
+        h.stub_issue_api("tonight")
         r = h.run(max_wait=30, poll=1, issue_poll_every=1)
         assert "DEADLINE reached" not in r.stdout
 
@@ -354,7 +360,7 @@ class TestUpstreamFailureSignal:
         h = Hub(tmp_path)
         history(h)
         h.seed("2026-09-08T19:15:52+00:00")
-        h.stub_gh("tonight")
+        h.stub_issue_api("tonight")
         h.run(max_wait=30, poll=1, issue_poll_every=1)
         assert h.consumed == "2026-09-08T19:15:52+00:00"
 
@@ -369,7 +375,7 @@ class TestUpstreamFailureSignal:
         h = Hub(tmp_path)
         history(h)
         h.seed("2026-09-08T19:15:52+00:00")
-        h.stub_gh("yesterday")
+        h.stub_issue_api("yesterday")
         r = h.run(max_wait=3, poll=1, issue_poll_every=1)
         assert r.returncode == 0
         assert "UPSTREAM FAILED" not in r.stdout
@@ -381,7 +387,7 @@ class TestUpstreamFailureSignal:
         history(h)
         h.seed("2026-08-01T00:00:00+00:00")
         h.publish("2026-09-10T18:20:00+00:00", NORMAL)
-        h.stub_gh("tonight")
+        h.stub_issue_api("tonight")
         r = h.run(max_wait=30, poll=1, issue_poll_every=1)
         assert "READY" in r.stdout
         assert "UPSTREAM FAILED" not in r.stdout
@@ -393,7 +399,7 @@ class TestUpstreamFailureSignal:
         h = Hub(tmp_path)
         history(h)
         h.seed("2026-09-08T19:15:52+00:00")
-        h.stub_gh("broken")
+        h.stub_issue_api("broken")
         r = h.run(max_wait=3, poll=1, issue_poll_every=1)
         assert r.returncode == 0
         assert "UPSTREAM FAILED" not in r.stdout
@@ -403,7 +409,7 @@ class TestUpstreamFailureSignal:
         h = Hub(tmp_path)
         history(h)
         h.seed("2026-09-08T19:15:52+00:00")
-        h.stub_gh("none")
+        h.stub_issue_api("none")
         r = h.run(max_wait=3, poll=1, issue_poll_every=1)
         assert "UPSTREAM FAILED" not in r.stdout
         assert "DEADLINE reached" in r.stdout
@@ -412,7 +418,25 @@ class TestUpstreamFailureSignal:
         h = Hub(tmp_path)
         history(h)
         h.seed("2026-09-08T19:15:52+00:00")
-        h.stub_gh("tonight")
+        h.stub_issue_api("tonight")
         r = h.run(max_wait=3, poll=1, issue_poll_every=0)
         assert "UPSTREAM FAILED" not in r.stdout
         assert "DEADLINE reached" in r.stdout
+
+    def test_a_non_json_response_changes_nothing(self, tmp_path):
+        """A rate-limit body is a 200 that is not a list -- must not parse."""
+        h = Hub(tmp_path)
+        history(h)
+        h.seed("2026-09-08T19:15:52+00:00")
+        h.stub_issue_api("malformed")
+        r = h.run(max_wait=3, poll=1, issue_poll_every=1)
+        assert r.returncode == 0
+        assert "UPSTREAM FAILED" not in r.stdout
+        assert "DEADLINE reached" in r.stdout
+
+    def test_the_probe_needs_no_external_binary(self, tmp_path):
+        """Regression: the first cut shelled out to `gh`, which is not installed
+        on sadalsuud, so the probe silently no-opped in production."""
+        body = SCRIPT.read_text()
+        assert "gh issue list" not in body
+        assert "command -v gh" not in body

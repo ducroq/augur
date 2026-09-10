@@ -63,8 +63,9 @@
 # reported WHILE we were waiting says anything about tonight.
 #
 # This never blocks and never adds a wait: it can only end one early, and every
-# way of not knowing (no gh, no auth, no network, rate limit, schema change)
-# falls through to the existing deadline path.
+# way of not knowing (offline, rate limit, non-200, schema change) falls
+# through to the existing deadline path. Read with python3 stdlib, not `gh`,
+# which is not installed on sadalsuud.
 #
 # FAIL OPEN, ALWAYS. Unreadable report, missing dataset, schema change, deadline
 # reached -- every path exits 0 and lets the run proceed. A gate that fails
@@ -95,7 +96,13 @@ FALLBACK_PRIMARY_PTS="${EDH_FALLBACK_PRIMARY_PTS:-192}"
 FAILURE_REPO="${EDH_FAILURE_REPO:-ducroq/energydatahub}"
 FAILURE_LABEL="${EDH_FAILURE_LABEL:-publish-failure}"
 ISSUE_POLL_EVERY="${EDH_ISSUE_POLL_EVERY:-5}"
-GH_TIMEOUT_SEC="${EDH_GH_TIMEOUT_SEC:-20}"
+API_TIMEOUT_SEC="${EDH_API_TIMEOUT_SEC:-20}"
+# Read GitHub's public REST API directly with python3 stdlib rather than via
+# `gh`: gh is NOT installed on sadalsuud, so a gh-based probe silently no-ops
+# in the one place it needs to work. This needs no binary, no auth and no
+# secret -- energydatahub is public, and an unauthenticated read is 60/hr per
+# IP against our ~6/hr. Overridable as a whole so tests can point at file://.
+FAILURE_API_URL="${EDH_FAILURE_API_URL:-https://api.github.com/repos/${FAILURE_REPO}/issues?labels=${FAILURE_LABEL}&state=open&per_page=5}"
 
 START_TS=$(date -u +%s)
 mkdir -p "$(dirname "$VERDICT")" 2>/dev/null || true
@@ -199,20 +206,22 @@ for x in r.get("dataset_reports", []):
 }
 
 # Print the number of an OPEN publish-failure issue reported since this run
-# started, or nothing at all. Every failure mode -- gh absent, unauthenticated,
-# offline, rate-limited, --json schema changed -- prints nothing, which the
-# caller reads as "no information" and keeps waiting. It must never be able to
+# started, or nothing at all. Every failure mode -- offline, DNS, rate-limited,
+# non-200, changed schema, unparseable date -- prints nothing, which the caller
+# reads as "no information" and keeps waiting. It must never be able to
 # manufacture a give-up.
 upstream_publish_failed() {
-    command -v gh >/dev/null 2>&1 || return 0
-    timeout "$GH_TIMEOUT_SEC" gh issue list \
-        --repo "$FAILURE_REPO" --label "$FAILURE_LABEL" \
-        --state open --limit 5 --json number,createdAt 2>/dev/null \
-      | python3 -c '
-import sys, json, datetime as dt
+    python3 -c '
+import sys, json, datetime as dt, urllib.request
+url, since_epoch, timeout = sys.argv[1], sys.argv[2], sys.argv[3]
 try:
-    rows = json.load(sys.stdin)
-    since = dt.datetime.fromtimestamp(int(sys.argv[1]), dt.timezone.utc)
+    since = dt.datetime.fromtimestamp(int(since_epoch), dt.timezone.utc)
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "augur-wait-for-edh",
+        "Accept": "application/vnd.github+json",
+    })
+    with urllib.request.urlopen(req, timeout=float(timeout)) as r:
+        rows = json.load(r)
 except Exception:
     sys.exit(0)
 if not isinstance(rows, list):
@@ -221,7 +230,9 @@ newest = None
 for r in rows:
     if not isinstance(r, dict):
         continue
-    raw, num = r.get("createdAt"), r.get("number")
+    # REST spells it created_at; gh --json spells it createdAt. Accept either.
+    raw = r.get("created_at") or r.get("createdAt")
+    num = r.get("number")
     if not isinstance(raw, str) or not isinstance(num, int):
         continue
     try:
@@ -236,7 +247,7 @@ for r in rows:
         newest = (created, num)
 if newest:
     print(newest[1])
-' "$START_TS" 2>/dev/null || true
+' "$FAILURE_API_URL" "$START_TS" "$API_TIMEOUT_SEC" 2>/dev/null || true
 }
 
 git -C "$DATAHUB_DIR" fetch --quiet origin main 2>/dev/null || true
