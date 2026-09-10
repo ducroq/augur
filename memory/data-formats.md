@@ -101,3 +101,10 @@ All timestamps normalized to Europe/Amsterdam (UTC+1 winter, UTC+2 summer). Ener
 | Weather | Hourly | 10 days |
 | Grid imbalance | 15-min | Historical |
 | Gas storage | Daily | ~2-3 day publication delay |
+
+## The v2.2 envelope shim, both sides — moved here from the index 2026-09-10
+
+Moved out of `memory/MEMORY.md` under its 50k ceiling; this is the topic file for it, and nothing was compressed.
+
+- **EDH v2.2 envelope shim, both sides** (`4a557c8` JS 2026-06-07; `e11487b` Python 2026-06-10): EDH commit `3dfc7fb` (2026-06-07 12:43 CEST) wrapped `energydatahub/docs/energy_price_forecast.json` + `energydatahub/docs/wind_forecast.json` under `{metadata, data: {...}}` to match the other 14 strategic feeds. The dashboard JS got a defensive `obj.data ?? obj` shim in `4a557c8` (data-processor.js:117, tab-charts.js:64-79, dashboard.js:264). The Python parsers ALSO needed the equivalent shim — the 4a557c8 commit message asserted "Python migrated transparently via `_migrate_2_1_to_2_2`" but `load_json_file` in `ml/data/consolidate.py` never invokes schema_registry, so parsers silently returned empty Series for every v2.2 file until `e11487b` added `_unwrap_v22_envelope` at three sites (`parse_price_file`, `_parse_single_source`, `parse_wind_file`). Pattern updated in the gotcha-log Promoted table to reflect (a user-memory file was named here until 2026-08-29 and never existed — `/curate` flagged it as a dead reference): NEITHER side auto-migrates; audit JS + Python parsers + any direct `json.load`/`fetch` of EDH files on every schema bump.
+<!-- verify: [ -f static/data/augur_forecast.json ] && [ -f static/data/augur_forecast_shadow.json ] && [ -f layouts/index.html ] && grep -q "utcToLocalNaiveISO" static/js/modules/chart-renderer.js && grep -q "weather-location-cloud" static/js/dashboard.js && grep -q "energyData.data ?? energyData" static/js/modules/data-processor.js && grep -q "_unwrap_v22_envelope" ml/data/consolidate.py && echo PASS || echo FAIL -->

@@ -29,6 +29,8 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 > Stage B from ≈10-09 to **≈10-14**. These are floors, not estimates — a further EDH miss moves them again,
 > and their publish reliability over 2026-07-25..08-28 was 31 of 35 days.
 >
+> **Amended 2026-09-10: two further vintages are gone** — EDH failed to publish on **09-07** (ENTSO-E outage, genuinely upstream) and **09-09** (a NED.nl timeout their collector swallowed, aborting the publish of all 19 healthy feeds — their defect, fix unreviewed). No backfill exists for either. Every floor above moves by two more vintages; still count, do not read dates.
+>
 > **Check the real count on sadalsuud** (`/home/jeroen/local_dev/augur`), never the local parquet, which is
 > gitignored and stale:
 > `` .venv/bin/python -c "import pandas as pd; d=pd.read_parquet('ml/data/training_history.parquet'); print((d.index>='2026-08-25').sum(),'hours;',d.index.max())" ``
@@ -37,6 +39,60 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 > (it now needs two normal-hour EDH publishes, not 7 calendar days) — see its own note. The **t0-guard**
 > entry's 14-run window is also unaffected in kind: its criteria are about `calibration_history` gaps having
 > a matching alarm, and the five outage days are legitimate data for exactly that.
+
+### [2026-09-10] The EDH gate's derived size expectation has decayed to the catch-up size, and the protection it earned on 09-04 is currently absent
+
+**Position (provisional):** `wait_for_edh.sh`'s `median_points` estimator is the right idea with the wrong statistic. Deriving the expectation from history is what lets an upstream resolution change be absorbed in days instead of reading as short forever — but the *median over the last 10 publishes* tracks a run of degraded publishes just as willingly as a genuine change, and it has. The expectation is now **96, not 192**.
+
+**Evidence (measured on sadalsuud 2026-09-10, before this entry was written):** the gate's own startup line reads `entsoe >= 96 points (median of last 10)`. The sample behind it:
+
+```
+2026-09-08  96     2026-09-04  96
+2026-09-06  192    2026-09-04  96
+2026-09-05  192    2026-08-30  192
+2026-09-04  192    2026-08-29  96
+2026-09-04  96     2026-08-28  96
+```
+
+Six of ten are half-size, and **2026-09-04 contributed four publishes on its own, three of them short** — sampling by publish rather than by day let one bad day set the expectation.
+
+**Why this matters concretely, and is not theoretical:** CLAUDE.md records that this gate *earned its place* on 2026-09-04 by refusing a 06:53 UTC recovery publish whose `entsoe` carried same-day prices only (96 vs 192), the day-ahead auction not having cleared. At an expectation of 96 that publish is now accepted as full, `t0` anchors on data with no day-ahead prices in it, and the only remaining detector is the downstream `t0` alarm — which fires *after* ingestion.
+
+**Alternatives (falsification signals):**
+
+1. **96 is the new normal and the estimator is working exactly as designed.** ENTSO-E may have changed resolution, in which case refusing 96-point publishes would be the bug. **Signal:** the 192-point publishes stop appearing entirely for ≥10 consecutive publishes. Then nothing is wrong and this entry closes — but note the sample above is *mixed*, which is the signature of intermittent degradation rather than a resolution change.
+2. **Per-day deduplication is sufficient.** **Signal:** taking one publish per day (the last) lifts the median back to 192 on the same history. Then the fix is a one-line change to the sampler and no estimator change is needed. ~~This is the cheapest arm and should be measured first.~~
+
+   **→ MEASURED AND REFUTED, same day.** Per-day dedup (last publish of each day, last 10 days) gives `[96, 96, 192, 192, 192, 192, 96, 96, 96, 192]` — median still **96**. The four-publish 09-04 was a red herring: the genuinely short days (08-28, 08-29, 09-08, 09-10) are separate days and dominate on their own. The 75th percentile over the same window gives **192**. So the sampler is not the problem; the *statistic* is, and choosing it is a real decision rather than a one-line fix.
+3. **The point count is the wrong quantity entirely.** A publish carrying tomorrow's auction is what matters, not how many rows it has. **Signal:** a 96-point publish that *does* contain day-ahead hours exists in the history. Then the gate should assert **span** — which is augur's half of the never-built span check already recorded in the gotcha-log Promoted table and EDH's #51 — and point count was always a proxy.
+
+**Method / revisit trigger:** re-measure `median_points` against the same 10-publish window under three estimators — median as-is, median after per-day dedup, and the 75th percentile — plus the day-ahead-span check of Alternative 3. Read-only against committed EDH history; costs minutes and touches no production path. **Do not change the estimator before measuring**, because tightening it wrongly makes the gate refuse good publishes and the gate's one inviolable property is that it never fails closed.
+
+**Live instance, 2026-09-10 — this is not hypothetical and it lands tonight.** EDH recovered with a dispatched publish at **07:41 UTC carrying `entsoe=96`** — same-day prices only, the day-ahead auction not having cleared at that hour. Under the decayed expectation of 96 the gate will **accept** it at 16:30, record it as consumed, and release the run. Their *scheduled* run then publishes again ~17:50–19:30 UTC with the full 192 — but the monotonic contract means that fresher publish is not consumed until tomorrow. Net cost is one night anchored on data with no day-ahead prices in it, for exactly the hours (h+1..24) where the auction result is known truth. Under a 75th-percentile expectation of 192 the gate would simply have waited ~90 minutes and taken the good publish. **This is the 2026-09-04 catch, defeated.**
+
+**Review by:** 2026-09-17, or immediately if a `[ALARM: t0 stale]` lands on a night EDH *did* publish — that would be this failure mode firing.
+
+---
+
+### [2026-09-10] ARF is not a backup: it and production die through the same door, and it dies harder
+
+**Position (provisional):** keeping ARF running as a "backup signal" (ADR-006, 2026-05-29) buys less resilience than the label implies, because the two models share their single most likely failure cause — stale upstream data — and ARF degrades *worse* than the thing it is backing up.
+
+**Evidence (2026-09-10, the EDH stall):** LightGBM is **data-anchored**. `predict_72h` builds features for one row at `t0` and gets all 72 horizons from horizon-as-feature stacking, so it never needs forward exogenous; when the parquet is stale it re-emits from the old anchor. Verified byte-identical against the previous run — `forecast`, `forecast_upper`, `forecast_lower` all `identical=True`, only `last_updated` moved. ARF is **wall-clock anchored**: `generate_forecast` loops from `datetime.now()`, and `OnlineFeatureBuilder.build` returns `None` unless it has both a 1h and 24h price lag (`online_features.py:112`). With prices ending 09-09T20:00 and the run at 09-10T03:01 the 1h lag is missing at the very first hour; nothing is pushed back into the buffer, so every subsequent hour fails the same way. Result: `forecast: {}`, 0 of 72 hours.
+
+So on the failure mode that has cost this pipeline the most vintages, production degrades to *stale* and the backup degrades to *nothing*. This was flagged independently by the energyDataHub session on the same day, which is weak corroboration but from a different vantage point.
+
+**Alternatives (falsification signals):**
+
+1. **The backup was never for this failure mode.** ARF is kept as a *modelling* fallback — a second opinion if LightGBM's quality regresses — not an availability fallback, and it is doing that job (it still feeds the Model-tab metrics). **Signal:** ADR-006 or the retrospective states an availability rationale nowhere. Then the label "backup signal" is imprecise but nothing is broken, and the fix is wording plus the wall-clock anchor being an ordinary bug.
+2. **The wall-clock anchor is trivially fixable.** **Signal:** anchoring ARF on `parquet.index.max()` like the shadow path costs less than an hour and makes it degrade to stale rather than empty. Then this is a small bug fix, not an architecture question, and it should just be done.
+3. **The right answer is to stop running it.** ARF was retired as a model 2026-04-28 and kept running for one rolling-window cycle; that cycle is long over. **Signal:** the Model-tab widgets are its only consumer and can be sourced from `eval_log.jsonl` instead. Then the honest move is retirement, not repair — and the daily job loses a step.
+
+**Method / revisit trigger:** decide between Alternative 2 and 3 before any work — they point opposite ways and the cost difference is an hour versus a deletion. Read `docs/river-arf-retrospective.md` and ADR-006 for the stated rationale first (Alternative 1 is checkable from documents alone and may close this outright).
+
+**Review by:** 2026-10-01, or whenever the ARF step next fails in a way that costs attention. Not urgent: it is non-fatal in `daily_update.sh` (`set +e` since 2026-07-03) and cannot abort the production path.
+
+---
 
 ### [2026-09-06] The production model has no demonstrated skill over a seasonal-naive baseline, and the eval harness could not have told us
 

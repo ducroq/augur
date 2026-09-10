@@ -5,6 +5,16 @@
      Moved out of memory/MEMORY.md 2026-09-06 — it is history, not current state,
      and the index is read at every session start. Nothing here was edited. -->
 
+## Closed 2026-09-10
+
+- ✅ **Heartbeat could silence itself after a dropped send** (`7fecd79`) — `LAST_EMAIL` was never cleared on an episode boundary, so a new episode inherited the previous one's send clock and a failed first send read as already delivered. Reproduced, fixed, 5 tests. **Not fixed: `notify_email.py` still makes one SMTP attempt with no retry** — that is what actually lost the 2026-09-10 alert.
+- ✅ **`paste -sd'; '` was dropping marker types from the heartbeat fingerprint** (`7fecd79`) — `paste -d` takes a *cycling delimiter list*, so every second marker merged onto its neighbour's line and the first matching `marker_kinds` rule discarded it. On the real 09-10 commit that lost `eval-stale`. A marker absent from the shape cannot break through an open episode.
+- ✅ **EDH gate can now tell "late" from "failed"** (`ad10432`, `a07a77b`) — reads EDH's `publish-failure` label and gives up early, referenced to *this run's start* so a previous night's still-open issue cannot abandon the wait before EDH has run. **First cut used `gh`, which is not installed on sadalsuud**; rewritten on python3 stdlib and verified from sadalsuud. 10 tests.
+- ✅ **`audit_registry.py` check 5 false positive** (`1bcb191`) — `method_sections` let the last backlog section run to EOF, so appending EXP-036 reported EXP-034 as EDITED (the whole diff was the `---` separator). Second occurrence of the promoted rule *an integrity check that makes the correct action fail is a defect*. New `tests/test_audit_registry.py`.
+- ✅ **EXP-036 pre-committed** (`2113e1f`, pinned in `PRECOMMIT_REV_BY_ID`) — an averaged daily profile as a stronger skill floor than the single-day carry. Bounded so it cannot move augur#29 retroactively.
+- ✅ **Moved out of the index 2026-09-10 (ceiling pressure), preserved here:** Weather tab: two-dropdown UI parity. Both "Temperature & Wind (10-day)" and "Cloud Cover & Humidity" each show a `<select>` (synced — changing one mirrors the other before re-render). Distinct aria-labels per chart. Commits `656e917` + `fa28450`.
+- 📌 **Filed, not fixed:** augur#31 (gate expectation decayed 192→96 — **live**), augur#32 (ARF wall-clock anchored), augur#33 (no dashboard staleness indicator).
+
 ## Closed 2026-08-28
 
 - ✅ **Silent vintage loss** — t0 stall/jump now alarms at the step that owns t0 (`4a2afc4`), and `wait_for_edh.sh` no longer releases the run on an overnight catch-up publish (`05b4d43`). Deployed to sadalsuud the same day; first observation is the 2026-08-28 18:30 CEST run. Position + 14-run review in `docs/hypothesis-log.md` [2026-08-28].

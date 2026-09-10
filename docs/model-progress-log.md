@@ -4,7 +4,44 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
-## 2026-09-06 (latest) — The eval harness had no floor in it: the production model does not reliably beat "yesterday, same hour"
+## 2026-09-10 (latest) — Three detectors that were reporting success while doing nothing
+
+**No model or forecast logic changed today.** Everything below is the pipeline's *observability* layer. It is in this log because each item is a case of an instrument that looked healthy and was inert — the failure family this project keeps rediscovering — and because one of them silently degraded a live safety property.
+
+**What prompted it.** A heartbeat alert that never arrived. The check itself was fine: it ran at 06:04 UTC, detected the upstream stall correctly, exited 0, and then lost the email to a transient `SMTPServerDisconnected`. Pulling that thread found two more defects behind it and one in the gate.
+
+**1. The heartbeat could silence itself for a day after a dropped send.** `LAST_EMAIL` is deliberately armed only on a confirmed send, so a degraded channel retries tomorrow. But it was never *cleared* when the fingerprint changed, so a new episode inherited the previous episode's send clock: the failed first send of a new episode read as already delivered and suppressed the next morning. Reproduced, then fixed by clearing it on the episode boundary. `TestDegradedChannel` had missed it because its episode is the first one, where `LAST_EMAIL` starts empty either way.
+
+**2. A cycling `paste` delimiter was dropping marker types out of the fingerprint.** `paste -sd'; '` passes a *list* of delimiters applied cyclically, so markers joined with alternating `;` and space. `tr ';' '\n'` then left every second marker merged onto its neighbour's line, where the first matching rule in `marker_kinds` rewrote the whole line and discarded it. On the real 2026-09-10 commit this dropped `eval-stale` from the shape entirely:
+
+```
+actual shape          : ...,arf-forecast-short,t0-stale
+with single delimiter : ...,arf-forecast-short,eval-stale,t0-stale
+```
+
+A marker type absent from the shape cannot break through an open episode, which is the entire purpose of the shape — so this was a live detection gap, not cosmetics.
+
+**3. The EDH gate could not tell "late" from "failed", and now can.** The readiness contract answers *has a good publish landed?*, which is silent on whether one is still coming. Both outcomes spent the full window polling to the 03:00 UTC deadline. EDH's alert job opens exactly one issue labelled `publish-failure` per failed publish and closes it on recovery (#69 opened 09-07 19:51, closed 09-08 19:16 — 27s after the recovery publish), so the signal tracks tightly. The gate now reads it and gives up early with `[ALARM: EDH publish FAILED upstream — repo#N]`.
+
+Two design points worth keeping. The reference is **this run's start**, not the last consumed report: EDH closes the issue only on the next *successful* publish, so one is routinely still open at 16:30 while tonight's GitHub-deferred run (17:50–19:30) has not begun — comparing against the last publish would abandon the wait every night until upstream recovered. And the probe can only ever *end* a wait, never start or extend one; every way of not knowing falls through to the deadline, preserving fail-open.
+
+**The correction that matters most.** The first cut shelled out to `gh`. **`gh` is not installed on sadalsuud**, so `command -v gh` failed there and the probe returned nothing on every poll — correct fail-open behaviour, and completely inert in the only place it needed to work. It would have looked fine forever, because "no information" and "no failure" are the same output by design. Rewritten on python3 stdlib `urllib` against the public REST API — no binary, no auth, no secret — and verified end-to-end *from sadalsuud*, which returns `#70 created 2026-09-09T19:13:45Z`.
+
+**4. A live safety property has quietly decayed, and is not fixed.** The gate derives its size expectation as the median `entsoe` point count over the last 10 publishes, so an upstream resolution change is absorbed in days rather than reading as short forever. That median is now **96, not 192** — six of the last ten publishes were half-size, and 2026-09-04 alone contributed four publishes, three of them short. The consequence is specific: this gate *earned its place* on 2026-09-04 by refusing a 06:53 UTC recovery publish whose `entsoe` held same-day prices only (96 vs 192), the day-ahead auction not having cleared. **That protection is currently absent** — a same-day-only publish tonight would be accepted as full. Position and options pre-committed in `docs/hypothesis-log.md` [2026-09-10]; not changed today because picking the estimator is a real decision, not a bug fix.
+
+**Known limitation of the new probe, stated rather than discovered later.** EDH opens **one** issue per failure *streak*. #70 has been open since 09-09 with `updatedAt == createdAt` and zero comments, so on the second and later nights of a streak nothing is newer than our start and the gate waits to the deadline exactly as before. The probe helps on the first night of a streak — which is when a still-evaluable vintage is at risk — and not after. Making it work every night needs EDH to touch the issue per failure; asked, not yet answered.
+
+**Upstream, for the record.** Confirmed with the energyDataHub session rather than inferred: **09-07 was genuinely ENTSO-E** (outage, their breaker opened, run exited 1, self-healed by 09-08). **09-09 was not** — NED.nl timed out on all six fetches, their collector swallowed each one and returned a truthy envelope with `data={}`, and their completeness gate scored that CRITICAL and aborted the publish of **all 19 healthy feeds**, including the `entsoe` Augur was waiting on. Their fix exists but is uncommitted and unreviewed. There is no backfill: 09-07 and 09-09 are permanently gone. Details in `memory/upstream-edh.md`.
+
+**A fourth instrument, found while adding EXP-036.** `audit_registry.py` check 5 reported `EXP-034: Method body EDITED since pre-commit eedf7b2`. It was not edited — `method_sections` splits on `\n## ` and lets the *last* section run to EOF, so appending an entry changed the previous one's captured body. The whole diff was the `\n\n---\n` separator. This is the **second** occurrence of the promoted rule *an integrity check that makes the correct action fail is a defect, not strictness* (first: 2026-08-31, the global pre-commit revision). Fixed by normalising section bodies; all existing pins still validate.
+
+**Backlog.** EXP-036 pre-committed (`2113e1f`, pinned): the skill floor is a single-day carry, and an averaged daily profile is the obvious strengthening. Position — against the best profile arm, `lgbm_full`'s +5.1% falls to ≤2% overall and goes negative in ≥4 of 9 months. Explicitly bounded so it cannot move augur#29 retroactively.
+
+**Tests**: suite 310 → 329. `test_heartbeat_check.py` +5 (11→16), `test_wait_for_edh.py` +10 (15→25), new `test_audit_registry.py` (4). Of the new tests, 4+2+2 fail against their respective unfixed code; the remainder are over-correction guards that must pass both ways.
+
+---
+
+## 2026-09-06 — The eval harness had no floor in it: the production model does not reliably beat "yesterday, same hour"
 
 **What prompted it.** The pipeline recovered from the 2026-08-30..09-04 EDH outage and every health signal was green — clean commit subject, `t0` held back 0.0h, coverage healing. The observation that started this was not a metric: *the dashboard still isn't producing useful forecasts.* It wasn't, and nothing in the project could have said so.
 
