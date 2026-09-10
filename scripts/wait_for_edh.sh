@@ -24,9 +24,18 @@
 #        2026-08-28 00:44   entsoe= 96  load=192   catch-up
 #        2026-08-30 19:02   entsoe=192  load=192   halved load feed
 #
-#      Every catch-up is exactly half size, so content separates them without
-#      any clock rule. And the two anomalies were both real incidents the hour
-#      rule waved through: 08-26 is the day 2 hours of the training target came
+#      Every catch-up is exactly half size. ⚠️ CORRECTED 2026-09-10 (augur#31):
+#      the converse does NOT hold, and this comment asserted it for nine days.
+#      Half-size does not imply catch-up -- the 08-26 row four lines above is a
+#      SCHEDULED 16:44 run that is short anyway, and 2026-09-08T19:15 is another.
+#      8 of the last 14 publishes are half-size and at least two are scheduled
+#      evening runs, so point count cannot separate "pre-auction" from
+#      "genuinely degraded" and EXPECTED_PTS keeps absorbing the latter. The
+#      table below refuted the sentence it was used to justify. Upstream is
+#      investigating the two scheduled shorts as energydatahub#74; the fix on
+#      this side is to assert the day-ahead SPAN, which is decidable without
+#      classifying the cause. And the two anomalies were both real incidents
+#      the hour rule waved through: 08-26 is the day 2 hours of the training target came
 #      from a fallback source, and 08-30 is the run whose halved load feed
 #      crashed update_shadow and forced latest_feasible_t0. Both were described
 #      in the report at publish time. Nothing was reading them.
