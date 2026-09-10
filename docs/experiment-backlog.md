@@ -28,6 +28,9 @@ Different from its neighbours:
 | 6 | EXP-026 model-size ladder | GPU min + bench | jwasys | **RUN 2026-08-29 — `kept`**; latency half completed by proxy 2026-08-30 (EXP-030): base 0.52s, ~115× headroom |
 | 7 | EXP-027 fine-tuning dissociation | GPU hours | jwasys | **RUN 2026-08-30 — `rejected`**; both halves degrade, zero-shot is the deployment mode |
 | 8 | EXP-034 fragility-conditioned bands | minutes | CPU | **Added 2026-08-31, not run.** Queued *after* EXP-018a Stage 1 — see its own sequencing note |
+| 9 | EXP-036 profile baseline as the skill floor | minutes | CPU | **Added 2026-09-10, not run.** Independent of the fresh-vintage queue; see its own sequencing note |
+
+**Entry 9 was added 2026-09-10** and belongs to neither batch — it descends from the 2026-09-06 naive-floor finding (augur#29) and its Method was fixed on 2026-09-10 before any profile baseline was computed.
 
 **Entry 8 was added 2026-08-31 and is not part of the 2026-08-29 batch** — it descends from the EXP-015/016 calibration arc rather than from EXP-021/022, and its Method was fixed on 2026-08-31 before any data was seen. The seven-entry framing below refers to the original batch.
 
@@ -308,3 +311,45 @@ Any one failing parks it with the reason recorded. Arm B reaching the bar is a `
 **Cost.** Minutes of CPU on the existing window. No GPU, no fresh vintages, no production path touched.
 
 **Standing caution.** EXP-029 is the cautionary twin: a cheap, well-motivated pre-screen that was rejected as a gate because it would have vetoed a true positive. Fragility indicators are the same shape — trivial to construct, hard to validate. The matched-width control in arm B is the specific defence against believing this one too early.
+
+---
+
+## EXP-036 — The skill floor is too weak: an averaged daily profile beats the single-day carry, and takes the incumbent's remaining edge with it
+
+**Priority: high, and cheap.** Descends from the 2026-09-06 entry in `docs/hypothesis-log.md` and augur#29. Nothing here consumes a fresh vintage, so it does not touch the EXP-018a / EXP-021a / EXP-028a queue.
+
+**Question.** `evaluate_shadow.py`'s floor is a *single-day carry*: `24 * ceil(h/24)` hours back, which for a 72h vintage is always the one window `[t0-23h, t0]`. That is one sample per forecast hour. The obvious strengthening is a **profile**: the mean of the same clock hour over the last N days. EXP-035 measured LightGBM `full` at **+5.1%** over the single-day carry across nine months, below it in 2 of 9, and below it on *all eight ablation variants* in August 2026. The question is how much of that +5.1% is real skill and how much is the floor being one draw from a noisy distribution.
+
+**Position (provisional).** A multi-day profile baseline beats the single-day carry, and against the best profile arm LightGBM `full`'s overall skill falls to **≤ +2%** (from +5.1%) and goes negative in **≥4 of 9 months** (from 2 of 9). Chronos-bolt-base stays clearly above every profile arm.
+
+**Mechanism.** Day-ahead prices are strongly autocorrelated at lag 24h, which is why the single-day carry is hard to beat at all — but a single draw carries that day's idiosyncratic noise in full. Averaging K days cuts the baseline's variance roughly as 1/K while leaving the diurnal shape, which is the part that actually repeats. It should therefore gain most where the carry is stalest (49–72h) and least at 1–24h. That the incumbent only clears such a noisy reference by 5.1% is the reason to suspect the margin is mostly the reference's variance rather than the model's skill.
+
+**Alternatives (falsification signals).**
+
+1. **Averaging destroys more than it denoises.** Level shifts are real and fast; a mean over 5 days lags a step change by more than a single carry does. **Signal:** every multi-day arm is worse than N1 overall. Then the current floor is already the right instrument, the +5.1% stands as measured, and this closes — a genuinely useful outcome, because it retires the doubt rather than leaving it standing.
+2. **Day-type is the whole effect.** **Signal:** the day-type-matched arm beats N1 by ≥3% while plain N5 does not. Then the lever is calendar handling rather than averaging, which directly reopens EXP-035's odd result that `drop_calendar` was the *only* LightGBM arm below the floor.
+3. **The gain is horizon-dependent.** **Signal:** skill differential between the 1–24h and 49–72h groups exceeds 5 percentage points. Then a single scalar floor is the wrong shape and augur#29's threshold must be restated per horizon group rather than as one mean.
+4. **It erodes the foundation model's margin too.** **Signal:** the best profile arm closes >1/3 of Chronos-bolt-base's +25.0%. Then part of what EXP-021/022 attributed to a pretrained prior is ordinary profile smoothing, and the mechanism story needs its *third* correction. This is the arm most likely to be uncomfortable and least likely to be run if it is not written down first.
+
+**Method (pre-committed 2026-09-10, before any profile baseline has been computed).** Pure re-scoring of stored artifacts — no refit, no GPU, no fresh vintages, no production path touched. Extends `scripts/exp035_naive_floor.py` rather than replacing it, on the **same 260 paired vintages** (2025-12-05..2026-08-21), same scoring functions, same HAC bandwidth 71.
+
+Every baseline is built **only from prices at or before `t0`**, read from the same context tape EXP-035 uses, so the baseline's information set stays a subset of the candidate's *by construction*. A clock hour with no observation in the lookback is dropped from the paired comparison, never zero-filled, and all arms are scored on the intersection of hours where every arm is defined.
+
+```
+N1        same clock hour, 1 day back            the incumbent floor, for continuity
+N2/N3/N5/N7   unweighted mean, same clock hour, last 2/3/5/7 days
+N5_decay  exponentially weighted over 5 days, half-life 2 days
+N5_dt     mean over the last 5 *matching* day types (weekday / weekend / NL holiday)
+```
+
+Candidates scored against each arm: LightGBM `full`, LightGBM `drop_rolling` (EXP-035's best arm against the floor), and Chronos-bolt-base. Report MAE and quantile score overall, per horizon group (1–24 / 25–48 / 49–72), and per month, with paired Diebold-Mariano against N1 and against the winning arm.
+
+**Gates.** (1) A profile arm must beat N1 by **≥3% MAE** with DM p<0.05 to be adopted as the floor. (2) If adopted, `evaluate_shadow.py` gains it as an additional field — `naive_profile_mae` alongside the existing `naive_mae`, never replacing it, so the pre-2026-09-10 rows stay comparable. (3) The arm chosen is the *simplest* within 1% of the best, not the best: a floor that needs tuning is not a floor.
+
+**Pre-commitment boundary — this must not retroactively move augur#29.** The 2026-09-06 entry pre-commits a verdict on ≥21 fresh vintages read against the floor **as specified there**. That verdict is read against the single-day carry when it fires (≈2026-09-27), whatever EXP-036 finds. Re-reading an already-pre-committed criterion against a floor chosen later is exactly the post-hoc criterion swap ADR-007 forbids, and the 2026-09-04 lesson in `docs/model-progress-log.md` is on precisely this. A new floor applies to vintages scored *after* it lands, and both numbers get reported side by side for at least one full review cycle.
+
+**What it would change.** If the position holds, the honest statement of the incumbent's point skill is "indistinguishable from an averaged daily profile", not "+5.1% over naive" — which changes what the model tab should claim, and makes the model-class case (EXP-021a) the only live path rather than one of several. If Alternative 1 fires instead, augur#29 narrows to a regime-conditional finding and the incumbent keeps a small but real edge.
+
+**Cost.** Minutes of CPU on the existing window. No GPU, no fresh vintages, no production path touched.
+
+**Not in scope.** The rank-based metric (does it pick the cheap hours?) named as Alternative 3 of the 2026-09-06 entry is a different question — a different *metric*, where this is a stronger *baseline* under the existing metric. Both are cheap and they are independent; running them together would confound which one moved the verdict.
