@@ -52,6 +52,7 @@ PRECOMMIT_REV = "4024420"          # the 2026-08-29 batch (EXP-023..029)
 # 2026-08-31 when EXP-034 hit precisely that.
 PRECOMMIT_REV_BY_ID = {
     "EXP-034": "eedf7b2",
+    "EXP-036": "2113e1f",
 }
 BACKLOG = "docs/experiment-backlog.md"
 
@@ -107,11 +108,24 @@ def traceable(v, pool):
 
 
 def method_sections(text):
+    """Map EXP id -> its section body, independent of what follows it.
+
+    The split leaves the LAST section running to EOF, so appending a new entry
+    used to change the previous last entry's captured body and report it as
+    EDITED — a false positive that would fire on every future addition to the
+    backlog (observed 2026-09-10 adding EXP-036 after EXP-034: the whole diff
+    was the "\n\n---\n" separator between them). Normalising away the trailing
+    separator makes a body depend only on itself. Both sides of the comparison
+    go through here, so existing pins keep validating unchanged.
+    """
     out = {}
     for part in re.split(r"\n## ", text)[1:]:
         m = re.match(r"(EXP-\d+)", part.split("\n", 1)[0].strip())
         if m:
-            out[m.group(1)] = part
+            body = part.rstrip()
+            if body.endswith("---"):
+                body = body[: -len("---")].rstrip()
+            out[m.group(1)] = body
     return out
 
 
