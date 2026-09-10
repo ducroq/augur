@@ -80,13 +80,43 @@ class Hub:
         sc.write_text("#!/usr/bin/env bash\necho '%s'\n" % timeout_value)
         sc.chmod(0o755)
 
-    def run(self, max_wait=2, poll=1):
+    def stub_gh(self, mode):
+        """Fake `gh issue list --json number,createdAt` on PATH.
+
+        `mode` picks what the upstream alert job would look like right now:
+          "tonight"   an open publish-failure issue opened while we wait
+          "yesterday" one still open from a previous night (EDH only closes it
+                      on the next successful publish) -- must NOT count
+          "none"      no open issues
+          "broken"    gh fails, as it does with no auth or no network
+        """
+        self.bin = self.augur / "bin"
+        self.bin.mkdir(exist_ok=True)
+        gh = self.bin / "gh"
+        if mode == "broken":
+            body = "#!/usr/bin/env bash\necho 'gh: not authenticated' >&2\nexit 1\n"
+        elif mode == "none":
+            body = "#!/usr/bin/env bash\necho '[]'\n"
+        else:
+            when = ("+2 minutes" if mode == "tonight" else "-1 day")
+            body = (
+                "#!/usr/bin/env bash\n"
+                "TS=$(date -u -d '%s' +%%Y-%%m-%%dT%%H:%%M:%%SZ)\n"
+                "printf '[{\"number\":70,\"createdAt\":\"%%s\"}]\\n' \"$TS\"\n"
+            ) % when
+        gh.write_text(body)
+        gh.chmod(0o755)
+
+    def run(self, max_wait=2, poll=1, issue_poll_every=0):
         env = dict(os.environ)
         env.update({
             "DATAHUB_DIR": str(self.hub),
             "AUGUR_DIR": str(self.augur),
             "EDH_MAX_WAIT_SEC": str(max_wait),
             "EDH_POLL_SEC": str(poll),
+            # OFF unless a test opts in. The probe reads the real GitHub API,
+            # and no unit test may depend on ducroq/energydatahub's live issues.
+            "EDH_ISSUE_POLL_EVERY": str(issue_poll_every),
             # Each sampled publish costs a `git show` plus a python3 start, and
             # the gate samples on every invocation. 3 is enough for a median
             # and keeps this file from dominating the suite's runtime.
@@ -287,3 +317,102 @@ class TestUnitTimeoutCap:
         r = h.run(max_wait=2)
         assert "capping deadline" not in r.stdout
         assert "READY" in r.stdout
+
+
+class TestUpstreamFailureSignal:
+    """The gate can tell "EDH is late" from "EDH has failed" (2026-09-10).
+
+    EDH's alert job opens one `publish-failure` issue when a publish fails and
+    closes it on the next success. Without reading it, the 2026-09-09 failure
+    (issue opened 19:13 UTC) left this gate polling blind until its 03:00
+    deadline, after which the run retrained on an unchanged parquet and
+    republished a byte-identical vintage over a still-evaluable one.
+    """
+
+    def test_failure_reported_while_waiting_ends_the_wait_early(self, tmp_path):
+        h = Hub(tmp_path)
+        history(h)
+        h.seed("2026-09-08T19:15:52+00:00")
+        h.stub_gh("tonight")
+        r = h.run(max_wait=30, poll=1, issue_poll_every=1)
+        assert r.returncode == 0
+        assert "UPSTREAM FAILED" in r.stdout
+        assert "ducroq/energydatahub#70" in h.marker
+        assert "ALARM: EDH publish FAILED upstream" in h.marker
+
+    def test_it_gives_up_well_before_the_deadline(self, tmp_path):
+        """The point is the hours saved, so prove it did not just run out."""
+        h = Hub(tmp_path)
+        history(h)
+        h.seed("2026-09-08T19:15:52+00:00")
+        h.stub_gh("tonight")
+        r = h.run(max_wait=30, poll=1, issue_poll_every=1)
+        assert "DEADLINE reached" not in r.stdout
+
+    def test_consumed_marker_is_not_advanced_on_an_upstream_failure(self, tmp_path):
+        """The recovery publish must still be acceptable to the next run."""
+        h = Hub(tmp_path)
+        history(h)
+        h.seed("2026-09-08T19:15:52+00:00")
+        h.stub_gh("tonight")
+        h.run(max_wait=30, poll=1, issue_poll_every=1)
+        assert h.consumed == "2026-09-08T19:15:52+00:00"
+
+    def test_an_issue_still_open_from_a_previous_night_does_not_count(self, tmp_path):
+        """The regression this signal could most easily cause.
+
+        EDH closes the issue only on the next successful publish, so one is
+        routinely still open at 16:30 while tonight's run -- deferred by GitHub
+        to 17:50-19:30 -- has not started. Treating that as tonight's verdict
+        would abandon the wait before EDH had a chance to publish at all.
+        """
+        h = Hub(tmp_path)
+        history(h)
+        h.seed("2026-09-08T19:15:52+00:00")
+        h.stub_gh("yesterday")
+        r = h.run(max_wait=3, poll=1, issue_poll_every=1)
+        assert r.returncode == 0
+        assert "UPSTREAM FAILED" not in r.stdout
+        assert "DEADLINE reached" in r.stdout
+        assert "EDH publish FAILED upstream" not in h.marker
+
+    def test_a_good_publish_still_wins_over_an_open_failure_issue(self, tmp_path):
+        h = Hub(tmp_path)
+        history(h)
+        h.seed("2026-08-01T00:00:00+00:00")
+        h.publish("2026-09-10T18:20:00+00:00", NORMAL)
+        h.stub_gh("tonight")
+        r = h.run(max_wait=30, poll=1, issue_poll_every=1)
+        assert "READY" in r.stdout
+        assert "UPSTREAM FAILED" not in r.stdout
+        assert h.consumed == "2026-09-10T18:20:00+00:00"
+
+    def test_broken_gh_changes_nothing(self, tmp_path):
+        """No auth, no network, rate limited -- all must fall through to the
+        deadline exactly as before. The probe may only ever END a wait early."""
+        h = Hub(tmp_path)
+        history(h)
+        h.seed("2026-09-08T19:15:52+00:00")
+        h.stub_gh("broken")
+        r = h.run(max_wait=3, poll=1, issue_poll_every=1)
+        assert r.returncode == 0
+        assert "UPSTREAM FAILED" not in r.stdout
+        assert "DEADLINE reached" in r.stdout
+
+    def test_no_open_issues_changes_nothing(self, tmp_path):
+        h = Hub(tmp_path)
+        history(h)
+        h.seed("2026-09-08T19:15:52+00:00")
+        h.stub_gh("none")
+        r = h.run(max_wait=3, poll=1, issue_poll_every=1)
+        assert "UPSTREAM FAILED" not in r.stdout
+        assert "DEADLINE reached" in r.stdout
+
+    def test_the_probe_can_be_disabled_outright(self, tmp_path):
+        h = Hub(tmp_path)
+        history(h)
+        h.seed("2026-09-08T19:15:52+00:00")
+        h.stub_gh("tonight")
+        r = h.run(max_wait=3, poll=1, issue_poll_every=0)
+        assert "UPSTREAM FAILED" not in r.stdout
+        assert "DEADLINE reached" in r.stdout

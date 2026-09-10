@@ -44,6 +44,28 @@
 # cost the vintage outright rather than costing two hours of provenance. We
 # proceed and name it, and latest_feasible_t0 handles the rest.
 #
+# GIVING UP EARLY (2026-09-10). The contract above answers "has a good publish
+# landed?" but cannot distinguish "EDH is running late" from "EDH has FAILED and
+# nothing is coming tonight" -- so both spend the whole window polling to the
+# 03:00 deadline. EDH's alert job opens exactly one issue labelled
+# `publish-failure` on ducroq/energydatahub when a publish fails and closes it on
+# recovery (#69 opened 09-07 19:51 and closed 09-08 19:16, 27s after the
+# recovery publish). Reading that label turns an 8-hour blind wait into a
+# definite answer: on 2026-09-09 the issue opened at 19:13 UTC while this gate
+# sat polling until 03:00, then let the run retrain on an unchanged parquet and
+# republish a byte-identical vintage over a still-evaluable one.
+#
+# The reference point is this run's START, not the last consumed report, and the
+# difference matters: an issue from a PREVIOUS night can still be open when we
+# start (EDH only closes it on the next successful publish), and comparing
+# against the last consumed report would then make the gate give up at 16:30
+# before EDH's run -- deferred to 17:50-19:30 -- had even begun. Only a failure
+# reported WHILE we were waiting says anything about tonight.
+#
+# This never blocks and never adds a wait: it can only end one early, and every
+# way of not knowing (no gh, no auth, no network, rate limit, schema change)
+# falls through to the existing deadline path.
+#
 # FAIL OPEN, ALWAYS. Unreadable report, missing dataset, schema change, deadline
 # reached -- every path exits 0 and lets the run proceed. A gate that fails
 # closed freezes the dashboard with no signal. Everything it notices is written
@@ -66,6 +88,14 @@ PRIMARY_DATASET="${EDH_PRIMARY_DATASET:-entsoe}"
 SECONDARY_DATASET="${EDH_SECONDARY_DATASET:-load_forecast}"
 # Only used when git history cannot be sampled at all.
 FALLBACK_PRIMARY_PTS="${EDH_FALLBACK_PRIMARY_PTS:-192}"
+
+# Upstream publish-failure signal. Polled every Nth iteration rather than every
+# one: at the default 120s poll that is a GitHub API read every 10 minutes,
+# which stays well inside even the unauthenticated hourly budget. 0 disables.
+FAILURE_REPO="${EDH_FAILURE_REPO:-ducroq/energydatahub}"
+FAILURE_LABEL="${EDH_FAILURE_LABEL:-publish-failure}"
+ISSUE_POLL_EVERY="${EDH_ISSUE_POLL_EVERY:-5}"
+GH_TIMEOUT_SEC="${EDH_GH_TIMEOUT_SEC:-20}"
 
 START_TS=$(date -u +%s)
 mkdir -p "$(dirname "$VERDICT")" 2>/dev/null || true
@@ -168,6 +198,47 @@ for x in r.get("dataset_reports", []):
     done | sort -n | awk '{a[NR]=$1} END {if (NR) print a[int((NR+1)/2)]}'
 }
 
+# Print the number of an OPEN publish-failure issue reported since this run
+# started, or nothing at all. Every failure mode -- gh absent, unauthenticated,
+# offline, rate-limited, --json schema changed -- prints nothing, which the
+# caller reads as "no information" and keeps waiting. It must never be able to
+# manufacture a give-up.
+upstream_publish_failed() {
+    command -v gh >/dev/null 2>&1 || return 0
+    timeout "$GH_TIMEOUT_SEC" gh issue list \
+        --repo "$FAILURE_REPO" --label "$FAILURE_LABEL" \
+        --state open --limit 5 --json number,createdAt 2>/dev/null \
+      | python3 -c '
+import sys, json, datetime as dt
+try:
+    rows = json.load(sys.stdin)
+    since = dt.datetime.fromtimestamp(int(sys.argv[1]), dt.timezone.utc)
+except Exception:
+    sys.exit(0)
+if not isinstance(rows, list):
+    sys.exit(0)
+newest = None
+for r in rows:
+    if not isinstance(r, dict):
+        continue
+    raw, num = r.get("createdAt"), r.get("number")
+    if not isinstance(raw, str) or not isinstance(num, int):
+        continue
+    try:
+        created = dt.datetime.fromisoformat(raw.strip().replace("Z", "+00:00"))
+    except Exception:
+        continue
+    if created.tzinfo is None:
+        continue
+    # Strictly after this run began -- see the header note on why START_TS and
+    # not the last consumed report.
+    if created > since and (newest is None or created > newest[0]):
+        newest = (created, num)
+if newest:
+    print(newest[1])
+' "$START_TS" 2>/dev/null || true
+}
+
 git -C "$DATAHUB_DIR" fetch --quiet origin main 2>/dev/null || true
 
 EXPECTED_PTS=$(median_points "$PRIMARY_DATASET")
@@ -188,6 +259,7 @@ record_and_go() {
     exit 0
 }
 
+POLL_I=0
 while : ; do
     git -C "$DATAHUB_DIR" fetch --quiet origin main 2>/dev/null || true
     REPORT=$(git -C "$DATAHUB_DIR" show "origin/main:data/data_quality_report.json" 2>/dev/null || true)
@@ -220,6 +292,19 @@ while : ; do
         [ -z "$LAST_CONSUMED" ] && echo "[wait_for_edh] NOTE: no prior state — bootstrapping from this publish. Subsequent runs require a strictly newer one."
         echo "[wait_for_edh] READY: ${UPSTREAM_TS}, ${PRIMARY_DATASET}=${PRIMARY_PTS} (>= ${EXPECTED_PTS}), ${SECONDARY_DATASET}=${SECONDARY_PTS:-?}. Proceeding."
         record_and_go "$UPSTREAM_TS" "$MARKER"
+    fi
+
+    POLL_I=$(( POLL_I + 1 ))
+    if [ "$ISSUE_POLL_EVERY" -gt 0 ] \
+       && [ $(( (POLL_I - 1) % ISSUE_POLL_EVERY )) -eq 0 ]; then
+        FAILED_ISSUE=$(upstream_publish_failed)
+        if printf '%s' "${FAILED_ISSUE:-}" | grep -qE '^[0-9]+$'; then
+            echo "[wait_for_edh] UPSTREAM FAILED: ${FAILURE_REPO}#${FAILED_ISSUE} (${FAILURE_LABEL}) was opened while we were waiting — nothing is coming tonight. Giving up after $(( ($(date -u +%s) - START_TS) / 60 ))min instead of holding to the deadline."
+            # Same as the deadline path: do NOT record this as consumed, so the
+            # recovery publish is still accepted by the next run.
+            printf '%s' " [ALARM: EDH publish FAILED upstream — ${FAILURE_REPO}#${FAILED_ISSUE}]" > "$VERDICT" 2>/dev/null || true
+            exit 0
+        fi
     fi
 
     NOW_TS=$(date -u +%s)
