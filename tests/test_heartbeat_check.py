@@ -113,6 +113,11 @@ class Env:
     def shape(self):
         return self.state.read_text().split("\t")[0]
 
+    def set_notify_result(self, result):
+        """Change what the stubbed channel reports, mid-test."""
+        (self.root / "scripts" / "notify_email.py").write_text(
+            NOTIFY_STUB.format(record=self.record, result=result))
+
     def backdate(self, days):
         """Age the open episode by `days`, as if that many mornings had passed."""
         fp, first, last = self.state.read_text().strip("\n").split("\t")
@@ -239,3 +244,113 @@ class TestRecovery:
         env.run()
         env.run()
         assert env.sent == []
+
+
+ALL_MARKERS = (
+    "Daily update 2026-09-10 — ARF OK | shadow rc=0/eval rc=0 "
+    "[ALARM: ARF forecast 0h] [ALARM: eval stale 3d] "
+    "[ALARM: t0 stale 2026-09-09] "
+    "[ALARM: EDH gate timeout — no new publish since "
+    "2026-09-08T19:15:52.749879+00:00]"
+)
+
+
+class TestMarkerSeparation:
+    """Regression: `paste -sd'; '` cycled TWO delimiters, so every second marker
+    was joined to its neighbour by a space instead of ';'. `tr ';' '\n'` then
+    left the pair on one line and the first matching rule in marker_kinds
+    rewrote the whole line, silently discarding the other marker. On the real
+    2026-09-10 commit that dropped `eval-stale` from the fingerprint entirely --
+    a marker type that is absent from the shape cannot break through an open
+    episode, which is the whole point of the shape.
+    """
+
+    def test_every_marker_type_survives_into_the_shape(self, tmp_path):
+        env = Env(tmp_path)
+        env.commit(ALL_MARKERS)
+        env.run()
+        kinds = env.shape().removeprefix("soft:").split(",")
+        assert kinds == ["arf-forecast-short", "edh-gate-timeout",
+                         "eval-stale", "t0-stale"]
+
+
+class TestEdhGateTimeoutShape:
+    """The EDH gate-timeout marker embeds the timestamp of the last upstream
+    publish. With no rule for it, it entered the fingerprint verbatim, so each
+    new stall read as a brand-new episode and reset the day counter.
+    """
+
+    def test_timestamp_does_not_leak_into_the_shape(self, tmp_path):
+        env = Env(tmp_path)
+        env.commit(ALL_MARKERS)
+        env.run()
+        assert "edh-gate-timeout" in env.shape()
+        assert "2026-09-08T19:15:52" not in env.shape()
+
+    def test_a_later_stall_timestamp_is_the_same_episode(self, tmp_path):
+        env = Env(tmp_path)
+        env.commit(ALL_MARKERS)
+        env.run()
+        env.backdate(1)
+        env.commit(
+            "Daily update 2026-09-11 — ARF OK | shadow rc=0/eval rc=0 "
+            "[ALARM: ARF forecast 0h] [ALARM: eval stale 4d] "
+            "[ALARM: t0 stale 2026-09-09] "
+            "[ALARM: EDH gate timeout — no new publish since "
+            "2026-09-10T04:02:11.000000+00:00]"
+        )
+        env.run()
+        assert len(env.sent) == 1, "a moved stall timestamp is not a new problem"
+        assert "suppressed" in env.log
+
+
+class TestFailedSendAcrossEpisodes:
+    """Regression for 2026-09-10: the heartbeat correctly detected the EDH stall
+    and then lost the email to a transient SMTPServerDisconnected. Because a new
+    episode inherited LAST_EMAIL from the episode that had just closed, the
+    reminder arithmetic read the never-delivered alert as already sent and
+    suppressed the following morning. TestDegradedChannel did not catch it: its
+    episode is the FIRST one, so LAST_EMAIL starts empty either way.
+    """
+
+    def test_first_send_of_a_new_episode_failing_still_retries_tomorrow(
+            self, tmp_path):
+        env = Env(tmp_path)
+
+        # Episode 1 delivers, arming the reminder clock.
+        env.commit(ALARM)
+        env.run()
+        assert len(env.sent) == 1
+
+        # Episode 2 is a different shape, and its first send is lost.
+        env.backdate(1)
+        env.set_notify_result(
+            "ERROR: send failed (SMTPServerDisconnected: Connection "
+            "unexpectedly closed: The read operation timed out)")
+        env.commit("Daily update 2026-09-10 — shadow rc=0/eval rc=0 "
+                   "[ALARM: ARF forecast 0h]")
+        env.run()
+        assert len(env.sent) == 2
+        assert env.shape() == "soft:arf-forecast-short"
+
+        # Nothing was ever delivered for episode 2, so tomorrow must try again.
+        env.backdate(1)
+        env.run()
+        assert len(env.sent) == 3, (
+            "a failed first send must not inherit the previous episode's "
+            "send clock and suppress itself")
+
+    def test_a_delivered_send_still_suppresses_the_next_morning(self, tmp_path):
+        """The fix must not turn every episode into a daily re-send."""
+        env = Env(tmp_path)
+        env.commit(ALARM)
+        env.run()
+        env.backdate(1)
+        env.commit("Daily update 2026-09-10 — shadow rc=0/eval rc=0 "
+                   "[ALARM: ARF forecast 0h]")
+        env.run()
+        assert len(env.sent) == 2
+        env.backdate(1)
+        env.run()
+        assert len(env.sent) == 2, "a delivered alert still suppresses tomorrow"
+        assert "suppressed" in env.log

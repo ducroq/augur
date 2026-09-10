@@ -82,7 +82,10 @@ UNPUSHED=$(git rev-list --count origin/main..HEAD 2>/dev/null || echo "?")
 LAST_BODY=$(git log -1 --grep='^Daily update' --format='%s' 2>/dev/null)
 # Soft-failure markers daily_update.sh composes into the subject: any [ALARM: ...],
 # `ARF FAIL rc=N`, a non-zero step rc, or a step gated off as `rc=skip`.
-ALARM_HIT=$(printf '%s' "$LAST_BODY" | grep -oE 'ALARM: [^]]*|ARF FAIL rc=[0-9]+|rc=[1-9][0-9]*|rc=skip' | paste -sd'; ' - 2>/dev/null || true)
+# NB: paste -d takes a LIST of delimiters applied cyclically, so a two-character
+# '; ' alternates ';' and ' ' and merges every second marker onto its neighbour's
+# line -- where marker_kinds' first matching rule swallowed it. Single ';' only.
+ALARM_HIT=$(printf '%s' "$LAST_BODY" | grep -oE 'ALARM: [^]]*|ARF FAIL rc=[0-9]+|rc=[1-9][0-9]*|rc=skip' | paste -sd';' - 2>/dev/null || true)
 
 # Canonical marker TYPE, with the varying parts (day counts, dates, hour deltas,
 # feed lists) stripped: `[ALARM: t0 jumped 2d]` and `[ALARM: t0 jumped 3d]` are
@@ -97,6 +100,7 @@ marker_kinds() {
         s/.*t0 +stale.*/t0-stale/
         s/.*eval +stale.*/eval-stale/
         s/.*naive +unscored.*/naive-unscored/
+        s/.*EDH +gate +timeout.*/edh-gate-timeout/
         s/.*ARF +forecast.*/arf-forecast-short/
         s/.*ARF FAIL.*/arf-fail/
         s/^ *rc=skip *$/rc-skip/
@@ -183,6 +187,12 @@ case "${LAST_EMAIL:-}" in ''|*[!0-9]*) LAST_EMAIL="" ;; esac
 
 if [ "$FP" != "$PREV_FP" ] || [ -z "$FIRST_SEEN" ]; then
     FIRST_SEEN=$NOW
+    # Drop the previous episode's send clock too. Without this a new episode
+    # inherits LAST_EMAIL from the episode that just closed, so if this
+    # episode's FIRST send fails the reminder arithmetic reads it as already
+    # delivered and suppresses tomorrow -- exactly the silence the
+    # arm-only-on-confirmed-send rule below exists to prevent (2026-09-10).
+    LAST_EMAIL=""
     EPISODE_DAY=1
     SEND=1
     REASON="new"
