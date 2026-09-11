@@ -111,7 +111,7 @@ class Hub:
             }]))
         self.api_url = "file://" + str(fixture)
 
-    def run(self, max_wait=2, poll=1, issue_poll_every=0):
+    def run(self, max_wait=2, poll=1, issue_poll_every=0, env_extra=None):
         env = dict(os.environ)
         env.update({
             "DATAHUB_DIR": str(self.hub),
@@ -130,6 +130,7 @@ class Hub:
             env["PATH"] = f"{self.bin}:{env['PATH']}"
         if getattr(self, "api_url", None):
             env["EDH_FAILURE_API_URL"] = self.api_url
+        env.update(env_extra or {})
         return subprocess.run(["bash", str(SCRIPT)], env=env,
                               capture_output=True, text=True, timeout=90)
 
@@ -464,3 +465,110 @@ class TestUpstreamFailureSignal:
         body = SCRIPT.read_text()
         assert "gh issue list" not in body
         assert "command -v gh" not in body
+
+
+class TestExpectationDoesNotDecay:
+    """augur#31: the median slid 192 -> 96 and the gate stopped seeing short.
+
+    `median_points` sampled recent publishes to derive "full", which absorbs an
+    upstream resolution change in a few days instead of reading as short
+    forever. What it also absorbed was a run of DEGRADED publishes. Over the
+    twenty publishes to 2026-09-10, eleven were 192 and nine were 96 -- and the
+    nine are over-represented because EDH republishes several times on a
+    recovery day (three on 2026-09-04 alone). The median landed on 96, so the
+    pre-auction publish the gate correctly refused on 2026-09-04 was accepted
+    on 2026-09-10. Per-day dedup was measured and refuted; the 75th percentile
+    is the blunter fix, and it says the expectation should sit where a HEALTHY
+    publish sits.
+    """
+
+    def test_a_run_of_shorts_does_not_teach_the_gate_that_short_is_normal(
+            self, tmp_path):
+        h = Hub(tmp_path)
+        # SAMPLE_N is 3 in tests: two shorts and one healthy publish. The
+        # median of that is 96 -- which would make the short publish below
+        # read as FULL, which is exactly the live bug.
+        h.publish("2026-09-04T06:53:00+00:00", CATCHUP)
+        h.publish("2026-09-04T08:13:00+00:00", CATCHUP)
+        h.publish("2026-09-06T17:57:00+00:00", NORMAL)
+        h.seed("2026-09-06T17:57:00+00:00")
+        h.publish("2026-09-10T07:41:00+00:00", CATCHUP)
+        r = h.run()
+        assert "READY" not in r.stdout, (
+            "a 96-point publish must still read as short after a bad week")
+        assert "SHORT primary" in r.stdout
+
+    def test_a_genuine_resolution_change_is_still_absorbed(self, tmp_path):
+        """The decay fix must not re-break what the median was introduced for."""
+        h = Hub(tmp_path)
+        for d in (1, 2, 3):
+            h.publish(f"2026-09-0{d}T16:20:00+00:00", CATCHUP)
+        h.seed("2026-09-03T16:20:00+00:00")
+        h.publish("2026-09-04T16:20:00+00:00", CATCHUP)
+        r = h.run()
+        assert "READY" in r.stdout, (
+            "once the NEW size is what everyone publishes, it is the expectation")
+
+
+class TestBoundedHold:
+    """A short primary holds, but not forever (augur#31, 2026-09-11).
+
+    Neither pure position survives the publish record. 2026-09-04 published
+    short three times and then FULL at 18:46 -- refusing won that vintage.
+    2026-09-08 published short at 19:15 and nothing better ever came, because
+    upstream answered a four-day query with one day (EDH d3e540f) -- there,
+    refusing only burned hours to the 03:00 deadline. So: hold, bounded.
+    """
+
+    def test_short_is_accepted_once_the_hold_expires(self, tmp_path):
+        h = Hub(tmp_path)
+        h.stub_systemctl("infinity")
+        history(h)
+        h.seed("2026-08-15T16:20:00+00:00")
+        h.publish("2026-09-08T19:15:00+00:00", SHORT_ENTSOE)
+        r = h.run(max_wait=30, env_extra={"EDH_SHORT_HOLD_SEC": "1"})
+        assert "READY" in r.stdout
+        assert "accepted after" in h.marker and "ALARM" in h.marker
+        assert h.consumed == "2026-09-08T19:15:00+00:00", (
+            "an accepted publish must be recorded, or it is re-accepted forever")
+
+    def test_the_vintage_is_degraded_not_lost(self, tmp_path):
+        """The marker must name the shortfall, so the t0 guards are read in context."""
+        h = Hub(tmp_path)
+        h.stub_systemctl("infinity")
+        history(h)
+        h.seed("2026-08-15T16:20:00+00:00")
+        h.publish("2026-09-08T19:15:00+00:00", SHORT_ENTSOE)
+        h.run(max_wait=30, env_extra={"EDH_SHORT_HOLD_SEC": "1"})
+        assert "96/192" in h.marker
+
+    def test_hold_zero_accepts_immediately(self, tmp_path):
+        """The escape hatch to the pure accept-and-alarm position."""
+        h = Hub(tmp_path)
+        history(h)
+        h.seed("2026-08-15T16:20:00+00:00")
+        h.publish("2026-09-08T19:15:00+00:00", SHORT_ENTSOE)
+        r = h.run(env_extra={"EDH_SHORT_HOLD_SEC": "0"})
+        assert "READY" in r.stdout and "accepted after" in h.marker
+
+    def test_a_short_secondary_rides_along_on_the_short_accept(self, tmp_path):
+        """Both accept paths share check_secondary; this pins that they do."""
+        h = Hub(tmp_path)
+        h.stub_systemctl("infinity")
+        history(h)
+        h.seed("2026-08-15T16:20:00+00:00")
+        h.publish("2026-09-08T19:15:00+00:00", CATCHUP)   # entsoe 96, load 192
+        h.run(max_wait=30, env_extra={"EDH_SHORT_HOLD_SEC": "1"})
+        assert "ALARM" in h.marker and "entsoe" in h.marker
+        assert "[NOTE: EDH load_forecast short" in h.marker, (
+            "the secondary NOTE must not be lost on the short-accept path")
+
+    def test_default_hold_still_refuses_within_the_window(self, tmp_path):
+        """With the real 4h default, a short publish does NOT sail through."""
+        h = Hub(tmp_path)
+        history(h)
+        h.seed("2026-08-15T16:20:00+00:00")
+        h.publish("2026-09-08T19:15:00+00:00", SHORT_ENTSOE)
+        r = h.run()
+        assert "READY" not in r.stdout
+        assert "Holding up to 4h" in r.stdout
