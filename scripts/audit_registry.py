@@ -53,6 +53,7 @@ PRECOMMIT_REV = "4024420"          # the 2026-08-29 batch (EXP-023..029)
 PRECOMMIT_REV_BY_ID = {
     "EXP-034": "eedf7b2",
     "EXP-036": "2113e1f",
+    "EXP-037": "2e96bb9",
 }
 BACKLOG = "docs/experiment-backlog.md"
 
@@ -73,6 +74,8 @@ NUMBER_SOURCES = {
     "EXP-028": ["ml/shadow/exp028_chronos2/summary.json"],
     "EXP-029": ["ml/shadow/exp029_residual_screen/summary.json"],
     "EXP-030": ["ml/shadow/exp026_size_ladder/cpu_latency_proxy.json"],
+    "EXP-037": ["ml/shadow/exp037_rank_metric/summary.json",
+                "ml/shadow/exp037_rank_metric/diagnostics.json"],
 }
 # Values that are arithmetic on artifact-backed numbers rather than stored ones.
 # Each must state HOW it is derived, so the claim is checkable by a reader.

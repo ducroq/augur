@@ -1,0 +1,968 @@
+{
+  "precommit": "docs/experiment-backlog.md EXP-037 (2026-09-11), pinned 2e96bb9",
+  "baseline": "single-day carry, 24*ceil(h/24), from the EXP-035 context tape",
+  "hac_lags": 3,
+  "materiality_eur_mwh": 1.0,
+  "n_blocks": 755,
+  "n_vintages": 253,
+  "window": [
+    "2025-12-05 23:00:00+00:00",
+    "2026-08-21 23:00:00+00:00"
+  ],
+  "naive": {
+    "h1_24": {
+      "n": 252,
+      "regret_k3": 6.7207,
+      "regret_k6": 4.9688,
+      "hit_k3": 0.6151,
+      "hit_k6": 0.7738,
+      "spearman": 0.7981
+    },
+    "h25_48": {
+      "n": 252,
+      "regret_k3": 6.8197,
+      "regret_k6": 5.3026,
+      "hit_k3": 0.6296,
+      "hit_k6": 0.7798,
+      "spearman": 0.784
+    },
+    "h49_72": {
+      "n": 251,
+      "regret_k3": 6.1768,
+      "regret_k6": 4.7537,
+      "hit_k3": 0.6228,
+      "hit_k6": 0.7795,
+      "spearman": 0.7798
+    },
+    "pooled": {
+      "regret_k3": 6.5729,
+      "regret_k6": 5.0087,
+      "spearman": 0.7873
+    }
+  },
+  "arms": {
+    "fm_chronos_bolt_base": {
+      "h1_24": {
+        "regret_k3": 3.4624,
+        "regret_k6": 2.0192,
+        "advantage_k3": 3.2583,
+        "advantage_k6": 2.9497,
+        "hit_k3": 0.6931,
+        "hit_k6": 0.8466,
+        "spearman": 0.89
+      },
+      "h25_48": {
+        "regret_k3": 3.5525,
+        "regret_k6": 2.631,
+        "advantage_k3": 3.2672,
+        "advantage_k6": 2.6716,
+        "hit_k3": 0.6997,
+        "hit_k6": 0.8353,
+        "spearman": 0.8802
+      },
+      "h49_72": {
+        "regret_k3": 3.9175,
+        "regret_k6": 2.7357,
+        "advantage_k3": 2.2593,
+        "advantage_k6": 2.0181,
+        "hit_k3": 0.6972,
+        "hit_k6": 0.836,
+        "spearman": 0.878
+      },
+      "pooled_k3": {
+        "regret": 3.6438,
+        "naive_regret": 6.5729,
+        "advantage": 2.9292,
+        "dm_statistic": -5.1588,
+        "dm_p_one_sided": 0.0
+      },
+      "pooled_k6": {
+        "regret": 2.4616,
+        "naive_regret": 5.0087,
+        "advantage": 2.5471,
+        "dm_statistic": -6.8871,
+        "dm_p_one_sided": 0.0
+      },
+      "pooled_spearman": 0.8827,
+      "naive_pooled_spearman": 0.7873
+    },
+    "lgbm_drop_calendar": {
+      "h1_24": {
+        "regret_k3": 10.1581,
+        "regret_k6": 7.7714,
+        "advantage_k3": -3.4374,
+        "advantage_k6": -2.8025,
+        "hit_k3": 0.5291,
+        "hit_k6": 0.7295,
+        "spearman": 0.7219
+      },
+      "h25_48": {
+        "regret_k3": 17.5321,
+        "regret_k6": 14.6366,
+        "advantage_k3": -10.7124,
+        "advantage_k6": -9.3339,
+        "hit_k3": 0.4101,
+        "hit_k6": 0.6402,
+        "spearman": 0.5989
+      },
+      "h49_72": {
+        "regret_k3": 20.4418,
+        "regret_k6": 15.6928,
+        "advantage_k3": -14.265,
+        "advantage_k6": -10.9391,
+        "hit_k3": 0.3904,
+        "hit_k6": 0.6016,
+        "spearman": 0.5681
+      },
+      "pooled_k3": {
+        "regret": 16.0382,
+        "naive_regret": 6.5729,
+        "advantage": -9.4652,
+        "dm_statistic": 7.563,
+        "dm_p_one_sided": 1.0
+      },
+      "pooled_k6": {
+        "regret": 12.6963,
+        "naive_regret": 5.0087,
+        "advantage": -7.6876,
+        "dm_statistic": 8.512,
+        "dm_p_one_sided": 1.0
+      },
+      "pooled_spearman": 0.6297,
+      "naive_pooled_spearman": 0.7873
+    },
+    "lgbm_drop_exog": {
+      "h1_24": {
+        "regret_k3": 5.4426,
+        "regret_k6": 4.033,
+        "advantage_k3": 1.2781,
+        "advantage_k6": 0.9358,
+        "hit_k3": 0.6455,
+        "hit_k6": 0.7996,
+        "spearman": 0.8117
+      },
+      "h25_48": {
+        "regret_k3": 10.4706,
+        "regret_k6": 8.4708,
+        "advantage_k3": -3.6508,
+        "advantage_k6": -3.1682,
+        "hit_k3": 0.5198,
+        "hit_k6": 0.7282,
+        "spearman": 0.6816
+      },
+      "h49_72": {
+        "regret_k3": 12.473,
+        "regret_k6": 9.9944,
+        "advantage_k3": -6.2962,
+        "advantage_k6": -5.2407,
+        "hit_k3": 0.5153,
+        "hit_k6": 0.6906,
+        "spearman": 0.6524
+      },
+      "pooled_k3": {
+        "regret": 9.4581,
+        "naive_regret": 6.5729,
+        "advantage": -2.8851,
+        "dm_statistic": 2.9464,
+        "dm_p_one_sided": 0.998392
+      },
+      "pooled_k6": {
+        "regret": 7.4961,
+        "naive_regret": 5.0087,
+        "advantage": -2.4874,
+        "dm_statistic": 3.6401,
+        "dm_p_one_sided": 0.999864
+      },
+      "pooled_spearman": 0.7153,
+      "naive_pooled_spearman": 0.7873
+    },
+    "lgbm_drop_lags": {
+      "h1_24": {
+        "regret_k3": 6.0179,
+        "regret_k6": 4.4432,
+        "advantage_k3": 0.7028,
+        "advantage_k6": 0.5256,
+        "hit_k3": 0.6481,
+        "hit_k6": 0.791,
+        "spearman": 0.8184
+      },
+      "h25_48": {
+        "regret_k3": 13.4248,
+        "regret_k6": 10.6338,
+        "advantage_k3": -6.6051,
+        "advantage_k6": -5.3312,
+        "hit_k3": 0.5053,
+        "hit_k6": 0.7017,
+        "spearman": 0.6805
+      },
+      "h49_72": {
+        "regret_k3": 13.8344,
+        "regret_k6": 10.7115,
+        "advantage_k3": -7.6575,
+        "advantage_k6": -5.9578,
+        "hit_k3": 0.494,
+        "hit_k6": 0.6946,
+        "spearman": 0.6486
+      },
+      "pooled_k3": {
+        "regret": 11.0888,
+        "naive_regret": 6.5729,
+        "advantage": -4.5158,
+        "dm_statistic": 4.111,
+        "dm_p_one_sided": 0.99998
+      },
+      "pooled_k6": {
+        "regret": 8.5934,
+        "naive_regret": 5.0087,
+        "advantage": -3.5847,
+        "dm_statistic": 4.3867,
+        "dm_p_one_sided": 0.999994
+      },
+      "pooled_spearman": 0.7159,
+      "naive_pooled_spearman": 0.7873
+    },
+    "lgbm_drop_load": {
+      "h1_24": {
+        "regret_k3": 5.4801,
+        "regret_k6": 4.1646,
+        "advantage_k3": 1.2406,
+        "advantage_k6": 0.8043,
+        "hit_k3": 0.6495,
+        "hit_k6": 0.8029,
+        "spearman": 0.8108
+      },
+      "h25_48": {
+        "regret_k3": 11.962,
+        "regret_k6": 9.447,
+        "advantage_k3": -5.1422,
+        "advantage_k6": -4.1444,
+        "hit_k3": 0.5238,
+        "hit_k6": 0.7196,
+        "spearman": 0.6785
+      },
+      "h49_72": {
+        "regret_k3": 13.7472,
+        "regret_k6": 10.3964,
+        "advantage_k3": -7.5704,
+        "advantage_k6": -5.6427,
+        "hit_k3": 0.51,
+        "hit_k6": 0.6866,
+        "spearman": 0.6461
+      },
+      "pooled_k3": {
+        "regret": 10.392,
+        "naive_regret": 6.5729,
+        "advantage": -3.819,
+        "dm_statistic": 3.7678,
+        "dm_p_one_sided": 0.999918
+      },
+      "pooled_k6": {
+        "regret": 7.9995,
+        "naive_regret": 5.0087,
+        "advantage": -2.9908,
+        "dm_statistic": 3.9248,
+        "dm_p_one_sided": 0.999957
+      },
+      "pooled_spearman": 0.7119,
+      "naive_pooled_spearman": 0.7873
+    },
+    "lgbm_drop_rolling": {
+      "h1_24": {
+        "regret_k3": 4.0881,
+        "regret_k6": 3.1401,
+        "advantage_k3": 2.6326,
+        "advantage_k6": 1.8287,
+        "hit_k3": 0.6812,
+        "hit_k6": 0.8089,
+        "spearman": 0.8324
+      },
+      "h25_48": {
+        "regret_k3": 8.8403,
+        "regret_k6": 6.2785,
+        "advantage_k3": -2.0206,
+        "advantage_k6": -0.9759,
+        "hit_k3": 0.5979,
+        "hit_k6": 0.7692,
+        "spearman": 0.7387
+      },
+      "h49_72": {
+        "regret_k3": 7.2482,
+        "regret_k6": 5.9098,
+        "advantage_k3": -1.0714,
+        "advantage_k6": -1.1561,
+        "hit_k3": 0.5896,
+        "hit_k6": 0.7576,
+        "spearman": 0.7156
+      },
+      "pooled_k3": {
+        "regret": 6.7248,
+        "naive_regret": 6.5729,
+        "advantage": -0.1519,
+        "dm_statistic": 0.1907,
+        "dm_p_one_sided": 0.575609
+      },
+      "pooled_k6": {
+        "regret": 5.1084,
+        "naive_regret": 5.0087,
+        "advantage": -0.0997,
+        "dm_statistic": 0.1885,
+        "dm_p_one_sided": 0.574746
+      },
+      "pooled_spearman": 0.7623,
+      "naive_pooled_spearman": 0.7873
+    },
+    "lgbm_drop_solar": {
+      "h1_24": {
+        "regret_k3": 5.3131,
+        "regret_k6": 3.778,
+        "advantage_k3": 1.4076,
+        "advantage_k6": 1.1909,
+        "hit_k3": 0.6627,
+        "hit_k6": 0.8062,
+        "spearman": 0.8183
+      },
+      "h25_48": {
+        "regret_k3": 11.5088,
+        "regret_k6": 8.9822,
+        "advantage_k3": -4.689,
+        "advantage_k6": -3.6796,
+        "hit_k3": 0.5132,
+        "hit_k6": 0.709,
+        "spearman": 0.6739
+      },
+      "h49_72": {
+        "regret_k3": 16.0205,
+        "regret_k6": 12.0369,
+        "advantage_k3": -9.8437,
+        "advantage_k6": -7.2832,
+        "hit_k3": 0.498,
+        "hit_k6": 0.6952,
+        "spearman": 0.6408
+      },
+      "pooled_k3": {
+        "regret": 10.9407,
+        "naive_regret": 6.5729,
+        "advantage": -4.3678,
+        "dm_statistic": 3.3683,
+        "dm_p_one_sided": 0.999622
+      },
+      "pooled_k6": {
+        "regret": 8.2607,
+        "naive_regret": 5.0087,
+        "advantage": -3.252,
+        "dm_statistic": 3.6781,
+        "dm_p_one_sided": 0.999882
+      },
+      "pooled_spearman": 0.7111,
+      "naive_pooled_spearman": 0.7873
+    },
+    "lgbm_drop_wind": {
+      "h1_24": {
+        "regret_k3": 5.2905,
+        "regret_k6": 4.2142,
+        "advantage_k3": 1.4302,
+        "advantage_k6": 0.7546,
+        "hit_k3": 0.6349,
+        "hit_k6": 0.8016,
+        "spearman": 0.8116
+      },
+      "h25_48": {
+        "regret_k3": 12.8006,
+        "regret_k6": 9.6068,
+        "advantage_k3": -5.9808,
+        "advantage_k6": -4.3042,
+        "hit_k3": 0.5212,
+        "hit_k6": 0.7143,
+        "spearman": 0.679
+      },
+      "h49_72": {
+        "regret_k3": 11.8155,
+        "regret_k6": 9.4349,
+        "advantage_k3": -5.6386,
+        "advantage_k6": -4.6812,
+        "hit_k3": 0.5073,
+        "hit_k6": 0.6952,
+        "spearman": 0.649
+      },
+      "pooled_k3": {
+        "regret": 9.9664,
+        "naive_regret": 6.5729,
+        "advantage": -3.3934,
+        "dm_statistic": 3.1858,
+        "dm_p_one_sided": 0.999278
+      },
+      "pooled_k6": {
+        "regret": 7.7497,
+        "naive_regret": 5.0087,
+        "advantage": -2.741,
+        "dm_statistic": 3.6788,
+        "dm_p_one_sided": 0.999883
+      },
+      "pooled_spearman": 0.7133,
+      "naive_pooled_spearman": 0.7873
+    },
+    "lgbm_full": {
+      "h1_24": {
+        "regret_k3": 5.4771,
+        "regret_k6": 4.1302,
+        "advantage_k3": 1.2436,
+        "advantage_k6": 0.8386,
+        "hit_k3": 0.6429,
+        "hit_k6": 0.7983,
+        "spearman": 0.8177
+      },
+      "h25_48": {
+        "regret_k3": 10.83,
+        "regret_k6": 9.1528,
+        "advantage_k3": -4.0103,
+        "advantage_k6": -3.8502,
+        "hit_k3": 0.537,
+        "hit_k6": 0.7262,
+        "spearman": 0.6839
+      },
+      "h49_72": {
+        "regret_k3": 13.1802,
+        "regret_k6": 10.6925,
+        "advantage_k3": -7.0034,
+        "advantage_k6": -5.9388,
+        "hit_k3": 0.5033,
+        "hit_k6": 0.6886,
+        "spearman": 0.6527
+      },
+      "pooled_k3": {
+        "regret": 9.8247,
+        "naive_regret": 6.5729,
+        "advantage": -3.2517,
+        "dm_statistic": 3.4048,
+        "dm_p_one_sided": 0.999669
+      },
+      "pooled_k6": {
+        "regret": 7.9883,
+        "naive_regret": 5.0087,
+        "advantage": -2.9795,
+        "dm_statistic": 4.2086,
+        "dm_p_one_sided": 0.999987
+      },
+      "pooled_spearman": 0.7182,
+      "naive_pooled_spearman": 0.7873
+    }
+  },
+  "monthly": {
+    "fm_chronos_bolt_base": {
+      "2025-12": {
+        "mean_price": 83.34,
+        "regret_k6": 3.631,
+        "naive_regret_k6": 7.028,
+        "advantage_k6": 3.397
+      },
+      "2026-01": {
+        "mean_price": 110.8,
+        "regret_k6": 1.931,
+        "naive_regret_k6": 4.316,
+        "advantage_k6": 2.385
+      },
+      "2026-02": {
+        "mean_price": 90.92,
+        "regret_k6": 6.405,
+        "naive_regret_k6": 8.908,
+        "advantage_k6": 2.504
+      },
+      "2026-03": {
+        "mean_price": 102.47,
+        "regret_k6": 5.033,
+        "naive_regret_k6": 11.064,
+        "advantage_k6": 6.03
+      },
+      "2026-04": {
+        "mean_price": 78.47,
+        "regret_k6": 2.56,
+        "naive_regret_k6": 6.152,
+        "advantage_k6": 3.592
+      },
+      "2026-05": {
+        "mean_price": 100.52,
+        "regret_k6": 0.803,
+        "naive_regret_k6": 1.524,
+        "advantage_k6": 0.721
+      },
+      "2026-06": {
+        "mean_price": 105.43,
+        "regret_k6": 0.924,
+        "naive_regret_k6": 2.928,
+        "advantage_k6": 2.004
+      },
+      "2026-07": {
+        "mean_price": 106.09,
+        "regret_k6": 0.177,
+        "naive_regret_k6": 1.239,
+        "advantage_k6": 1.063
+      },
+      "2026-08": {
+        "mean_price": 131.51,
+        "regret_k6": 0.363,
+        "naive_regret_k6": 1.264,
+        "advantage_k6": 0.901
+      }
+    },
+    "lgbm_drop_calendar": {
+      "2025-12": {
+        "mean_price": 83.34,
+        "regret_k6": 10.623,
+        "naive_regret_k6": 7.028,
+        "advantage_k6": -3.595
+      },
+      "2026-01": {
+        "mean_price": 110.8,
+        "regret_k6": 7.681,
+        "naive_regret_k6": 4.316,
+        "advantage_k6": -3.365
+      },
+      "2026-02": {
+        "mean_price": 90.92,
+        "regret_k6": 13.496,
+        "naive_regret_k6": 8.908,
+        "advantage_k6": -4.587
+      },
+      "2026-03": {
+        "mean_price": 102.47,
+        "regret_k6": 25.383,
+        "naive_regret_k6": 11.064,
+        "advantage_k6": -14.32
+      },
+      "2026-04": {
+        "mean_price": 78.47,
+        "regret_k6": 26.447,
+        "naive_regret_k6": 6.152,
+        "advantage_k6": -20.295
+      },
+      "2026-05": {
+        "mean_price": 100.52,
+        "regret_k6": 7.694,
+        "naive_regret_k6": 1.524,
+        "advantage_k6": -6.17
+      },
+      "2026-06": {
+        "mean_price": 105.43,
+        "regret_k6": 5.293,
+        "naive_regret_k6": 2.928,
+        "advantage_k6": -2.366
+      },
+      "2026-07": {
+        "mean_price": 106.09,
+        "regret_k6": 8.881,
+        "naive_regret_k6": 1.239,
+        "advantage_k6": -7.642
+      },
+      "2026-08": {
+        "mean_price": 131.51,
+        "regret_k6": 7.103,
+        "naive_regret_k6": 1.264,
+        "advantage_k6": -5.839
+      }
+    },
+    "lgbm_drop_exog": {
+      "2025-12": {
+        "mean_price": 83.34,
+        "regret_k6": 7.617,
+        "naive_regret_k6": 7.028,
+        "advantage_k6": -0.589
+      },
+      "2026-01": {
+        "mean_price": 110.8,
+        "regret_k6": 4.487,
+        "naive_regret_k6": 4.316,
+        "advantage_k6": -0.171
+      },
+      "2026-02": {
+        "mean_price": 90.92,
+        "regret_k6": 11.126,
+        "naive_regret_k6": 8.908,
+        "advantage_k6": -2.218
+      },
+      "2026-03": {
+        "mean_price": 102.47,
+        "regret_k6": 17.964,
+        "naive_regret_k6": 11.064,
+        "advantage_k6": -6.9
+      },
+      "2026-04": {
+        "mean_price": 78.47,
+        "regret_k6": 14.166,
+        "naive_regret_k6": 6.152,
+        "advantage_k6": -8.014
+      },
+      "2026-05": {
+        "mean_price": 100.52,
+        "regret_k6": 3.975,
+        "naive_regret_k6": 1.524,
+        "advantage_k6": -2.451
+      },
+      "2026-06": {
+        "mean_price": 105.43,
+        "regret_k6": 3.115,
+        "naive_regret_k6": 2.928,
+        "advantage_k6": -0.187
+      },
+      "2026-07": {
+        "mean_price": 106.09,
+        "regret_k6": 1.793,
+        "naive_regret_k6": 1.239,
+        "advantage_k6": -0.554
+      },
+      "2026-08": {
+        "mean_price": 131.51,
+        "regret_k6": 1.906,
+        "naive_regret_k6": 1.264,
+        "advantage_k6": -0.642
+      }
+    },
+    "lgbm_drop_lags": {
+      "2025-12": {
+        "mean_price": 83.34,
+        "regret_k6": 8.274,
+        "naive_regret_k6": 7.028,
+        "advantage_k6": -1.246
+      },
+      "2026-01": {
+        "mean_price": 110.8,
+        "regret_k6": 3.852,
+        "naive_regret_k6": 4.316,
+        "advantage_k6": 0.464
+      },
+      "2026-02": {
+        "mean_price": 90.92,
+        "regret_k6": 12.543,
+        "naive_regret_k6": 8.908,
+        "advantage_k6": -3.634
+      },
+      "2026-03": {
+        "mean_price": 102.47,
+        "regret_k6": 23.112,
+        "naive_regret_k6": 11.064,
+        "advantage_k6": -12.048
+      },
+      "2026-04": {
+        "mean_price": 78.47,
+        "regret_k6": 16.544,
+        "naive_regret_k6": 6.152,
+        "advantage_k6": -10.392
+      },
+      "2026-05": {
+        "mean_price": 100.52,
+        "regret_k6": 5.417,
+        "naive_regret_k6": 1.524,
+        "advantage_k6": -3.893
+      },
+      "2026-06": {
+        "mean_price": 105.43,
+        "regret_k6": 2.442,
+        "naive_regret_k6": 2.928,
+        "advantage_k6": 0.486
+      },
+      "2026-07": {
+        "mean_price": 106.09,
+        "regret_k6": 1.778,
+        "naive_regret_k6": 1.239,
+        "advantage_k6": -0.538
+      },
+      "2026-08": {
+        "mean_price": 131.51,
+        "regret_k6": 1.592,
+        "naive_regret_k6": 1.264,
+        "advantage_k6": -0.329
+      }
+    },
+    "lgbm_drop_load": {
+      "2025-12": {
+        "mean_price": 83.34,
+        "regret_k6": 8.699,
+        "naive_regret_k6": 7.028,
+        "advantage_k6": -1.672
+      },
+      "2026-01": {
+        "mean_price": 110.8,
+        "regret_k6": 4.079,
+        "naive_regret_k6": 4.316,
+        "advantage_k6": 0.237
+      },
+      "2026-02": {
+        "mean_price": 90.92,
+        "regret_k6": 12.663,
+        "naive_regret_k6": 8.908,
+        "advantage_k6": -3.754
+      },
+      "2026-03": {
+        "mean_price": 102.47,
+        "regret_k6": 18.507,
+        "naive_regret_k6": 11.064,
+        "advantage_k6": -7.443
+      },
+      "2026-04": {
+        "mean_price": 78.47,
+        "regret_k6": 16.007,
+        "naive_regret_k6": 6.152,
+        "advantage_k6": -9.855
+      },
+      "2026-05": {
+        "mean_price": 100.52,
+        "regret_k6": 4.145,
+        "naive_regret_k6": 1.524,
+        "advantage_k6": -2.622
+      },
+      "2026-06": {
+        "mean_price": 105.43,
+        "regret_k6": 2.45,
+        "naive_regret_k6": 2.928,
+        "advantage_k6": 0.478
+      },
+      "2026-07": {
+        "mean_price": 106.09,
+        "regret_k6": 2.149,
+        "naive_regret_k6": 1.239,
+        "advantage_k6": -0.909
+      },
+      "2026-08": {
+        "mean_price": 131.51,
+        "regret_k6": 1.881,
+        "naive_regret_k6": 1.264,
+        "advantage_k6": -0.618
+      }
+    },
+    "lgbm_drop_rolling": {
+      "2025-12": {
+        "mean_price": 83.34,
+        "regret_k6": 6.146,
+        "naive_regret_k6": 7.028,
+        "advantage_k6": 0.881
+      },
+      "2026-01": {
+        "mean_price": 110.8,
+        "regret_k6": 2.605,
+        "naive_regret_k6": 4.316,
+        "advantage_k6": 1.711
+      },
+      "2026-02": {
+        "mean_price": 90.92,
+        "regret_k6": 11.135,
+        "naive_regret_k6": 8.908,
+        "advantage_k6": -2.227
+      },
+      "2026-03": {
+        "mean_price": 102.47,
+        "regret_k6": 11.359,
+        "naive_regret_k6": 11.064,
+        "advantage_k6": -0.295
+      },
+      "2026-04": {
+        "mean_price": 78.47,
+        "regret_k6": 8.395,
+        "naive_regret_k6": 6.152,
+        "advantage_k6": -2.243
+      },
+      "2026-05": {
+        "mean_price": 100.52,
+        "regret_k6": 1.79,
+        "naive_regret_k6": 1.524,
+        "advantage_k6": -0.266
+      },
+      "2026-06": {
+        "mean_price": 105.43,
+        "regret_k6": 1.625,
+        "naive_regret_k6": 2.928,
+        "advantage_k6": 1.302
+      },
+      "2026-07": {
+        "mean_price": 106.09,
+        "regret_k6": 1.086,
+        "naive_regret_k6": 1.239,
+        "advantage_k6": 0.153
+      },
+      "2026-08": {
+        "mean_price": 131.51,
+        "regret_k6": 1.137,
+        "naive_regret_k6": 1.264,
+        "advantage_k6": 0.126
+      }
+    },
+    "lgbm_drop_solar": {
+      "2025-12": {
+        "mean_price": 83.34,
+        "regret_k6": 7.169,
+        "naive_regret_k6": 7.028,
+        "advantage_k6": -0.142
+      },
+      "2026-01": {
+        "mean_price": 110.8,
+        "regret_k6": 4.438,
+        "naive_regret_k6": 4.316,
+        "advantage_k6": -0.123
+      },
+      "2026-02": {
+        "mean_price": 90.92,
+        "regret_k6": 11.786,
+        "naive_regret_k6": 8.908,
+        "advantage_k6": -2.877
+      },
+      "2026-03": {
+        "mean_price": 102.47,
+        "regret_k6": 20.852,
+        "naive_regret_k6": 11.064,
+        "advantage_k6": -9.789
+      },
+      "2026-04": {
+        "mean_price": 78.47,
+        "regret_k6": 17.269,
+        "naive_regret_k6": 6.152,
+        "advantage_k6": -11.117
+      },
+      "2026-05": {
+        "mean_price": 100.52,
+        "regret_k6": 4.597,
+        "naive_regret_k6": 1.524,
+        "advantage_k6": -3.073
+      },
+      "2026-06": {
+        "mean_price": 105.43,
+        "regret_k6": 2.752,
+        "naive_regret_k6": 2.928,
+        "advantage_k6": 0.175
+      },
+      "2026-07": {
+        "mean_price": 106.09,
+        "regret_k6": 2.1,
+        "naive_regret_k6": 1.239,
+        "advantage_k6": -0.861
+      },
+      "2026-08": {
+        "mean_price": 131.51,
+        "regret_k6": 1.625,
+        "naive_regret_k6": 1.264,
+        "advantage_k6": -0.361
+      }
+    },
+    "lgbm_drop_wind": {
+      "2025-12": {
+        "mean_price": 83.34,
+        "regret_k6": 7.623,
+        "naive_regret_k6": 7.028,
+        "advantage_k6": -0.595
+      },
+      "2026-01": {
+        "mean_price": 110.8,
+        "regret_k6": 4.139,
+        "naive_regret_k6": 4.316,
+        "advantage_k6": 0.177
+      },
+      "2026-02": {
+        "mean_price": 90.92,
+        "regret_k6": 11.936,
+        "naive_regret_k6": 8.908,
+        "advantage_k6": -3.028
+      },
+      "2026-03": {
+        "mean_price": 102.47,
+        "regret_k6": 17.693,
+        "naive_regret_k6": 11.064,
+        "advantage_k6": -6.629
+      },
+      "2026-04": {
+        "mean_price": 78.47,
+        "regret_k6": 15.343,
+        "naive_regret_k6": 6.152,
+        "advantage_k6": -9.191
+      },
+      "2026-05": {
+        "mean_price": 100.52,
+        "regret_k6": 5.309,
+        "naive_regret_k6": 1.524,
+        "advantage_k6": -3.786
+      },
+      "2026-06": {
+        "mean_price": 105.43,
+        "regret_k6": 2.394,
+        "naive_regret_k6": 2.928,
+        "advantage_k6": 0.534
+      },
+      "2026-07": {
+        "mean_price": 106.09,
+        "regret_k6": 2.133,
+        "naive_regret_k6": 1.239,
+        "advantage_k6": -0.894
+      },
+      "2026-08": {
+        "mean_price": 131.51,
+        "regret_k6": 1.533,
+        "naive_regret_k6": 1.264,
+        "advantage_k6": -0.269
+      }
+    },
+    "lgbm_full": {
+      "2025-12": {
+        "mean_price": 83.34,
+        "regret_k6": 7.215,
+        "naive_regret_k6": 7.028,
+        "advantage_k6": -0.187
+      },
+      "2026-01": {
+        "mean_price": 110.8,
+        "regret_k6": 4.169,
+        "naive_regret_k6": 4.316,
+        "advantage_k6": 0.146
+      },
+      "2026-02": {
+        "mean_price": 90.92,
+        "regret_k6": 11.711,
+        "naive_regret_k6": 8.908,
+        "advantage_k6": -2.803
+      },
+      "2026-03": {
+        "mean_price": 102.47,
+        "regret_k6": 19.274,
+        "naive_regret_k6": 11.064,
+        "advantage_k6": -8.21
+      },
+      "2026-04": {
+        "mean_price": 78.47,
+        "regret_k6": 16.877,
+        "naive_regret_k6": 6.152,
+        "advantage_k6": -10.725
+      },
+      "2026-05": {
+        "mean_price": 100.52,
+        "regret_k6": 5.163,
+        "naive_regret_k6": 1.524,
+        "advantage_k6": -3.639
+      },
+      "2026-06": {
+        "mean_price": 105.43,
+        "regret_k6": 2.404,
+        "naive_regret_k6": 2.928,
+        "advantage_k6": 0.523
+      },
+      "2026-07": {
+        "mean_price": 106.09,
+        "regret_k6": 2.139,
+        "naive_regret_k6": 1.239,
+        "advantage_k6": -0.899
+      },
+      "2026-08": {
+        "mean_price": 131.51,
+        "regret_k6": 1.005,
+        "naive_regret_k6": 1.264,
+        "advantage_k6": 0.258
+      }
+    }
+  },
+  "gates": {
+    "G1_ranks_better_all_blocks_k6": false,
+    "G1_per_block_advantage_k6": [
+      0.8386,
+      -3.8502,
+      -5.9388
+    ],
+    "G1_pooled_dm_p": 0.999987,
+    "G2_material": false,
+    "G2_pooled_advantage_eur_mwh": -2.9795,
+    "G3_refuted": true
+  }
+}

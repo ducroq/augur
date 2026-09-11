@@ -2,7 +2,7 @@
 
 **Generated file — do not edit.** Rendered from `experiments/registry.jsonl` and the `summary.json` artifacts it references, by `scripts/render_results.py`. Regenerate after appending to the registry; `--check` fails if this file is stale.
 
-Registry state: **33 entries**, rendered at `be3deb6`. Integrity of the underlying record is verified separately by `scripts/audit_registry.py` (schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed).
+Registry state: **34 entries**, rendered at `2e96bb9`. Integrity of the underlying record is verified separately by `scripts/audit_registry.py` (schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed).
 
 Decision values: `kept` (evidence stands / in production) · `parked` (works, not adopted, revisit) · `rejected` (does not work) · `rolled_back` · `superseded`.
 
@@ -60,6 +60,7 @@ The registry records *what was found*; the **revisit trigger and review-by date 
 | EXP-030 | EXP-026 part (b) completed by proxy |
 | EXP-031 | Documentation-integrity audit of EXP-021..030 |
 | EXP-033 | EXP-021a Stage 2 latency gate discharged on the real host |
+| EXP-037 | The product lens does not rescue the incumbent |
 | EXP-001 | Initial ARF warmup baseline (pre-backfill) |
 
 ## Summary
@@ -99,6 +100,7 @@ The registry records *what was found*; the **revisit trigger and review-by date 
 | EXP-032 | 2026-08-30 | parked | — | EXP-023a Stage A: the 112-day window's advantage does NOT reproduce on unscored vintages |
 | EXP-033 | 2026-08-30 | **kept** | — | EXP-021a Stage 2 latency gate discharged on the real host: chronos-bolt-base runs a 72h forecast in 1.16s on sadalsuud |
 | EXP-035 | 2026-09-06 | parked | — | Every stored arm re-scored against a seasonal-naive floor: the foundation model clears it in all 9 months, no LightGBM configuration clears it in August |
+| EXP-037 | 2026-09-11 | **kept** | — | The product lens does not rescue the incumbent: on cost regret it is WORSE than the carry it already barely beat on MAE, and the cause is amplitude collapse |
 
 ## EXP-001 — Initial ARF warmup baseline (pre-backfill)
 
@@ -1404,5 +1406,55 @@ The registry records *what was found*; the **revisit trigger and review-by date 
 **Caveats.** No GPU and no fresh vintages: pure re-scoring of predictions already stored by EXP-018 and EXP-021 on the identical 260-vintage set (2025-12-05..2026-08-21), so the arms are paired row-for-row. The naive prices are read from the FM's own context tape rather than the training parquet, which makes 'the baseline saw less than the model' true by construction instead of by argument. Reproduce with scripts/exp035_naive_floor.py. Caveat: the LightGBM arms here are the EXP-018 harness's walk-forward rebuilds, production-shaped but not the literal production model; the live-record measurement in the hypothesis-log entry is the one that speaks for the deployed system.
 
 **Artifacts.** `ml/shadow/exp035_naive_floor/summary.json` · `scripts/exp035_naive_floor.py`
+
+---
+
+## EXP-037 — The product lens does not rescue the incumbent: on cost regret it is WORSE than the carry it already barely beat on MAE, and the cause is amplitude collapse
+
+****kept**** · 2026-09-11 · model: re-scoring only, no training: 8 LightGBM-Quantile ablation variants (EXP-018) and chronos-bolt-base zero-shot (EXP-021) vs the single-day carry, scored on cost regret
+
+**Hypothesis.** Alternative 3 of docs/hypothesis-log.md [2026-09-06], pre-committed in docs/experiment-backlog.md EXP-037 (pinned 2e96bb9) before any rank number was computed. augur#29 measures MAE, but Augur exists so a load RUNS during the cheap hours - a ranking problem, invariant to exactly the level error this model is known to make. Stated position: LightGBM full has lower cost regret than the single-day carry in ALL THREE horizon groups, widest at 49-72h, with a rank advantage LARGER than its +5.1% MAE advantage but economically small (<2 EUR/MWh). THIS POSITION WAS REFUTED.
+
+**Outcome.** KEPT as settled standing evidence: the question Alternative 3 left open is now CLOSED, nothing is pending, and no production path is touched. G3 (refutation) FIRED and G1/G2 both failed. LightGBM full's cost regret is 7.99 EUR/MWh against the carry's 5.01 - it is WORSE by 2.98 EUR/MWh pooled, worse in 2 of 3 horizon groups (+0.84 at 1-24h, -3.85 at 25-48h, -5.94 at 49-72h), worse in 6 of 9 months, and the DM one-sided p of 0.999987 is emphatic in the wrong direction. Mean Spearman 0.718 vs the carry's 0.787. So the product lens does NOT rescue the incumbent: it is the harsher lens, not the kinder one. This makes augur#29 SIMPLER and STRONGER - the model is not beaten on one metric and vindicated on another; it loses to a one-line baseline on the metric that matters to the product too. Alternative 1 (the carry brings yesterday's weather, so it wins short and loses long) is refuted by the SIGN: the pattern is exactly reversed. The mechanism is amplitude collapse, measured post-hoc: LightGBM's within-block forecast spread falls from 26.6 EUR/MWh at 1-24h to 14.9 at 49-72h, against a realised spread of 42.7 and a carry that holds 41.1. Beyond 24h it forecasts about a third of the true diurnal amplitude - a flattened forecast has a BETTER MAE (hedging toward the conditional median is what minimising absolute error buys) and a nearly arbitrary ranking. The model is optimising the thing that destroys its product value. Chronos-bolt-base holds 35.7 and beats the carry by 2.55 EUR/MWh (DM p<1e-6) in all three horizon groups and all nine months, Spearman 0.883: a second, independent, product-denominated metric on which the model-class gap is large. Not an artifact of the shipped column - scoring the raw tau=0.50 output instead gives 7.95, materially identical. Two independent replications of EXP-035's secondary findings on a completely different metric: drop_rolling is again the best LightGBM arm (-0.10, statistically indistinguishable from the carry at p=0.57), and drop_calendar is again the worst and the only arm below the baseline in all nine months (-7.69) - the calendar block, which encodes diurnal SHAPE, is what little is holding the ranking up. Does NOT discharge augur#29's >=21-fresh-vintage verdict: these 260 stored vintages include the 24 the hypothesis was formed on, so this corroborates on stored data exactly as EXP-035 does. Authorises no swap - no calibration guardrail is evaluated here and ADR-007 requires one.
+
+<details><summary>All recorded metrics (29)</summary>
+
+| metric | value |
+|---|---|
+| `carry_regret_k6` | 5.0087 |
+| `carry_regret_k3` | 6.5729 |
+| `carry_spearman` | 0.7873 |
+| `lgbm_full_regret_k6` | 7.9883 |
+| `lgbm_full_advantage_k6` | -2.9795 |
+| `lgbm_full_dm_p_one_sided` | 0.999987 |
+| `lgbm_full_advantage_k6_h1_24` | 0.8386 |
+| `lgbm_full_advantage_k6_h25_48` | -3.8502 |
+| `lgbm_full_advantage_k6_h49_72` | -5.9388 |
+| `lgbm_full_spearman` | 0.7182 |
+| `chronos_regret_k6` | 2.4616 |
+| `chronos_advantage_k6` | 2.5471 |
+| `chronos_dm_p_one_sided` | 0 |
+| `chronos_spearman` | 0.8827 |
+| `lgbm_drop_rolling_advantage_k6` | -0.0997 |
+| `lgbm_drop_rolling_dm_p_one_sided` | 0.574746 |
+| `lgbm_drop_calendar_advantage_k6` | -7.6876 |
+| `n_months_lgbm_full_below_carry` | 6 |
+| `n_months_chronos_below_carry` | 0 |
+| `n_months_drop_calendar_below_carry` | 9 |
+| `amplitude_realised_h49_72` | 42.689 |
+| `amplitude_carry_h49_72` | 41.135 |
+| `amplitude_lgbm_full_h1_24` | 26.566 |
+| `amplitude_lgbm_full_h49_72` | 14.94 |
+| `amplitude_chronos_h49_72` | 35.744 |
+| `p50_raw_regret_k6` | 7.9452 |
+| `gate_G1_passed` | no |
+| `gate_G2_material` | no |
+| `gate_G3_refuted` | yes |
+
+</details>
+
+**Caveats.** No GPU, no fresh vintages, no production path touched: pure re-scoring of predictions already stored by EXP-018 and EXP-021, on the identical vintage set EXP-035 used, so the two experiments are comparable line for line. 755 blocks from 253 vintages survived the all-arms-defined intersection out of 253*3=759. The baseline function is IMPORTED from scripts/exp035_naive_floor.py rather than reimplemented, so the carry is bit-identical to the one augur#29's floor is measured against. Method pre-committed 2026-09-11 before any rank or regret number existed, including HAC bandwidth 3 (the observation is a block, not an hour) and the 1.0 EUR/MWh materiality bar, so a statistically real but economically irrelevant win could not have been reported as a product finding. The author's stated position was wrong in direction and magnitude; it is recorded above unedited. Caveat inherited from EXP-035: the LightGBM arms are the EXP-018 harness's walk-forward rebuilds, production-shaped but not the literal deployed model. One nuance worth not over-reading: in August 2026 the incumbent BEATS the carry on regret (+0.26) although it is that month's worst MAE performer - regret is small for everyone in August (1.26 for the carry) because a deep solar midday dip makes the cheap hours easy to find. It is one month and the pre-committed reading is the pooled one.
+
+**Artifacts.** `ml/shadow/exp037_rank_metric/summary.json` · `ml/shadow/exp037_rank_metric/diagnostics.json` · `scripts/exp037_rank_metric.py` · `scripts/exp037_diagnostics.py`
 
 ---
