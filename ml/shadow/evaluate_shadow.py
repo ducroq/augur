@@ -212,6 +212,95 @@ def naive_source_timestamp(ts: pd.Timestamp, t0: pd.Timestamp) -> pd.Timestamp:
     return ts - pd.Timedelta(days=days_back)
 
 
+# --- EXP-036 profile floor (adopted 2026-09-11) ------------------------------
+# The single-day carry above is ONE sample per forecast hour. EXP-036 measured
+# seven estimators on 257 stored vintages: every multi-day profile beat it,
+# and the adopted arm -- the mean of the same clock hour over the last 5
+# MATCHING day types -- beat it by 15.8% MAE (DM p<1e-5). That turned the
+# incumbent's "+5.1% over naive" into -12.4% BELOW an honest floor.
+#
+# It is logged ALONGSIDE naive_mae and never replaces it. augur#29's >=21
+# vintage verdict is pre-committed against the carry; swapping the floor under
+# a criterion while its data is arriving is the post-hoc swap ADR-007 forbids.
+# Both numbers travel together for at least one review cycle.
+PROFILE_DAYS = 5
+PROFILE_MAX_LOOKBACK_DAYS = 56   # the training window's own depth
+TZ_LOCAL = "Europe/Amsterdam"
+
+
+def load_holiday_dates(parquet_path: Path) -> set | None:
+    """NL public-holiday LOCAL dates from the parquet, or None if unavailable.
+
+    None (not an empty set) when the column is missing: an empty set silently
+    demotes the day-type arm to plain weekday/weekend matching, which is a
+    DIFFERENT estimator wearing the same field name. Null the field instead --
+    same discipline as load_price_history.
+    """
+    if not parquet_path.exists():
+        return None
+    try:
+        parquet = _normalize_parquet_index(pd.read_parquet(parquet_path))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not read %s (%s) — naive_profile null", parquet_path, exc)
+        return None
+    if "is_holiday_nl" not in parquet.columns:
+        logger.warning(
+            "Parquet has no is_holiday_nl column — naive_profile fields null. "
+            "Regenerate with ml/data/consolidate.py (9 columns since 2026-08-29)."
+        )
+        return None
+    # fillna BEFORE the bool cast: the column is float64 and numpy casts NaN to
+    # True, which would type most of the series as a holiday. Cost the EXP-036
+    # run a re-verification; pinned by a test here so it cannot come back.
+    flag = parquet["is_holiday_nl"].fillna(0).to_numpy().astype(bool)
+    local = parquet.index.tz_convert(TZ_LOCAL)
+    return set(pd.Series(local.date)[flag])
+
+
+def _day_type(ts: pd.Timestamp, holidays: set) -> int:
+    """0 weekday, 1 weekend, 2 NL holiday — on the LOCAL calendar.
+
+    Local, not UTC: weekend and holiday are calendar notions, and deciding them
+    in UTC mis-types the hours either side of local midnight.
+    """
+    local = _as_utc(ts).tz_convert(TZ_LOCAL)
+    if holidays and local.date() in holidays:
+        return 2
+    return 1 if local.weekday() >= 5 else 0
+
+
+def naive_profile_prediction(
+    ts: pd.Timestamp,
+    t0: pd.Timestamp,
+    prices: dict,
+    holidays: set,
+) -> float | None:
+    """Mean of the same clock hour over the last PROFILE_DAYS matching day types.
+
+    Walks back from the SAME anchor the carry uses, so it can never read a
+    price the carry could not: every source is at or before `t0` by
+    construction, and going further back only moves further into the past.
+
+    Returns None unless all PROFILE_DAYS sources are found. A mean over fewer
+    is a different estimator, and a partially-filled one would quietly change
+    meaning exactly on the damaged days where it matters most.
+    """
+    src = naive_source_timestamp(ts, t0)
+    want = _day_type(ts, holidays)
+    vals: list[float] = []
+    for j in range(PROFILE_MAX_LOOKBACK_DAYS):
+        cand = src - pd.Timedelta(days=j)
+        if _day_type(cand, holidays) != want:
+            continue
+        v = prices.get(cand)
+        if v is None or pd.isna(v):
+            continue
+        vals.append(float(v))
+        if len(vals) == PROFILE_DAYS:
+            return float(np.mean(vals))
+    return None
+
+
 def _as_utc(ts: pd.Timestamp) -> pd.Timestamp:
     return ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
 
@@ -278,6 +367,7 @@ def evaluate_one_day(
     calibration_history: list[dict],
     arf_predictions: dict[pd.Timestamp, float] | None,
     price_history: pd.Series | None = None,
+    holiday_dates: set | None = None,
 ) -> dict | None:
     """Compute one row for eval_log.jsonl. Returns None if no realised hours for the day."""
     rows = [
@@ -340,6 +430,10 @@ def evaluate_one_day(
     naive_skill: float | None = None
     naive_min_horizon_h: int | None = None
     naive_max_horizon_h: int | None = None
+    n_naive_profile_hours = 0
+    naive_profile_mae: float | None = None
+    lgbm_mae_on_profile: float | None = None
+    profile_skill: float | None = None
 
     t0 = t0_for_eval_day(calibration_history, eval_day)
     if price_history is not None and t0 is not None:
@@ -364,6 +458,26 @@ def evaluate_one_day(
             if naive_mae > 0:
                 naive_skill = 1.0 - lgbm_mae_on_naive / naive_mae
 
+        # EXP-036 profile floor, scored on its OWN paired hours. It is defined
+        # on a different (smaller) set than the carry -- it needs 5 matching
+        # day types, the carry needs 1 observation -- so pairing it against the
+        # carry's hours would compare two baselines on different samples.
+        if holiday_dates:
+            prices = price_history.to_dict()
+            df["profile_pred"] = [
+                naive_profile_prediction(ts, t0, prices, holiday_dates)
+                for ts in df["timestamp_utc"]
+            ]
+            paired_p = df.dropna(subset=["profile_pred"])
+            n_naive_profile_hours = len(paired_p)
+            if n_naive_profile_hours:
+                naive_profile_mae = float(
+                    _abs_err(paired_p["profile_pred"], paired_p["realized"]).mean()
+                )
+                lgbm_mae_on_profile = float(paired_p["lgbm_abs_err"].mean())
+                if naive_profile_mae > 0:
+                    profile_skill = 1.0 - lgbm_mae_on_profile / naive_profile_mae
+
     def _round(x: float | None, n: int = 3) -> float | None:
         return None if x is None else round(x, n)
 
@@ -385,6 +499,12 @@ def evaluate_one_day(
         "lightgbm_skill_vs_naive": _round(naive_skill, 4),
         "naive_min_horizon_h": naive_min_horizon_h,
         "naive_max_horizon_h": naive_max_horizon_h,
+        # EXP-036, additive: the carry's fields above are untouched so rows
+        # written before 2026-09-11 stay comparable with rows written after.
+        "n_naive_profile_hours": int(n_naive_profile_hours),
+        "naive_profile_mae": _round(naive_profile_mae),
+        "lightgbm_mae_on_profile_hours": _round(lgbm_mae_on_profile),
+        "lightgbm_skill_vs_naive_profile": _round(profile_skill, 4),
     }
 
 
@@ -457,6 +577,7 @@ def run_evaluation(
     # After the early-out: on a no-op night there is no row to attach a
     # "parquet missing" warning to, and reading it would be wasted I/O.
     price_history = load_price_history(parquet_path)
+    holiday_dates = load_holiday_dates(parquet_path)
 
     logger.info("Evaluating %d day(s): %s", len(eligible), eligible)
     appended: list[dict] = []
@@ -468,7 +589,8 @@ def run_evaluation(
                 "No ARF archive precedes %s — arf_* fields will be null", day
             )
         row = evaluate_one_day(
-            day, state["calibration_history"], arf_preds, price_history
+            day, state["calibration_history"], arf_preds, price_history,
+            holiday_dates
         )
         if row is None:
             continue

@@ -2,7 +2,7 @@
 
 **Generated file — do not edit.** Rendered from `experiments/registry.jsonl` and the `summary.json` artifacts it references, by `scripts/render_results.py`. Regenerate after appending to the registry; `--check` fails if this file is stale.
 
-Registry state: **34 entries**, rendered at `2e96bb9`. Integrity of the underlying record is verified separately by `scripts/audit_registry.py` (schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed).
+Registry state: **35 entries**, rendered at `bad615b`. Integrity of the underlying record is verified separately by `scripts/audit_registry.py` (schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed).
 
 Decision values: `kept` (evidence stands / in production) · `parked` (works, not adopted, revisit) · `rejected` (does not work) · `rolled_back` · `superseded`.
 
@@ -60,6 +60,7 @@ The registry records *what was found*; the **revisit trigger and review-by date 
 | EXP-030 | EXP-026 part (b) completed by proxy |
 | EXP-031 | Documentation-integrity audit of EXP-021..030 |
 | EXP-033 | EXP-021a Stage 2 latency gate discharged on the real host |
+| EXP-036 | The skill floor was too weak |
 | EXP-037 | The product lens does not rescue the incumbent |
 | EXP-001 | Initial ARF warmup baseline (pre-backfill) |
 
@@ -100,6 +101,7 @@ The registry records *what was found*; the **revisit trigger and review-by date 
 | EXP-032 | 2026-08-30 | parked | — | EXP-023a Stage A: the 112-day window's advantage does NOT reproduce on unscored vintages |
 | EXP-033 | 2026-08-30 | **kept** | — | EXP-021a Stage 2 latency gate discharged on the real host: chronos-bolt-base runs a 72h forecast in 1.16s on sadalsuud |
 | EXP-035 | 2026-09-06 | parked | — | Every stored arm re-scored against a seasonal-naive floor: the foundation model clears it in all 9 months, no LightGBM configuration clears it in August |
+| EXP-036 | 2026-09-11 | **kept** | — | The skill floor was too weak: every profile baseline beats the single-day carry, and against the best one the incumbent is 12.4% BELOW the floor |
 | EXP-037 | 2026-09-11 | **kept** | — | The product lens does not rescue the incumbent: on cost regret it is WORSE than the carry it already barely beat on MAE, and the cause is amplitude collapse |
 
 ## EXP-001 — Initial ARF warmup baseline (pre-backfill)
@@ -1406,6 +1408,59 @@ The registry records *what was found*; the **revisit trigger and review-by date 
 **Caveats.** No GPU and no fresh vintages: pure re-scoring of predictions already stored by EXP-018 and EXP-021 on the identical 260-vintage set (2025-12-05..2026-08-21), so the arms are paired row-for-row. The naive prices are read from the FM's own context tape rather than the training parquet, which makes 'the baseline saw less than the model' true by construction instead of by argument. Reproduce with scripts/exp035_naive_floor.py. Caveat: the LightGBM arms here are the EXP-018 harness's walk-forward rebuilds, production-shaped but not the literal production model; the live-record measurement in the hypothesis-log entry is the one that speaks for the deployed system.
 
 **Artifacts.** `ml/shadow/exp035_naive_floor/summary.json` · `scripts/exp035_naive_floor.py`
+
+---
+
+## EXP-036 — The skill floor was too weak: every profile baseline beats the single-day carry, and against the best one the incumbent is 12.4% BELOW the floor
+
+****kept**** · 2026-09-11 · model: re-scoring only, no training: seven baseline estimators vs LightGBM full, LightGBM drop_rolling and chronos-bolt-base
+
+**Hypothesis.** Pre-committed in docs/experiment-backlog.md 2026-09-10 (pinned 2113e1f). evaluate_shadow.py's floor is a single-day carry - one sample per forecast hour - and EXP-035 measured LightGBM full at +5.1% over it. Position: a multi-day profile beats the carry, and against the best profile arm LightGBM full's skill falls to <=+2% and goes negative in >=4 of 9 months, while chronos-bolt-base stays clearly above every arm. CONFIRMED, and on the strong side: full falls to -12.4% and is negative in 7 of 9 months.
+
+**Outcome.** KEPT and ADOPTED. G1 passes for all six profile arms (>=3% MAE over N1, DM p<0.05); G3 selects N5_dt, which is both the best (+15.8%) and the simplest within 1pp of the best - nothing cheaper comes close (N7 is 2.97pp behind). The floor everything in this project is measured against was a single noisy draw: N1 MAE 28.92, N5_dt 24.35. Consequence for augur#29: LightGBM full's '+5.1% over naive' becomes -12.4% BELOW the honest floor, negative in 7 of 9 months rather than 2. drop_rolling, the best LightGBM arm, is also negative (-5.5%). Chronos-bolt-base survives every arm (+10.7% vs N5_dt, never below in any month). ALTERNATIVE 1 REFUTED: averaging does not destroy more than it denoises - every multi-day arm beats N1, monotonically in K. ALTERNATIVE 2 NOT FIRED: day-type is not the whole effect - plain N5 already beats N1 by 9.8%, and day-type matching adds ~6pp on top. ALTERNATIVE 3 FIRED: the gain is strongly horizon-dependent (N5_dt +7.1% at 1-24h vs +19.8% at 49-72h, a 12.6pp spread against a 5pp signal). Per the pre-commitment this means a single scalar floor is the WRONG SHAPE and augur#29's threshold must be restated per horizon group rather than as one mean. ALTERNATIVE 4 FIRED, and it is the uncomfortable one: the best profile arm closes 57% of chronos-bolt-base's margin (from +24.8% over N1 to +10.7% over N5_dt) against a >1/3 signal. So a material part of what EXP-021/022 attributed to a pretrained distributional prior is ordinary profile smoothing that a seven-line baseline also has. The FM still wins everywhere, but its headline margin over a HONEST floor is roughly half what it is over the carry. This is the mechanism story's third correction, as that entry warned it might be. Pre-commitment boundary respected: this does NOT retroactively move augur#29, whose >=21-fresh-vintage verdict is read against the single-day carry as specified there. The new floor applies to vintages scored after it lands, and both numbers are reported side by side (G2: evaluate_shadow.py gains naive_profile_mae ALONGSIDE naive_mae, never replacing it).
+
+<details><summary>All recorded metrics (32)</summary>
+
+| metric | value |
+|---|---|
+| `N1_mae` | 28.9241 |
+| `N2_mae` | 27.7108 |
+| `N3_mae` | 27.1451 |
+| `N5_mae` | 26.099 |
+| `N7_mae` | 25.2048 |
+| `N5_decay_mae` | 25.92 |
+| `N5_dt_mae` | 24.3465 |
+| `N2_gain_vs_N1` | 0.0419 |
+| `N3_gain_vs_N1` | 0.0615 |
+| `N5_gain_vs_N1` | 0.0977 |
+| `N7_gain_vs_N1` | 0.1286 |
+| `N5_decay_gain_vs_N1` | 0.1039 |
+| `N5_dt_gain_vs_N1` | 0.1583 |
+| `N2_dm_p` | 0.002986 |
+| `N3_dm_p` | 0.002135 |
+| `N5_dm_p` | 0.000114 |
+| `N7_dm_p` | 2e-06 |
+| `N5_decay_dm_p` | 0 |
+| `N5_dt_dm_p` | 1e-06 |
+| `lgbm_full_skill_vs_N1` | 0.0538 |
+| `lgbm_full_skill_vs_N5_dt` | -0.1241 |
+| `lgbm_drop_rolling_skill_vs_N5_dt` | -0.055 |
+| `chronos_skill_vs_N1` | 0.2479 |
+| `chronos_skill_vs_N5_dt` | 0.1065 |
+| `n_months_lgbm_full_below_N5_dt` | 7 |
+| `n_months_chronos_below_N5_dt` | 0 |
+| `alt3_horizon_spread_pp` | 12.62 |
+| `alt4_fraction_of_chronos_margin_closed` | 0.5704 |
+| `gate_G1_adopted` | yes |
+| `gate_G3_chosen` | N5_dt |
+| `N5_dt_gain_h1_24` | 0.0714 |
+| `N5_dt_gain_h49_72` | 0.1976 |
+
+</details>
+
+**Caveats.** No GPU, no fresh vintages, no production path touched by the measurement itself. 15754 of 18715 rows survive the all-arms-defined intersection (N7 needs 7 days back, N5_dt needs 5 matching day types), 257 vintages. The restriction does not bias the comparison: LightGBM full's skill vs N1 on this subset is +5.38% against EXP-035's +5.12% on the full set. BUG FOUND AND FIXED DURING THE RUN, recorded because the result depended on checking rather than assuming: is_holiday_nl is float64 with 1440 NaNs, and numpy casts NaN to True, so the first implementation typed ~1680 hours as NL holidays instead of 240. Fixed with fillna(0) before the cast. Verified the published numbers are unaffected rather than asserted to be: the spurious dates run 2025-09-28..2025-11-30 and recomputing N5_dt under both holiday sets gives bit-identical values on every one of the 17590 defined rows. The fix matters for any future window that overlaps the NaN region. Day type is decided on the Europe/Amsterdam calendar, not UTC, or the hours either side of midnight are mis-typed.
+
+**Artifacts.** `ml/shadow/exp036_profile_floor/summary.json` · `scripts/exp036_profile_floor.py`
 
 ---
 

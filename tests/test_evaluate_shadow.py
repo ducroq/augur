@@ -568,3 +568,109 @@ class TestNaiveSkillInRow:
         assert row["naive_mae"] == 58.0
         assert row["naive_min_horizon_h"] == 24
         assert row["naive_max_horizon_h"] == 72
+
+
+class TestProfileFloor:
+    """EXP-036's adopted floor, logged alongside the carry (never replacing it).
+
+    The carry is one sample per forecast hour. EXP-036 measured seven
+    estimators on 257 stored vintages: every multi-day profile beat it, and the
+    adopted arm -- the mean of the same clock hour over the last 5 MATCHING day
+    types -- beat it by 15.8% MAE, turning the incumbent's "+5.1% over naive"
+    into -12.4% below an honest floor.
+    """
+
+    T0 = pd.Timestamp("2026-05-01T21:00:00Z")
+    DAY = "2026-05-01"
+
+    def _prices(self, start, hours, value):
+        idx = pd.date_range(start, periods=hours, freq="h", tz="UTC")
+        return pd.Series([value] * hours, index=idx)
+
+    def test_fields_are_additive_and_the_carry_is_untouched(self):
+        calib = _vintage(self.T0, lgbm_pred=100.0, realised=100.0)
+        history = _flat_history(self.T0 - pd.Timedelta(days=40),
+                                hours=24 * 41, value=50.0)
+        row = evaluate_one_day(self.DAY, calib, None, history, {pd.Timestamp("2026-01-01").date()})
+        assert row["naive_mae"] == 50.0, "the carry must be unchanged"
+        assert row["lightgbm_skill_vs_naive"] == 1.0
+        assert row["naive_profile_mae"] == 50.0
+        assert row["lightgbm_skill_vs_naive_profile"] == 1.0
+        assert row["n_naive_profile_hours"] > 0
+
+    def test_absent_holiday_data_leaves_the_field_null_not_zero(self):
+        """An empty holiday set is a DIFFERENT estimator wearing the same name."""
+        calib = _vintage(self.T0, lgbm_pred=100.0, realised=100.0)
+        history = _flat_history(self.T0 - pd.Timedelta(days=40),
+                                hours=24 * 41, value=50.0)
+        row = evaluate_one_day(self.DAY, calib, None, history, None)
+        assert row["naive_profile_mae"] is None
+        assert row["lightgbm_skill_vs_naive_profile"] is None
+        assert row["n_naive_profile_hours"] == 0
+        assert row["naive_mae"] == 50.0, "the carry still scores"
+
+    def test_too_little_history_yields_none_not_a_partial_mean(self):
+        """A mean over fewer than 5 days is a different estimator."""
+        from ml.shadow.evaluate_shadow import naive_profile_prediction
+        ts = self.T0 + pd.Timedelta(hours=1)
+        prices = self._prices(self.T0 - pd.Timedelta(days=3), 24 * 4, 50.0).to_dict()
+        assert naive_profile_prediction(ts, self.T0, prices, set()) is None
+
+    def test_it_never_reads_a_price_after_t0(self):
+        """Same honesty property the carry has, and for the same reason.
+
+        Every source walks BACK from the carry's own anchor, so a lookahead
+        would have to travel forward through a subtraction.
+        """
+        from ml.shadow.evaluate_shadow import (naive_profile_prediction,
+                                               naive_source_timestamp)
+        seen = {}
+
+        class Spy(dict):
+            def get(self, k, default=None):
+                seen[k] = True
+                return 50.0
+
+        for h in (1, 25, 72):
+            ts = self.T0 + pd.Timedelta(hours=h)
+            naive_profile_prediction(ts, self.T0, Spy(), set())
+            assert max(seen) <= naive_source_timestamp(ts, self.T0) <= self.T0
+            seen.clear()
+
+    def test_day_types_are_matched_not_merely_counted_back(self):
+        """A Saturday target must average Saturdays, not the previous 5 days."""
+        from ml.shadow.evaluate_shadow import naive_profile_prediction
+        t0 = pd.Timestamp("2026-05-01T21:00:00Z")        # Friday
+        ts = pd.Timestamp("2026-05-02T12:00:00Z")        # Saturday, h=15
+        idx = pd.date_range(t0 - pd.Timedelta(days=60), t0, freq="h", tz="UTC")
+        # Weekends 100, weekdays 0 (local calendar).
+        local = idx.tz_convert("Europe/Amsterdam")
+        prices = dict(zip(idx, [100.0 if d >= 5 else 0.0 for d in local.weekday]))
+        got = naive_profile_prediction(ts, t0, prices, set())
+        assert got == 100.0, (
+            "matching on day type must pick weekend sources for a weekend target")
+
+    def test_nan_holiday_flag_does_not_become_true(self, tmp_path):
+        """The bug found during the EXP-036 run, pinned so it cannot return.
+
+        `is_holiday_nl` is float64 with NaNs, and numpy casts NaN to True — the
+        first implementation typed ~1680 hours as NL holidays instead of 240.
+        """
+        from ml.shadow.evaluate_shadow import load_holiday_dates
+        idx = pd.date_range("2026-01-01", periods=72, freq="h", tz="UTC")
+        flag = [float("nan")] * 48 + [1.0] * 24
+        pd.DataFrame({"price_eur_mwh": [50.0] * 72, "is_holiday_nl": flag},
+                     index=idx).rename_axis("timestamp_utc").to_parquet(
+                         tmp_path / "h.parquet")
+        got = load_holiday_dates(tmp_path / "h.parquet")
+        assert got is not None
+        assert len(got) <= 2, f"only the flagged day may be a holiday, got {got}"
+        assert pd.Timestamp("2026-01-01").date() not in got, (
+            "a NaN-flagged day must not be typed as a holiday")
+
+    def test_missing_column_returns_none(self, tmp_path):
+        from ml.shadow.evaluate_shadow import load_holiday_dates
+        idx = pd.date_range("2026-01-01", periods=24, freq="h", tz="UTC")
+        pd.DataFrame({"price_eur_mwh": [50.0] * 24}, index=idx).rename_axis(
+            "timestamp_utc").to_parquet(tmp_path / "n.parquet")
+        assert load_holiday_dates(tmp_path / "n.parquet") is None
