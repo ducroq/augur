@@ -282,10 +282,35 @@ fi
 #
 # The verdict itself stays pre-committed in docs/hypothesis-log.md [2026-09-06]
 # on >=21 rows and reads a MEAN, not a streak. This is visibility, not a gate.
-NAIVE_STATS=$(python3 -c "
-import json
+#
+# A THIRD category, added 2026-09-11: span-degenerate rows. A row is scored on
+# whatever hours the baseline could pair, and that can be as few as one. The
+# 2026-09-09 row paired a SINGLE hour, at horizon 25, and scored +0.762 -- one
+# draw of a noisy variable, standing as a whole day next to 24-hour rows, and
+# at the time it was one of only three scored rows in existence. The
+# pre-commitment already refuses to average across spans ("rows whose span
+# differs materially are reported separately"), but that is a reading rule
+# applied at verdict time; the COUNTING here, and the >=21 trigger that admits
+# the verdict, had no such floor. So a row can be counted in and then read out.
+# Require MIN_NAIVE_HOURS paired hours to count. Such rows are still written
+# and still readable -- excluded from the count, not from the record, and the
+# exclusion is reported so it can never be silent.
+MIN_NAIVE_HOURS="${MIN_NAIVE_HOURS:-12}"
+NAIVE_STATS=$(MIN_NAIVE_HOURS="$MIN_NAIVE_HOURS" python3 -c "
+import json, os
 try:
-    scored, unscored = [], 0
+    min_hours = int(os.environ.get('MIN_NAIVE_HOURS', '12'))
+    scored, unscored, degenerate = [], 0, 0
+
+    def too_thin(r):
+        # One rule, used by both the 7-row window and the >=21 trigger, so the
+        # two can never drift into counting different populations. A row whose
+        # hour count is absent or unreadable is KEPT: the floor may only
+        # exclude what it can actually measure, and treating an unknown as
+        # zero would silently void history.
+        n = r.get('n_naive_hours')
+        return isinstance(n, (int, float)) and not isinstance(n, bool) \
+            and n < min_hours
     with open('$AUGUR_DIR/ml/shadow/eval_log.jsonl') as f:
         rows = []
         for line in f:
@@ -301,19 +326,35 @@ try:
     for r in rows[-10:]:
         v = r.get('lightgbm_skill_vs_naive')
         if v is not None:
+            # Scored, so the instrument worked: never counted as unscored, and
+            # it does not reset that run either. Just too thin to weigh.
+            if too_thin(r):
+                degenerate += 1
+                continue
             scored.append(float(v))
         elif 'n_naive_hours' in r:
             unscored += 1
         else:
             unscored = 0  # a pre-2026-09-06 row resets the run
+    # Cumulative qualifying rows, over the WHOLE log rather than the window:
+    # this is the >=21 trigger for the augur#29 verdict, which until now nobody
+    # counted mechanically. Counted under the same floor as the window above,
+    # so the number that admits the verdict and the number the verdict reads
+    # are the same population.
+    eligible = sum(
+        1 for r in rows
+        if r.get('lightgbm_skill_vs_naive') is not None and not too_thin(r)
+    )
     w = scored[-7:]
-    print(f'{len(w)} {sum(1 for v in w if v < 0)} {unscored}')
+    print(f'{len(w)} {sum(1 for v in w if v < 0)} {unscored} {degenerate} {eligible}')
 except Exception:
-    print('0 0 0')
-" 2>/dev/null || echo "0 0 0")
+    print('0 0 0 0 0')
+" 2>/dev/null || echo "0 0 0 0 0")
 NAIVE_N=$(echo "$NAIVE_STATS" | cut -d' ' -f1)
 NAIVE_LOSSES=$(echo "$NAIVE_STATS" | cut -d' ' -f2)
 NAIVE_UNSCORED=$(echo "$NAIVE_STATS" | cut -d' ' -f3)
+NAIVE_DEGENERATE=$(echo "$NAIVE_STATS" | cut -d' ' -f4)
+NAIVE_ELIGIBLE=$(echo "$NAIVE_STATS" | cut -d' ' -f5)
 NAIVE_MARKER=""
 # Full 7-row window only. A 5-of-5 vs 5-of-7 ramp-up made the bar 100% on day 5
 # and 71% by day 7 -- inconsistent sensitivity for the same word.
@@ -327,6 +368,16 @@ if [ "${NAIVE_UNSCORED:-0}" -ge 3 ]; then
     echo "ALARM: ${NAIVE_UNSCORED} recent eval row(s) carry no seasonal-naive score — the floor is no longer being computed (check the parquet and t0_utc)."
     NAIVE_MARKER="${NAIVE_MARKER} [ALARM: naive unscored ${NAIVE_UNSCORED}]"
 fi
+# Reported, never marked. A thin row is neither a fault nor a result -- it is an
+# absence of evidence, and the only thing that must not happen is for it to be
+# dropped silently and leave the >=21 count unexplainable later.
+if [ "${NAIVE_DEGENERATE:-0}" -gt 0 ]; then
+    echo "NOTE: ${NAIVE_DEGENERATE} recent eval row(s) scored on <${MIN_NAIVE_HOURS} paired hours — excluded from the floor count (see augur#29)."
+fi
+# The augur#29 verdict trigger, made mechanical. /curate reads this line rather
+# than re-counting the log by eye, where a 1-hour row is indistinguishable from
+# a 24-hour one.
+echo "Seasonal-naive verdict trigger: ${NAIVE_ELIGIBLE:-0}/21 qualifying rows (>=${MIN_NAIVE_HOURS} paired hours)."
 
 # t0-advance guard (2026-08-28). update_shadow.py records how many calendar
 # days t0 moved since the previous run; anything but 1 means the vintage

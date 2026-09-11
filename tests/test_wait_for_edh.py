@@ -216,6 +216,30 @@ class TestContentContract:
         assert "load_forecast short at publish" in h.marker
         assert h.consumed == "2026-08-30T19:02:00+00:00"
 
+    def test_short_secondary_is_a_note_not_an_alarm(self, tmp_path):
+        """Demoted 2026-09-11.
+
+        heartbeat_check.sh reads any `ALARM:` in the commit subject as a SOFT
+        FAILURE and mails "pipeline FAILED". This condition is one the gate is
+        explicitly designed to proceed through, so as an ALARM it mailed a
+        failure for a healthy run: on 2026-09-10 EDH published
+        load_forecast=288/384, the run finished `shadow rc=0/eval rc=0` with
+        t0_held_back_hours=0.0, and the 06:00 heartbeat still reported the
+        production model down. The real fault detector is downstream and
+        measures the feature row rather than a point count --
+        `[ALARM: t0 held back Nh]` from latest_feasible_t0.
+        """
+        h = Hub(tmp_path)
+        history(h)
+        h.seed("2026-08-15T16:20:00+00:00")
+        h.publish("2026-08-30T19:02:00+00:00", SHORT_LOAD)
+        r = h.run()
+        assert "READY" in r.stdout
+        assert "[NOTE: EDH load_forecast short at publish" in h.marker
+        assert "ALARM" not in h.marker, (
+            "a non-blocking condition must not ride in the ALARM path — "
+            f"marker was {h.marker!r}")
+
 
 class TestMonotonic:
     def test_already_consumed_publish_is_not_reused(self, tmp_path):

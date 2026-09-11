@@ -354,3 +354,93 @@ class TestFailedSendAcrossEpisodes:
         env.run()
         assert len(env.sent) == 2, "a delivered alert still suppresses tomorrow"
         assert "suppressed" in env.log
+
+
+class TestNoteMarkersAreNotFailures:
+    """A `[NOTE: ...]` marker records a condition; it must never mail a failure.
+
+    The 2026-09-06 seasonal-naive split established the rule: a RESULT rides as
+    NOTE, a FAULT rides as ALARM, and only the latter reaches this check. On
+    2026-09-10 the EDH gate broke it from the other end by emitting its
+    non-blocking secondary-feed warning as an ALARM, and the 06:00 heartbeat
+    mailed "daily pipeline heartbeat FAILED" for a run that had completed with
+    `shadow rc=0/eval rc=0` and a full 72h forecast pushed to origin/main.
+    Both halves of that are pinned here: the gate now emits NOTE (see
+    test_wait_for_edh.py), and this check ignores NOTE markers.
+    """
+
+    NOTE_ONLY = ("Daily update 2026-09-10 — ARF OK | shadow rc=0/eval rc=0 "
+                 "[NOTE: EDH load_forecast short at publish 288/384]")
+
+    def test_note_only_subject_sends_nothing(self, tmp_path):
+        env = Env(tmp_path)
+        env.commit(self.NOTE_ONLY)
+        r = env.run()
+        assert r.returncode == 0
+        assert env.sent == [], (
+            "a NOTE marker is a recorded condition, not a soft failure")
+        assert not env.state.exists(), "no episode may be opened by a NOTE"
+
+    def test_sub_naive_note_also_sends_nothing(self, tmp_path):
+        """The other NOTE producer, pinned so the rule is not marker-specific."""
+        env = Env(tmp_path)
+        env.commit("Daily update 2026-09-10 — ARF OK | shadow rc=0/eval rc=0 "
+                   "[NOTE: sub-naive 5/7]")
+        env.run()
+        assert env.sent == []
+
+    def test_an_alarm_beside_a_note_still_alerts(self, tmp_path):
+        """Ignoring NOTE must not swallow a real alarm sharing the subject."""
+        env = Env(tmp_path)
+        env.commit("Daily update 2026-09-10 — ARF OK | shadow rc=0/eval rc=0 "
+                   "[NOTE: sub-naive 5/7] [ALARM: t0 jumped 2d]")
+        env.run()
+        assert len(env.sent) == 1
+        assert env.shape() == "soft:t0-jumped"
+
+
+class TestFindingTextMatchesTheFinding:
+    """The soft-failure paragraph asserted a non-zero rc unconditionally.
+
+    Until 2026-09-11 it read "a non-zero step rc means that step produced
+    nothing. `shadow rc=N` specifically means the PRODUCTION LightGBM model did
+    not update and the dashboard forecast is stale" — printed for every alarm,
+    including alarms that ride beside `rc=0`. That is a different failure shape
+    with a different fix, and stating the worse one sends the reader to
+    diagnose a stale forecast that is not stale.
+    """
+
+    STALE_CLAIM = "did not update and the dashboard forecast is stale"
+
+    def _body(self, env):
+        return [l.split("\t", 1)[1]
+                for l in env.record.read_text().splitlines()
+                if l.startswith("BODY")][-1]
+
+    def test_alarm_with_rc_zero_does_not_claim_the_model_is_stale(self, tmp_path):
+        env = Env(tmp_path)
+        env.commit("Daily update 2026-09-08 — ARF OK | shadow rc=0/eval rc=0 "
+                   "[ALARM: t0 jumped 2d]")
+        env.run()
+        body = self._body(env)
+        assert "t0 jumped 2d" in body
+        assert self.STALE_CLAIM not in body, (
+            "every step reported rc=0 — the forecast was produced")
+        assert "GUARD firing on a run that" in body
+
+    def test_rc_marker_keeps_the_production_stale_sentence(self, tmp_path):
+        """The 2026-08-30 shape this paragraph was written for must be unchanged."""
+        env = Env(tmp_path)
+        env.commit("Daily update 2026-08-30 — ARF OK | shadow rc=1/eval rc=skip")
+        env.run()
+        body = self._body(env)
+        assert self.STALE_CLAIM in body
+        assert "rc=1" in body
+
+    def test_arf_fail_is_an_rc_finding(self, tmp_path):
+        env = Env(tmp_path)
+        env.commit("Daily update 2026-09-02 — ARF FAIL rc=2 | shadow rc=0/eval rc=0")
+        env.run()
+        body = self._body(env)
+        assert self.STALE_CLAIM in body
+        assert "ARF FAIL rc=2" in body

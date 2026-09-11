@@ -51,7 +51,9 @@
 # A short SECONDARY feed (load_forecast) does NOT block. 08-26 proves blocking
 # would be wrong: that day's only publish was short, so refusing it would have
 # cost the vintage outright rather than costing two hours of provenance. We
-# proceed and name it, and latest_feasible_t0 handles the rest.
+# proceed and name it, and latest_feasible_t0 handles the rest. Because it does
+# not block, it is emitted as `[NOTE: ...]` and not `[ALARM: ...]` -- see the
+# comment at the emission site.
 #
 # GIVING UP EARLY (2026-09-10). The contract above answers "has a good publish
 # landed?" but cannot distinguish "EDH is running late" from "EDH has FAILED and
@@ -306,8 +308,22 @@ while : ; do
         if printf '%s' "$SECONDARY_PTS" | grep -qE '^[0-9]+$' \
            && printf '%s' "${EXPECTED_SECONDARY:-}" | grep -qE '^[0-9]+$' \
            && [ "$SECONDARY_PTS" -lt "$EXPECTED_SECONDARY" ]; then
-            echo "[wait_for_edh] ALARM: ${SECONDARY_DATASET} short at publish (${SECONDARY_PTS} < ${EXPECTED_SECONDARY}) — t0 will be held back; proceeding anyway."
-            MARKER=" [ALARM: EDH ${SECONDARY_DATASET} short at publish ${SECONDARY_PTS}/${EXPECTED_SECONDARY}]"
+            # NOTE, not ALARM (demoted 2026-09-11). heartbeat_check.sh treats
+            # every `ALARM:` in the commit subject as a SOFT FAILURE and mails
+            # "pipeline FAILED", so this marker mailed a failure for a run that
+            # is explicitly allowed to proceed -- 2026-09-10 published
+            # load_forecast=288/384 and the run finished `shadow rc=0/eval rc=0`
+            # with t0_held_back_hours=0.0. Same split the seasonal-naive floor
+            # got on 2026-09-06: a condition worth recording is not a fault.
+            #
+            # And the gate cannot say t0 WILL be held back -- it sees a point
+            # count, not a feature row. Whether the short feed actually costs
+            # anything is `latest_feasible_t0`'s call, and when it does the
+            # answer arrives as `[ALARM: t0 held back Nh — <feeds> short]` from
+            # a place that measured it. That alarm is the fault detector here;
+            # this line is the early warning beside it.
+            echo "[wait_for_edh] NOTE: ${SECONDARY_DATASET} short at publish (${SECONDARY_PTS} < ${EXPECTED_SECONDARY}) — may cost horizon; the t0 guard decides. Proceeding."
+            MARKER=" [NOTE: EDH ${SECONDARY_DATASET} short at publish ${SECONDARY_PTS}/${EXPECTED_SECONDARY}]"
         fi
         [ -z "$LAST_CONSUMED" ] && echo "[wait_for_edh] NOTE: no prior state — bootstrapping from this publish. Subsequent runs require a strictly newer one."
         echo "[wait_for_edh] READY: ${UPSTREAM_TS}, ${PRIMARY_DATASET}=${PRIMARY_PTS} (>= ${EXPECTED_PTS}), ${SECONDARY_DATASET}=${SECONDARY_PTS:-?}. Proceeding."

@@ -173,6 +173,20 @@ Whichever bucket lands, **run Alternative 3's rank metric before acting** — if
 
 **Update [2026-09-06, same day]:** EXP-035 re-scored every stored arm against this floor with no GPU and no fresh vintages (ADR-007 layer 2). Headline: **the floor separates the model classes cleanly** — Chronos +25.0% and never below naive in any month; every LightGBM variant below naive in August 2026. Secondary, and useful to EXP-018a: `drop_rolling` is the strongest LightGBM arm against the floor (+0.107, double `full`'s +0.051), which points the same way EXP-018a's pre-committed direction does, while `drop_calendar` is the only arm below naive over the whole window (−0.017) — the calendar block is the one feature group clearly carrying its weight. None of this changes what is deployed, and none of it discharges EXP-018a or EXP-021a, both of which remain gated on 14 fresh vintages (6 counted 2026-09-06).
 
+**Amendment [2026-09-11] — the trigger counts rows; the verdict reads spans; a row can be counted in and read out.**
+
+Step 1 says the baseline may only read `24 * ceil(h/24)` hours back, and restricts LGBM to the same hours so a gappy baseline cannot manufacture skill. What it does not say is what happens when the pairing is *thin*. It can be a single hour: the 2026-09-09 row paired **one** hour, at horizon 25, and scored **+0.762** — the most flattering number in the log, from one draw of a variable whose daily MAE ranges over tens of EUR/MWh, and at that moment one of only **three** scored rows in existence. Cause was upstream, not the evaluator: the 09-08 `t0 jumped 2d` and the 09-10 stale-parquet run left almost no source day to pair against.
+
+The reading rule above already handles this at verdict time — rows of materially different span are reported separately, not averaged in, and a 25–25h row is a different span from a 1–24h one. But the **trigger** is a bare count of non-null rows, and a bare count admits rows the reading rule will then discard. The two numbers must describe the same population or the verdict fires on a sample it cannot read.
+
+So, with no change to the thresholds, the buckets, or what counts as evidence:
+
+- **≥21 rows** now means ≥21 rows carrying non-null `lightgbm_skill_vs_naive` **and** `n_naive_hours ≥ 12` (`MIN_NAIVE_HOURS`, `scripts/daily_update.sh`). Half a day, on a metric whose unit of observation was always meant to be a day.
+- Thin rows are still **written and still readable** — excluded from the count, not from the record — and the exclusion is printed (`NOTE: N recent eval row(s) scored on <12 paired hours`) so it can never be silent. The same floor applies to the nightly 7-row sub-naive window.
+- The count is now **mechanical**: every run prints `Seasonal-naive verdict trigger: N/21 qualifying rows`. It was previously counted by eye from a log in which a 1-hour row is indistinguishable from a 24-hour one.
+
+This is a tightening, so it can only delay the verdict, never bring it forward — which is the right direction for a rule changed while the data is arriving. Count at amendment: **2 qualifying rows of 21** (09-06, 09-07; 09-09 excluded), so the ≈2026-09-27 date now assumes an unbroken run of full vintages from here and is optimistic. 12 tests in `tests/test_naive_floor_guard.py`.
+
 **Review by:** 2026-10-20.
 
 ---

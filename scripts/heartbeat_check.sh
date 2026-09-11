@@ -85,7 +85,17 @@ LAST_BODY=$(git log -1 --grep='^Daily update' --format='%s' 2>/dev/null)
 # NB: paste -d takes a LIST of delimiters applied cyclically, so a two-character
 # '; ' alternates ';' and ' ' and merges every second marker onto its neighbour's
 # line -- where marker_kinds' first matching rule swallowed it. Single ';' only.
-ALARM_HIT=$(printf '%s' "$LAST_BODY" | grep -oE 'ALARM: [^]]*|ARF FAIL rc=[0-9]+|rc=[1-9][0-9]*|rc=skip' | paste -sd';' - 2>/dev/null || true)
+# The rc alternation is defined ONCE and reused: RC_HIT is a strict subset of
+# ALARM_HIT, and if the two patterns drift a marker could open an episode as a
+# soft failure while being described as "every step reported rc=0".
+RC_PAT='ARF FAIL rc=[0-9]+|rc=[1-9][0-9]*|rc=skip'
+ALARM_HIT=$(printf '%s' "$LAST_BODY" | grep -oE "ALARM: [^]]*|$RC_PAT" | paste -sd';' - 2>/dev/null || true)
+# Of those, the ones that mean a step PRODUCED NOTHING. An `ALARM:` can ride
+# beside `rc=0` -- a guard firing on a run that completed -- and the two need
+# different sentences, so the rc subset is matched separately. `[NOTE: ...]`
+# markers match neither pattern and are deliberately invisible here: they are
+# conditions worth recording, not faults (sub-naive floor, short EDH secondary).
+RC_HIT=$(printf '%s' "$LAST_BODY" | grep -oE "$RC_PAT" | paste -sd';' - 2>/dev/null || true)
 
 # Canonical marker TYPE, with the varying parts (day counts, dates, hour deltas,
 # feed lists) stripped: `[ALARM: t0 jumped 2d]` and `[ALARM: t0 jumped 3d]` are
@@ -137,12 +147,25 @@ if [ "$UNPUSHED" != "0" ] && [ "$UNPUSHED" != "?" ]; then
 fi
 if [ -n "$ALARM_HIT" ]; then
     add_kind "soft:$(marker_kinds "$ALARM_HIT")"
+    # Two different findings wear the same marker slot, and until 2026-09-11
+    # this paragraph asserted the first one unconditionally. The 09-10 mail
+    # therefore said "the PRODUCTION LightGBM model did not update" about a
+    # commit whose own subject read `shadow rc=0/eval rc=0` -- the run was
+    # healthy and the marker was the non-blocking EDH secondary-short warning.
+    # Say which shape it is, from the subject, instead of guessing the worse one.
+    if [ -n "$RC_HIT" ]; then
+        WHAT="a step reported a non-zero or skipped rc (${RC_HIT}), so that step
+    produced nothing. \`shadow rc=N\` specifically means the PRODUCTION LightGBM
+    model did not update and the dashboard forecast is stale."
+    else
+        WHAT="every step reported rc=0, so this is a GUARD firing on a run that
+    completed: output was produced and something about it is wrong — the marker
+    above says what. Check it before assuming the forecast is stale."
+    fi
     FINDINGS="${FINDINGS}
   * SOFT FAILURE in the newest daily commit: ${ALARM_HIT}
     The run completed and committed, so it is invisible to the staleness and
-    timer checks above — but a non-zero step rc means that step produced
-    nothing. \`shadow rc=N\` specifically means the PRODUCTION LightGBM model
-    did not update and the dashboard forecast is stale."
+    timer checks above — but ${WHAT}"
 fi
 
 NOW=$(date +%s)
