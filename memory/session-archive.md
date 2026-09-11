@@ -5,6 +5,10 @@
      Moved out of memory/MEMORY.md 2026-09-06 — it is history, not current state,
      and the index is read at every session start. Nothing here was edited. -->
 
+## Closed 2026-09-11
+
+- ✅ **augur#31 CLOSED** — EDH gate expectation had decayed median 192→96, so pre-auction publishes were accepted. Fixed two ways in `bad615b`: expectation moved to the **75th percentile** (`expected_points`, 192 against live history at the deployed `SAMPLE_N=10`), and a short primary is now **held up to 4h then accepted with an alarm** rather than refused to the deadline. Six of the last nine shorts were off-schedule catch-ups later superseded by a full publish (2026-09-04 went short×3 then 192), while 2026-09-08's scheduled short never was — neither pure position fits both. **Alternative 3 (assert span) closed as NOT IMPLEMENTABLE**: EDH's quality report carries `data_points` and no time range, payloads are encrypted, and upstream confirms *"span has no accidental detector"*. Deployed and verified live.
+
 ## Closed 2026-09-10
 
 - ✅ **Heartbeat could silence itself after a dropped send** (`7fecd79`) — `LAST_EMAIL` was never cleared on an episode boundary, so a new episode inherited the previous one's send clock and a failed first send read as already delivered. Reproduced, fixed, 5 tests. **Not fixed: `notify_email.py` still makes one SMTP attempt with no retry** — that is what actually lost the 2026-09-10 alert.
