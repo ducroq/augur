@@ -296,21 +296,33 @@ fi
 # and still readable -- excluded from the count, not from the record, and the
 # exclusion is reported so it can never be silent.
 MIN_NAIVE_HOURS="${MIN_NAIVE_HOURS:-12}"
+# Validated HERE, in bash, and not inside the reader's try/except. The reader
+# catches everything and prints zeroes, and its stderr goes to /dev/null, so a
+# typo'd override (`MIN_NAIVE_HOURS=half-day`) parsed in there would zero every
+# counter in the block -- including `naive unscored`, which is a fault detector
+# with nothing to do with the floor. A bad value falls back to the default and
+# says so, rather than silently switching off an alarm.
+case "$MIN_NAIVE_HOURS" in
+    ''|*[!0-9]*)
+        echo "WARNING: MIN_NAIVE_HOURS='${MIN_NAIVE_HOURS}' is not a number — using 12."
+        MIN_NAIVE_HOURS=12 ;;
+esac
 NAIVE_STATS=$(MIN_NAIVE_HOURS="$MIN_NAIVE_HOURS" python3 -c "
 import json, os
-try:
-    min_hours = int(os.environ.get('MIN_NAIVE_HOURS', '12'))
-    scored, unscored, degenerate = [], 0, 0
 
-    def too_thin(r):
-        # One rule, used by both the 7-row window and the >=21 trigger, so the
-        # two can never drift into counting different populations. A row whose
-        # hour count is absent or unreadable is KEPT: the floor may only
-        # exclude what it can actually measure, and treating an unknown as
-        # zero would silently void history.
-        n = r.get('n_naive_hours')
-        return isinstance(n, (int, float)) and not isinstance(n, bool) \
-            and n < min_hours
+min_hours = int(os.environ['MIN_NAIVE_HOURS'])
+
+def too_thin(r):
+    # One rule, used by the window, the >=21 trigger and the exclusion count,
+    # so they can never drift into counting different populations. A row whose
+    # hour count is absent or unreadable is KEPT: the floor may only exclude
+    # what it can actually measure, and treating an unknown as zero would
+    # silently void history.
+    n = r.get('n_naive_hours')
+    return isinstance(n, (int, float)) and not isinstance(n, bool) \
+        and n < min_hours
+
+try:
     with open('$AUGUR_DIR/ml/shadow/eval_log.jsonl') as f:
         rows = []
         for line in f:
@@ -321,32 +333,52 @@ try:
                 rows.append(json.loads(line))
             except Exception:
                 continue
-    # Only rows written since the field existed can be unscored-by-fault; older
-    # rows simply predate it and must not be counted as a broken instrument.
-    for r in rows[-10:]:
+
+    # The WINDOW walks backwards until it has 7 qualifying rows, however far
+    # back that reaches. It is 'the last 7 rows carrying a usable naive score',
+    # exactly as docs/RUNBOOK.md describes it -- after an EDH outage it can
+    # span weeks. It must NOT be a fixed slice of recent rows: unscored and
+    # thin rows would eat the slots and the window could never fill, so the
+    # sub-naive NOTE would go quiet precisely during the vintage damage that
+    # produces those rows. (Pre-2026-09-11 this was rows[-10:], which was
+    # already a cap the runbook did not describe; the floor made it bite.)
+    scored = []
+    for r in reversed(rows):
         v = r.get('lightgbm_skill_vs_naive')
-        if v is not None:
-            # Scored, so the instrument worked: never counted as unscored, and
-            # it does not reset that run either. Just too thin to weigh.
-            if too_thin(r):
-                degenerate += 1
-                continue
+        if v is not None and not too_thin(r):
             scored.append(float(v))
-        elif 'n_naive_hours' in r:
+            if len(scored) == 7:
+                break
+    scored.reverse()
+
+    # The FAULT detector stays recency-bound: 'rows are landing NOW carrying no
+    # score at all'. Widening it would make it count history and alarm on an
+    # outage already recovered from.
+    unscored = 0
+    for r in rows[-10:]:
+        if r.get('lightgbm_skill_vs_naive') is not None:
+            continue          # scored: instrument worked, and no reset either
+        if 'n_naive_hours' in r:
             unscored += 1
         else:
-            unscored = 0  # a pre-2026-09-06 row resets the run
-    # Cumulative qualifying rows, over the WHOLE log rather than the window:
-    # this is the >=21 trigger for the augur#29 verdict, which until now nobody
-    # counted mechanically. Counted under the same floor as the window above,
-    # so the number that admits the verdict and the number the verdict reads
-    # are the same population.
+            unscored = 0      # a pre-2026-09-06 row resets the run
+
+    # Exclusions, also recency-bound: what was dropped from the window lately.
+    degenerate = sum(
+        1 for r in rows[-10:]
+        if r.get('lightgbm_skill_vs_naive') is not None and too_thin(r)
+    )
+
+    # Cumulative qualifying rows over the WHOLE log: the >=21 trigger for the
+    # augur#29 verdict, which until now nobody counted mechanically. Same floor
+    # as the window, so the number that admits the verdict and the number the
+    # verdict reads are the same population.
     eligible = sum(
         1 for r in rows
         if r.get('lightgbm_skill_vs_naive') is not None and not too_thin(r)
     )
-    w = scored[-7:]
-    print(f'{len(w)} {sum(1 for v in w if v < 0)} {unscored} {degenerate} {eligible}')
+
+    print(f'{len(scored)} {sum(1 for v in scored if v < 0)} {unscored} {degenerate} {eligible}')
 except Exception:
     print('0 0 0 0 0')
 " 2>/dev/null || echo "0 0 0 0 0")
@@ -368,11 +400,17 @@ if [ "${NAIVE_UNSCORED:-0}" -ge 3 ]; then
     echo "ALARM: ${NAIVE_UNSCORED} recent eval row(s) carry no seasonal-naive score — the floor is no longer being computed (check the parquet and t0_utc)."
     NAIVE_MARKER="${NAIVE_MARKER} [ALARM: naive unscored ${NAIVE_UNSCORED}]"
 fi
-# Reported, never marked. A thin row is neither a fault nor a result -- it is an
-# absence of evidence, and the only thing that must not happen is for it to be
-# dropped silently and leave the >=21 count unexplainable later.
+# A thin row is neither a fault nor a result -- it is an absence of evidence.
+# One is noise; a RUN of them is the >=21 verdict trigger quietly ceasing to
+# advance, which would otherwise surface only when someone opened the log by
+# hand. So: always logged, and marked in the commit subject once sustained, at
+# the same >=3-of-10 threshold the unscored alarm uses. NOTE and not ALARM --
+# nothing failed, and heartbeat_check.sh must not mail a failure for it.
 if [ "${NAIVE_DEGENERATE:-0}" -gt 0 ]; then
     echo "NOTE: ${NAIVE_DEGENERATE} recent eval row(s) scored on <${MIN_NAIVE_HOURS} paired hours — excluded from the floor count (see augur#29)."
+fi
+if [ "${NAIVE_DEGENERATE:-0}" -ge 3 ]; then
+    NAIVE_MARKER="${NAIVE_MARKER} [NOTE: naive thin ${NAIVE_DEGENERATE}]"
 fi
 # The augur#29 verdict trigger, made mechanical. /curate reads this line rather
 # than re-counting the log by eye, where a 1-hour row is indistinguishable from

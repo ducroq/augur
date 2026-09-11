@@ -159,8 +159,9 @@ if [ -n "$ALARM_HIT" ]; then
     model did not update and the dashboard forecast is stale."
     else
         WHAT="every step reported rc=0, so this is a GUARD firing on a run that
-    completed: output was produced and something about it is wrong — the marker
-    above says what. Check it before assuming the forecast is stale."
+    COMPLETED: the output was produced, and what is wrong is that output or the
+    data behind it — the marker above says which. \`t0 stale\` and the EDH gate
+    markers DO mean the forecast is anchored on old data; the others do not."
     fi
     FINDINGS="${FINDINGS}
   * SOFT FAILURE in the newest daily commit: ${ALARM_HIT}

@@ -389,6 +389,14 @@ class TestNoteMarkersAreNotFailures:
         env.run()
         assert env.sent == []
 
+    def test_sustained_thin_rows_note_sends_nothing(self, tmp_path):
+        """The marker added so the >=21 trigger cannot stall invisibly."""
+        env = Env(tmp_path)
+        env.commit("Daily update 2026-09-12 — ARF OK | shadow rc=0/eval rc=0 "
+                   "[NOTE: naive thin 4]")
+        env.run()
+        assert env.sent == []
+
     def test_an_alarm_beside_a_note_still_alerts(self, tmp_path):
         """Ignoring NOTE must not swallow a real alarm sharing the subject."""
         env = Env(tmp_path)
@@ -427,6 +435,23 @@ class TestFindingTextMatchesTheFinding:
         assert self.STALE_CLAIM not in body, (
             "every step reported rc=0 — the forecast was produced")
         assert "GUARD firing on a run that" in body
+
+    def test_rc_zero_text_does_not_deny_staleness_for_stale_markers(
+            self, tmp_path):
+        """Replacing one over-broad claim with its opposite is not a fix.
+
+        `[ALARM: t0 stale <date>]` rides beside rc=0 and means the run was
+        anchored on yesterday's parquet — staleness IS the finding there, so
+        telling the operator not to assume it is as wrong as the sentence this
+        branch replaced.
+        """
+        env = Env(tmp_path)
+        env.commit("Daily update 2026-09-10 — ARF OK | shadow rc=0/eval rc=0 "
+                   "[ALARM: t0 stale 2026-09-09]")
+        env.run()
+        body = self._body(env)
+        assert "before assuming the forecast is stale" not in body
+        assert "DO mean the forecast is anchored on old data" in body
 
     def test_rc_marker_keeps_the_production_stale_sentence(self, tmp_path):
         """The 2026-08-30 shape this paragraph was written for must be unchanged."""
