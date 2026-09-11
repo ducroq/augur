@@ -353,3 +353,51 @@ Candidates scored against each arm: LightGBM `full`, LightGBM `drop_rolling` (EX
 **Cost.** Minutes of CPU on the existing window. No GPU, no fresh vintages, no production path touched.
 
 **Not in scope.** The rank-based metric (does it pick the cheap hours?) named as Alternative 3 of the 2026-09-06 entry is a different question — a different *metric*, where this is a stronger *baseline* under the existing metric. Both are cheap and they are independent; running them together would confound which one moved the verdict.
+
+---
+
+## EXP-037 — The verdict is a lens artefact: the model ranks the cheap hours well even where it misses the level
+
+**Priority: high, and cheap.** Discharges **Alternative 3** of the `docs/hypothesis-log.md` [2026-09-06] entry, which that entry names as "the cheapest thing on this list" and instructs be run *before acting* on whichever verdict bucket lands. Independent of EXP-036 by construction: that one is a stronger **baseline** under the existing metric, this one is a different **metric** under the existing baseline. Running them together would confound which of the two moved the verdict, so they stay separate and the order between them does not matter.
+
+**Question.** augur#29 measures MAE. Augur does not exist to state prices — it exists so a heat pump, an EV or an industrial thermal load runs during the cheap hours. That is a *ranking* problem within a day, and it is invariant to exactly the error the incumbent is known to make. A forecast biased 20 EUR/MWh low for a whole day has a terrible MAE and a perfect ranking. So: does the model pick the cheap hours better than the carry, even where its MAE is worse?
+
+**Position (provisional).** LightGBM `full` has lower cost regret than the single-day carry in **all three** horizon groups, and the margin is widest at 49–72h. Its advantage on rank is **larger than its +5.1% MAE advantage**, because rank discards the level error that dominates its MAE — but the advantage is **economically small**, under 2 EUR/MWh against a ~100 EUR/MWh mean. Chronos-bolt-base beats both.
+
+**Mechanism.** Two of the incumbent's documented weaknesses are level errors, not shape errors: the trailing-56-day window under-reaches an upward level shift (the August 2026 regime, `augur#19`), and the band deficit has moved to the upper side. Ranking within a 24h block is invariant to any per-block constant, so both vanish under this lens. Meanwhile EXP-035's oddest secondary result points the same way: `drop_calendar` was the **only** LightGBM arm below the floor overall, i.e. the calendar block — hour-of-day and weekday, which is precisely the diurnal *shape* — is the one feature group clearly carrying its weight. A model whose only load-bearing features encode shape should rank better than it levels.
+
+**Alternatives (falsification signals).**
+
+1. **The model learned the average shape; the carry brings yesterday's actual one.** The day's cheap hours move with wind and solar, and four independent results (EXP-019/020/024/029) say this model cannot use exogenous data. Then the carry — which embeds yesterday's realised weather for free — ranks better at short horizons where yesterday still resembles today. **Signal:** the carry wins at 1–24h while the model wins at 49–72h. That would be the most informative outcome on this list: it says the ranking problem is a *weather* problem and points straight at EXP-028's covariate-capable arm.
+2. **Rank just tracks MAE and there is no separate story.** **Signal:** per-month rank skill correlates with per-month MAE skill above ρ=0.8, and August is negative on both. Then augur#29 stands unqualified, this lens adds nothing, and the question is closed rather than left open as a standing "but maybe".
+3. **It wins and nobody cares.** **Signal:** the regret advantage is real and statistically clean but below the materiality bar in G2. Then the honest statement is that neither lens justifies the incumbent, which is a *stronger* conclusion than augur#29 currently makes, not a weaker one.
+4. **The foundation model wins on rank too, by more.** **Signal:** Chronos-bolt-base's regret advantage over the carry exceeds LightGBM's by ≥2×. Then the model-class case rests on two independent metrics rather than one, and EXP-021a inherits first claim on rank grounds as well as level grounds.
+
+**Method (pre-committed 2026-09-11, before any rank or regret number has been computed).** Pure re-scoring of stored artifacts — no refit, no GPU, no fresh vintages, no production path touched. Same **260 paired vintages** (2025-12-05..2026-08-21), same context tape, same arms as EXP-035, so the two are directly comparable line for line.
+
+*Decision windows.* Each vintage is cut into three 24-slot blocks by horizon: 1–24, 25–48, 49–72. A block is one load-shifting decision. Blocks are never pooled across horizon groups before scoring, because the carry's quality is strongly horizon-dependent and pooling would average three different problems.
+
+*The decision rule.* Within a block, each forecaster ranks the 24 hours by its own point forecast (`p50`) and selects the cheapest **k**, for k ∈ {3, 6} — an EV top-up and an overnight heat-pump run. Ties are broken by earlier timestamp, identically for every arm.
+
+*Primary metric — cost regret, in EUR/MWh.* The mean **realised** price over the k hours the forecaster chose, minus the mean realised price over the k truly cheapest hours in that block. Zero is perfect foresight; it can never be negative; it is denominated in the unit the user actually pays. This is the metric, not an accuracy proxy for it.
+
+*Secondary metrics.* Hit rate `|chosen ∩ true cheapest k| / k`, and Spearman ρ between predicted and realised prices over the block's 24 slots. Reported because they are interpretable, but they do not decide anything: missing the third-cheapest hour by 0.1 EUR/MWh is a hit-rate miss and not a loss.
+
+*Baseline.* The same single-day carry EXP-035 uses (`24*ceil(h/24)` back, read from the context tape), so its information set stays a subset of the candidate's by construction. Within a 1–24h block this makes the baseline exactly "run the load when it was cheapest yesterday", which is the real-world heuristic worth beating.
+
+*Significance.* Paired Diebold-Mariano on per-(vintage, block) regret differences, **HAC bandwidth 3**, not the 71 used elsewhere: the observation here is a block, not an hour, and blocks from anchors more than three days apart share no realised hours. Stated here so it cannot be chosen after seeing the series.
+
+*Hygiene.* A block is scored only where all arms and the baseline are defined on all 24 slots; partial blocks are dropped, never padded. Arms are scored on the identical surviving block set.
+
+**Gates.**
+
+- **G1 — the Alternative-3 signal.** LightGBM `full` has strictly lower mean regret than the carry at k=6 in **all three** horizon groups, with pooled DM p<0.10. Fires → augur#29's verdict is **narrow, not wrong**: the model's value is in ranking, the Model tab and the dashboard should be scored on regret rather than MAE, and that becomes a product change with its own entry.
+- **G2 — materiality.** The pooled k=6 regret advantage must exceed **1.0 EUR/MWh** to be called material (≈1% of a ~100 EUR/MWh mean). A win below that bar is reported as real-but-immaterial and explicitly does **not** discharge G1's product change.
+- **G3 — refutation.** LightGBM's regret is ≥ the carry's in **≥2 of 3** horizon groups → Alternative 3 is refuted, augur#29 stands unqualified on both lenses, and this question is closed rather than left standing as a doubt.
+- **G4.** Whatever LightGBM does, Chronos-bolt-base is scored on the identical blocks and reported beside it.
+
+**Pre-commitment boundary — this must not retroactively move augur#29.** These 260 vintages include the 24 days the hypothesis was formed on. Like EXP-035, this is therefore **corroboration on stored data, not the pre-committed live test**: it cannot discharge the ≥21-fresh-vintage verdict, and it cannot be used to re-read that verdict against a metric chosen later. If G1 fires, the live confirmation on a rank metric needs its own fresh-vintage entry.
+
+**What it would change.** If the position holds and G2 clears, the Model tab is measuring the wrong thing and `evaluate_shadow.py` should log regret alongside MAE. If Alternative 1 fires, the ranking problem is a weather problem and EXP-028 is revived on rank grounds. If G3 fires, augur#29 gets simpler and harder: the incumbent is not rescued by any lens.
+
+**Cost.** Minutes of CPU on the existing window. No GPU, no fresh vintages, no production path touched.
