@@ -40,6 +40,49 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 > entry's 14-run window is also unaffected in kind: its criteria are about `calibration_history` gaps having
 > a matching alarm, and the five outage days are legitimate data for exactly that.
 
+### [2026-09-14] The forecast anchor moved 24h by accident, and the vintage series is not comparable across the break
+
+**Position (provisional):** production has been anchoring on `t0 = <run date> 21:00Z` on any night the gate was consuming the *previous day's* EDH publish — five of the nine nights from 2026-09-05 to 2026-09-13, in two episodes. On 2026-09-13 that lag broke and the anchor moved to `t0 = <run date +1> 21:00Z`. Both regimes are defensible; nobody chose either. **The provisional position is that the new regime (lag-0) is the correct one and should be ratified**, because it is the one where `h=1..24` tests the model instead of restating a cleared auction — but it must be ratified *explicitly*, and the vintages either side of 2026-09-13 must be treated as two series.
+
+**Mechanism (measured on sadalsuud 2026-09-14, from `logs/daily_update.log` and `logs/.edh_gate_state`):** the gate's only freshness test is *strictly newer than the last consumed report* (`wait_for_edh.sh`). It has no test for the report being from today. The unit fires 16:30 UTC; EDH publishes ~18:00–18:56 UTC. So whenever a **multi-publish EDH day** leaves one publish unconsumed, every later run finds it waiting at 16:30 and releases on it within seconds — and stays one behind indefinitely, invisibly, because `t0` still advances exactly +1 calendar day per run and every guard reads green.
+
+```
+run          consumed publish     lag
+09-04        2026-09-04T10:16     0    <- 4 publishes that day; 18:46 left unconsumed  [SEEDED]
+09-05        2026-09-04T18:46     1d
+09-06        2026-09-05T17:53     1d
+09-07        2026-09-06T17:57     1d
+09-08        2026-09-08T19:15     0    <- EDH missed 09-07, so the gate had to wait     [CLEARED, free]
+09-10 05:01  (deadline timeout)   -
+09-10 18:31  2026-09-10T07:41     0    <- 2 publishes that day; 18:53 left unconsumed   [RE-SEEDED]
+09-11        2026-09-10T18:53     1d
+09-12        2026-09-11T18:56     1d
+09-13        2026-09-13T18:29     0    <- 4h short-hold ran past 18:29; 09-12 skipped   [CLEARED, costly]
+```
+
+**Seeded twice in seven days**, by two unrelated multi-publish days — this is not a rare configuration. It never clears on its own: both clearings were accidents of something *delaying* a run past ~18:30 UTC (09-08 an EDH outage, 09-13 the augur#31 short-hold). And clearing it is not free. On 09-13 the same-day publish superseded the still-unconsumed 09-12 one, so `t0` went `2026-09-12 → 2026-09-14` and **`t0=2026-09-13` never got a prediction set and is permanently unevaluable**. EDH published normally on both days — that skip was ours, not upstream's.
+
+**Consequence, which is the part that needs a decision:**
+
+```
+09-12 run:  forecast 2026-09-12T22:00 -> 2026-09-15T21:00   (t0 = D   21:00Z)
+09-13 run:  forecast 2026-09-14T22:00 -> 2026-09-17T21:00   (t0 = D+1 21:00Z)
+```
+
+Under the lag, the first ~24 forecast hours covered an auction that had already cleared — that *is* the "zero-latency self-test" recorded against augur#30, and EXP-037 found that block flatters the scores. Under lag-0 the block is gone and `h=1..24` is a genuine test. So the accident moved production toward the more honest measurement, and simultaneously put a discontinuity in the middle of the `t0 >= 2026-08-25` window that EXP-018a / EXP-021a / EXP-028a are gated on.
+
+**Alternatives (falsification signals):**
+
+1. **Ratify lag-0.** The anchor should be as fresh as the data allows; the self-test was an artefact of a lag nobody knew about. **Signal:** augur#30 and ADR-006 nowhere state a *requirement* that `h=1..24` cover a cleared auction — only that it does. Then the fix is to make the gate *hold* the new regime (require a publish newer than the run's start, falling through to the existing 03:00 deadline) and to mark 2026-09-13 as a series break wherever a trailing window reads `eval_log.jsonl`.
+2. **Restore the D-anchor deliberately.** The cleared-auction block is load-bearing — it is the only continuous self-test the pipeline has, and eight months of vintages are anchored that way. **Signal:** any trailing-window metric or experiment harness breaks or shifts when horizons are re-based; or the dashboard depends on the forecast covering the remainder of the current day. Then the honest implementation is an explicit one-publish offset, not a gate that lags by accident.
+3. **The regimes are equivalent for everything that reads them.** **Signal:** `evaluate_shadow.py` matches predictions to realised prices by timestamp, so per-horizon scores are computed the same way in both; if the horizon *composition* of the last 20 eval rows is unchanged across 2026-09-13, the break is cosmetic. Then only the augur#30 note needs correcting and nothing else moves.
+
+**Method / revisit trigger:** decide between 1 and 2 **before** changing the gate — they imply opposite changes to it, and the current state holds regime 1 only by accident (it will stay lag-0 until the next EDH multi-publish day re-seeds the backlog, which will silently return it to regime 2). Check Alternative 3 first: it is decidable from `eval_log.jsonl` alone, costs minutes, and may close this outright. Do **not** add a clock floor to the gate — that was removed 2026-09-01 for good reason (GitHub defers EDH's cron 00:18–21:14 UTC); the run-start comparison achieves the same thing without a wall-clock rule, and must stay fail-open at the deadline.
+
+**Review by:** 2026-09-21, or immediately on EDH's next multi-publish day — that re-seeds the lag (it has done so twice already, 09-04 and 09-10), and the first symptom will be `t0` quietly reverting to `<run date> 21:00Z` with no alarm at all.
+
+---
+
 ### [2026-09-10] The EDH gate's derived size expectation has decayed to the catch-up size, and the protection it earned on 09-04 is currently absent
 
 **Position (provisional):** `wait_for_edh.sh`'s `median_points` estimator is the right idea with the wrong statistic. Deriving the expectation from history is what lets an upstream resolution change be absorbed in days instead of reading as short forever — but the *median over the last 10 publishes* tracks a run of degraded publishes just as willingly as a genuine change, and it has. The expectation is now **96, not 192**.

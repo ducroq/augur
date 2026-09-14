@@ -302,7 +302,7 @@ if ! printf '%s' "${EXPECTED_PTS:-}" | grep -qE '^[0-9]+$'; then
 fi
 
 echo "[wait_for_edh] Started $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-echo "[wait_for_edh] Ready when report is newer than '${LAST_CONSUMED:-<none, bootstrapping>}' and ${PRIMARY_DATASET} >= ${EXPECTED_PTS} points (median of last ${SAMPLE_N})"
+echo "[wait_for_edh] Ready when report is newer than '${LAST_CONSUMED:-<none, bootstrapping>}' and ${PRIMARY_DATASET} >= ${EXPECTED_PTS} points (75th pct of last ${SAMPLE_N})"
 echo "[wait_for_edh] Deadline $(date -u -d "@$DEADLINE_TS" '+%Y-%m-%d %H:%M UTC'); proceeding anyway at that point"
 
 # Sets SECONDARY_MARKER (possibly empty) and logs. A function rather than an

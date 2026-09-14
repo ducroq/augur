@@ -75,7 +75,7 @@ Last good publish before the gap: **2026-09-08T19:15:52Z** (`da5eab2`). Recovere
 
 **Do not misread the cadence on 2026-09-10.** There are **two** publishes that day: the 07:41Z dispatched recovery, and the ordinary scheduled run landing ~17:50–19:30Z. Two publishes in one day is unusual for EDH and is not a duplicate; the gate's strictly-newer contract simply advances twice, on consecutive days.
 
-⚠️ **The 07:41Z recovery carries `entsoe=96` — same-day only, pre-auction.** This is the same shape as the publish the gate correctly refused on 2026-09-04, but our `median_points` expectation has since decayed to 96 and will now **accept** it. See `docs/hypothesis-log.md` [2026-09-10]; this is a live gap, not a historical note.
+⚠️ **The 07:41Z recovery carries `entsoe=96` — same-day only, pre-auction.** This is the same shape as the publish the gate correctly refused on 2026-09-04, and at the time our `median_points` expectation had decayed to 96 and **accepted** it. **CLOSED 2026-09-11 (augur#31):** the expectation is now the 75th percentile (192 against live history) and a short primary is held 4h before being accepted with an alarm. See `docs/hypothesis-log.md` [2026-09-10]. ⚠️ **But note what that day also did**: leaving a publish unconsumed is how the gate enters a permanent one-day lag — 2026-09-04 seeded exactly that and it ran undetected until 2026-09-13. A multi-publish EDH day is not only a size problem; see `docs/hypothesis-log.md` [2026-09-14].
 
 ## Augur now reads the `publish-failure` label — and this does NOT contradict "diagnosis, not detection"
 
