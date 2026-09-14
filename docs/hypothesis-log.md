@@ -36,146 +36,14 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 > `` .venv/bin/python -c "import pandas as pd; d=pd.read_parquet('ml/data/training_history.parquet'); print((d.index>='2026-08-25').sum(),'hours;',d.index.max())" ``
 >
 > The exception is the **feed-divergence** entry, whose trigger was *re-specified* rather than merely delayed
-> (it now needs two normal-hour EDH publishes, not 7 calendar days) — see its own note. The **t0-guard**
-> entry's 14-run window is also unaffected in kind: its criteria are about `calibration_history` gaps having
-> a matching alarm, and the five outage days are legitimate data for exactly that.
-
-### [2026-09-14] The forecast anchor moved 24h by accident, because the EDH gate never tested freshness (augur#34)
-
-**Position (provisional):** production has been anchoring on `t0 = <run date> 21:00Z` on any night the gate was consuming the *previous day's* EDH publish — five of the nine nights from 2026-09-05 to 2026-09-13, in two episodes. On 2026-09-13 that lag broke and the anchor moved to `t0 = <run date +1> 21:00Z`. Both regimes are defensible; nobody chose either. **The provisional position is that the new regime (lag-0) is the correct one and should be ratified**, because it is the one where `h=1..24` tests the model instead of restating a cleared auction — but it must be ratified *explicitly*, ~~and the vintages either side of 2026-09-13 must be treated as two series~~ — **that second clause is withdrawn, see Alternative 3 below**; the break costs one vintage, not a regime change.
-
-**Mechanism (measured on sadalsuud 2026-09-14, from `logs/daily_update.log` and `logs/.edh_gate_state`):** the gate's only freshness test is *strictly newer than the last consumed report* (`wait_for_edh.sh`). It has no test for the report being from today. The unit fires 16:30 UTC; EDH publishes ~18:00–18:56 UTC. So whenever a **multi-publish EDH day** leaves one publish unconsumed, every later run finds it waiting at 16:30 and releases on it within seconds — and stays one behind indefinitely, invisibly, because `t0` still advances exactly +1 calendar day per run and every guard reads green.
-
-```
-run          consumed publish     lag
-09-04        2026-09-04T10:16     0    <- 4 publishes that day; 18:46 left unconsumed  [SEEDED]
-09-05        2026-09-04T18:46     1d
-09-06        2026-09-05T17:53     1d
-09-07        2026-09-06T17:57     1d
-09-08        2026-09-08T19:15     0    <- EDH missed 09-07, so the gate had to wait     [CLEARED, free]
-09-10 05:01  (deadline timeout)   -
-09-10 18:31  2026-09-10T07:41     0    <- 2 publishes that day; 18:53 left unconsumed   [RE-SEEDED]
-09-11        2026-09-10T18:53     1d
-09-12        2026-09-11T18:56     1d
-09-13        2026-09-13T18:29     0    <- 4h short-hold ran past 18:29; 09-12 skipped   [CLEARED, costly]
-```
-
-**Seeded twice in seven days**, by two unrelated multi-publish days — this is not a rare configuration. It never clears on its own: both clearings were accidents of something *delaying* a run past ~18:30 UTC (09-08 an EDH outage, 09-13 the augur#31 short-hold). And clearing it is not free. On 09-13 the same-day publish superseded the still-unconsumed 09-12 one, so `t0` went `2026-09-12 → 2026-09-14` and **`t0=2026-09-13` never got a prediction set and is permanently unevaluable**. EDH published normally on both days — that skip was ours, not upstream's.
-
-**Consequence, which is the part that needs a decision:**
-
-```
-09-12 run:  forecast 2026-09-12T22:00 -> 2026-09-15T21:00   (t0 = D   21:00Z)
-09-13 run:  forecast 2026-09-14T22:00 -> 2026-09-17T21:00   (t0 = D+1 21:00Z)
-```
-
-Under the lag, the first ~24 forecast hours covered an auction that had already cleared — that *is* the "zero-latency self-test" recorded against augur#30, and EXP-037 found that block flatters the scores. Under lag-0 the block is gone and `h=1..24` is a genuine test. So the accident moved production toward the more honest measurement. (An earlier draft of this entry also claimed it put a *discontinuity* in the `t0 >= 2026-08-25` window that EXP-018a / EXP-021a / EXP-028a are gated on. It does not — see Alternative 3.)
-
-**Alternatives (falsification signals):**
-
-1. **Ratify lag-0.** The anchor should be as fresh as the data allows; the self-test was an artefact of a lag nobody knew about. **Signal:** augur#30 and ADR-006 nowhere state a *requirement* that `h=1..24` cover a cleared auction — only that it does. Then the fix is to make the gate *hold* the new regime (require a publish newer than the run's start, falling through to the existing 03:00 deadline) and to mark 2026-09-13 as a series break wherever a trailing window reads `eval_log.jsonl`.
-2. **Restore the D-anchor deliberately.** The cleared-auction block is load-bearing — it is the only continuous self-test the pipeline has, and eight months of vintages are anchored that way. **Signal:** any trailing-window metric or experiment harness breaks or shifts when horizons are re-based; or the dashboard depends on the forecast covering the remainder of the current day. Then the honest implementation is an explicit one-publish offset, not a gate that lags by accident.
-3. **The regimes are equivalent for everything that reads them.** **Signal:** `evaluate_shadow.py` matches predictions to realised prices by timestamp, so per-horizon scores are computed the same way in both; if the horizon *composition* of the last 20 eval rows is unchanged across 2026-09-13, the break is cosmetic. Then only the augur#30 note needs correcting and nothing else moves.
-
-   **→ ANSWERED 2026-09-14, structurally, and it is substantially YES.** Not by the empirical check above — post-break rows do not exist yet — but by a stronger route that makes that check a confirmation rather than the decision. `evaluate_shadow.py:t0_for_eval_day` records that **`eval_day` IS `t0.strftime("%Y-%m-%d")`**, so a row is tagged by its vintage's anchor, not by a delivery date. The lag never changed the *set* of `t0` values — under both regimes the anchors are the same daily `…21:00Z` sequence — it changed only how promptly each one is produced (24h earlier under lag-0). `calibration_history` confirms the sequence is continuous with holes and no re-basing: `09-07, [09-08 EDH], 09-09, 09-10, 09-11, 09-12, [09-13 ours], 09-14 pending`. And for a given `t0` the forecast is constructed identically either way — `select_training_window` and the feature row both end at `t0`, not at the wall clock.
-
-   **So the "two series" framing written into this entry, `memory/MEMORY.md` and commit `66c1347` was wrong**, and EXP-018a / EXP-021a / EXP-028a do **not** need a regime break marked at 2026-09-13. What they need marking is one more vintage hole, of the kind they already handle.
-
-   **Two residuals survive, and they are the whole remaining decision.** (a) `apply_cqr`'s window is anchored on `t0` but populated from rows *realised by run time*, and a lag-0 run happens 24h earlier — so bands for a given `t0` may be widened from a less-complete window than the same `t0` would have had under the lag. **Band width only**; point forecasts are untouched. Unquantified: worth one pass over `last_cqr_n_calib_days` once a few lag-0 runs have landed. (b) augur#30's cleared-auction self-test is genuinely gone *at publish time* — under the lag `h=1..24` covered a day whose auction had cleared hours earlier; under lag-0 it covers a day whose auction clears ~16h **after** the forecast is published. That is the substantive change, and it is the one worth ratifying.
-
-**Method / revisit trigger:** decide between 1 and 2 **before** changing the gate — they imply opposite changes to it, and the current state holds regime 1 only by accident (it will stay lag-0 until the next EDH multi-publish day re-seeds the backlog, which will silently return it to regime 2). ~~Check Alternative 3 first: it is decidable from `eval_log.jsonl` alone, costs minutes, and may close this outright.~~ **Done — see above; it removes the eval-comparability argument from the decision entirely and leaves augur#30's self-test as the only substantive stake.** Do **not** add a clock floor to the gate — that was removed 2026-09-01 for good reason (GitHub defers EDH's cron 00:18–21:14 UTC); the run-start comparison achieves the same thing without a wall-clock rule, and must stay fail-open at the deadline.
-
-**RESOLVED 2026-09-14 — Alternative 1 chosen: lag-0 is ratified, and the gate now holds it.**
-
-*Why Alternative 1 and not 2.* The deciding fact was not in the model at all — `static/js/modules/api-client.js:227` already fetches **today + tomorrow + day-after** from Energy Zero every 10 minutes. So the cleared day the forecast no longer covers is on the dashboard as published prices either way, and the D-anchor was not buying coverage; it was spending a third of the forecast's horizon budget restating an auction the page already had, which is the defect augur#30 was filed for (`data-processor.js:256` drew the forecast line over them). Lag-0 gives three unknown days instead of two, makes `h=1..24` a genuine test, and removes the overlap. Against that, the self-test it costs was never designed, nothing reads `h=1..24` as one, and EXP-037 had already shown that block flatters. The run finishing ~2–4h later is a real cost and the right side of the trade: it was finishing earlier on day-old data.
-
-*How the gate holds it.* Clause (c), shipped the same day: the report must have arrived while this run was **waiting**, not already be sitting there when it started (`STALE_GRACE_HOURS`, default 2h — the two populations are ~22h apart, so the number is not delicate). It is relative to the run, so it is **not** the clock floor removed on 2026-09-01 and cron deferral cannot interact with it. And it **holds rather than refuses**, on augur#31's pattern one level over: a stale candidate starts a bounded clock and is accepted with `[ALARM: EDH publish Nh stale accepted after Nh]` if nothing fresher arrives, so the night EDH publishes nothing still gets a forecast. Bootstrap is exempt — with no prior state there is nothing to be behind of. Traced against all three real shapes (normal night, the 09-10 double publish that re-seeded the lag, EDH dead); 7 tests in `tests/test_wait_for_edh.py::TestFreshnessContract`, including `test_the_lag_cannot_re_seed` driven by a mid-wait publish, and an explicit **ablation** test pinning that the suite goes red when clause (c) is removed — verified, 3 of 7 fail without it.
-
-*Left open deliberately.* The augur#19 CQR residual (bands for a given `t0` may now be widened from a less-complete calibration window) is unmeasured; check `last_cqr_n_calib_days` across the break before reading any coverage comparison that spans it. And augur#25 remains the structural fix — an event-driven trigger removes the window in which this can happen at all, rather than bounding it.
-
-**Review by:** 2026-09-21 — confirm from `logs/daily_update.log` that the gate held and took the same-day publish, and that `check_gate_lag.sh` still says CURRENT. Or immediately on EDH's next multi-publish day — that re-seeds the lag (it has done so twice already, 09-04 and 09-10), and the first symptom will be `t0` quietly reverting to `<run date> 21:00Z` with no alarm at all.
-
----
-
-### [2026-09-10] The EDH gate's derived size expectation has decayed to the catch-up size, and the protection it earned on 09-04 is currently absent
-
-**Position (provisional):** `wait_for_edh.sh`'s `median_points` estimator is the right idea with the wrong statistic. Deriving the expectation from history is what lets an upstream resolution change be absorbed in days instead of reading as short forever — but the *median over the last 10 publishes* tracks a run of degraded publishes just as willingly as a genuine change, and it has. The expectation is now **96, not 192**.
-
-**Evidence (measured on sadalsuud 2026-09-10, before this entry was written):** the gate's own startup line reads `entsoe >= 96 points (median of last 10)`. The sample behind it:
-
-```
-2026-09-08  96     2026-09-04  96
-2026-09-06  192    2026-09-04  96
-2026-09-05  192    2026-08-30  192
-2026-09-04  192    2026-08-29  96
-2026-09-04  96     2026-08-28  96
-```
-
-Six of ten are half-size, and **2026-09-04 contributed four publishes on its own, three of them short** — sampling by publish rather than by day let one bad day set the expectation.
-
-**Why this matters concretely, and is not theoretical:** CLAUDE.md records that this gate *earned its place* on 2026-09-04 by refusing a 06:53 UTC recovery publish whose `entsoe` carried same-day prices only (96 vs 192), the day-ahead auction not having cleared. At an expectation of 96 that publish is now accepted as full, `t0` anchors on data with no day-ahead prices in it, and the only remaining detector is the downstream `t0` alarm — which fires *after* ingestion.
-
-**Alternatives (falsification signals):**
-
-1. **96 is the new normal and the estimator is working exactly as designed.** ENTSO-E may have changed resolution, in which case refusing 96-point publishes would be the bug. **Signal:** the 192-point publishes stop appearing entirely for ≥10 consecutive publishes. Then nothing is wrong and this entry closes — but note the sample above is *mixed*, which is the signature of intermittent degradation rather than a resolution change.
-2. **Per-day deduplication is sufficient.** **Signal:** taking one publish per day (the last) lifts the median back to 192 on the same history. Then the fix is a one-line change to the sampler and no estimator change is needed. ~~This is the cheapest arm and should be measured first.~~
-
-   **→ MEASURED AND REFUTED, same day.** Per-day dedup (last publish of each day, last 10 days) gives `[96, 96, 192, 192, 192, 192, 96, 96, 96, 192]` — median still **96**. The four-publish 09-04 was a red herring: the genuinely short days (08-28, 08-29, 09-08, 09-10) are separate days and dominate on their own. The 75th percentile over the same window gives **192**. So the sampler is not the problem; the *statistic* is, and choosing it is a real decision rather than a one-line fix.
-3. **The point count is the wrong quantity entirely.** A publish carrying tomorrow's auction is what matters, not how many rows it has. **Signal:** a 96-point publish that *does* contain day-ahead hours exists in the history. Then the gate should assert **span** — which is augur's half of the never-built span check already recorded in the gotcha-log Promoted table and EDH's #51 — and point count was always a proxy.
-
-**Method / revisit trigger:** re-measure `median_points` against the same 10-publish window under three estimators — median as-is, median after per-day dedup, and the 75th percentile — plus the day-ahead-span check of Alternative 3. Read-only against committed EDH history; costs minutes and touches no production path. **Do not change the estimator before measuring**, because tightening it wrongly makes the gate refuse good publishes and the gate's one inviolable property is that it never fails closed.
-
-**RESOLVED 2026-09-11 — shipped, and it is neither of the two pure positions.**
-
-*Alternative 3 is answered, and the answer is no.* The span check cannot be built against what EDH publishes. `data_quality_report.json` carries `data_points` and nothing else — no start, no end, no range — and the payload files are fully encrypted base64 with no plaintext metadata. EDH's own commit (`d3e540f`) states it from their side: *"identically by construction, so span has no accidental detector."* So point count is not "always a proxy" for something we could be measuring instead; it is the **only** quantity either repo can currently see. Asserting span would mean decrypting inside the gate — possible, Augur has the keys, but it couples the readiness gate to the crypto path and buys a distinction that only matters for a case the bounded hold below already handles. Recorded as **not implementable at this cost**, not as wrong.
-
-*The estimator, measured before changing as this entry required.* At the deployed `SAMPLE_N=10`, against live EDH history: **median 96, 75th percentile 192**. (At `SAMPLE_N=20` the median also returns 192 — so widening the sample would have masked it today, which is exactly why it is the wrong fix: 11 of those 20 are full, one bad week from flipping back.) Shipped the 75th percentile. The expectation should sit where a *healthy* publish sits, and healthy publishes are the majority of a normal week even when they are not the majority of a bad one.
-
-*And the hold rule, which is where the 09-10 correction lands.* That correction concluded the check must **accept and alarm, never hold**, because a scheduled short means upstream had less data when asked and nothing better is coming. That is right about `2026-09-08T19:15`. It is wrong about the commoner case, and the publish record says so:
-
-```
-2026-09-04   06:53 short, 08:13 short, 10:16 short, then 18:46 FULL (192)
-2026-09-08   19:15 short, and nothing better ever came
-```
-
-Six of the nine shorts in the last twenty publishes are off-schedule catch-ups of the first kind. The gate held ~2h from its 16:30 start on 09-04 and **got the good publish** — a vintage that pure accept-and-alarm would have degraded. Equally, holding is not free: on the 09-08 shape it burns to the 03:00 deadline for nothing.
-
-Also worth correcting in the 09-10 reasoning: holding does **not** "convert an upstream gap into a downstream outage". The gate is fail-open at the deadline, so holding costs a *delay* — the run lands at 03:00 instead of 19:15 — not a lost vintage. That makes the cost of being wrong here bounded on both sides, which is what licenses a middle position rather than forcing a choice between two absolutes.
-
-**Shipped:** hold a short primary for up to `SHORT_HOLD_HOURS` (default **4**, `EDH_SHORT_HOLD_HOURS`), then accept it and alarm — `[ALARM: EDH entsoe short N/M accepted after 4h]`. A superseding publish gets its chance; a genuine short-delivery costs 4h instead of ~8. The bound runs from the first short seen **in this run** and is never reset by a later one, or upstream republishing shorts hourly would extend the hold indefinitely. `SHORT_HOLD_HOURS=0` recovers the pure accept-and-alarm position if the balance of cases changes. The secondary check was factored into `check_secondary()` so both accept paths share it rather than drifting. 7 tests in `tests/test_wait_for_edh.py` (`TestExpectationDoesNotDecay`, `TestBoundedHold`), including one pinning that a genuine upstream resolution change is still absorbed — the property the median existed to provide, which must not be lost to fixing its failure mode.
-
-**Coverage restored.** The ⚠️ below — *"neither side would catch a short publish today"* — no longer holds for Augur as of this commit. EDH's own span check is still unarmed (`members_with_expectation: 0`), so their half remains pending.
-
-**CORRECTION 2026-09-10, from the energyDataHub session, and it changes the fix.** My first reading blamed the decay on *recovery dispatches* — pre-auction publishes that are short because the day-ahead auction has not cleared. That is true of 09-10T07:41 and of the three 09-04 dispatches, and upstream has since ruled out pre-midday recovery dispatches on their side. **But it does not explain two of the ten samples.** `2026-09-08T19:15Z` and `2026-08-26T16:44Z` were *scheduled evening* runs, hours after any auction, and both carry today only. Verified independently against the same EDH history rather than taken on trust. Upstream filed it as their #74; unexplained on both sides.
-
-**Our own gate header already contained the counterexample and drew the wrong rule from it.** `scripts/wait_for_edh.sh:20-32` tabulates `2026-08-26 16:44  entsoe=96  short ENTSO-E at a NORMAL hour` — and then concludes, four lines below it, *"Every catch-up is exactly half size, so content separates them without any clock rule."* Half-size does imply pre-auction-or-degraded; it does **not** imply catch-up, which is the direction the design premise needs and the direction the same table refutes. Eight of the last fourteen publishes are half-size and at least two of those are scheduled runs.
-
-**What this rules out.** Any estimator tuned on "short publishes are a recovery artifact" is built on a refuted premise — the short population contains genuine defects, so a statistic that treats shorts as outliers to be shrugged off will keep absorbing real degradation. This is the second alternative in this entry (per-day dedup) failing for a *second, independent* reason: not only do the short days not collapse, some of them are legitimately short scheduled days.
-
-**It strengthens Alternative 3 specifically.** "Does this publish contain tomorrow's day-ahead hours?" is decidable regardless of *why* a publish is short, so it is the only option here that does not depend on classifying the cause. Prefer it over any percentile choice.
-
-**DESIGN ANSWER 2026-09-10, from upstream's collect logs: the span assertion must ACCEPT AND ALARM, never hold.** Root cause of the two scheduled shorts is upstream short-delivery, silent, with nothing failing on EDH's side. Their comparison against a healthy run:
-
-```
-09-06 17:56:24  Parsed 192 data points from ENTSO-E response   <- healthy
-09-08 19:12:53  Parsed  96 data points from ENTSO-E response   <- short
-```
-
-Identical query shape, window and pagination termination; the `NoMatchingDataError: for offset 100` line appears in both and is normal pagination end, not a failure. No HTTP error, retry or 429 on the price path — the 429 burst in that run is Luchtmeetnet interleaved in the same log, a different collector. The request spanned **four days** (`periodStart=202609062200&periodEnd=202609102200`) and came back with one; **09-07, already in the past at that moment, was missing from the response too**, which is why this does not reduce to auction timing in any form.
-
-**Why that settles the hold-vs-accept question.** A short scheduled publish is not upstream publishing early — it is upstream having less data when asked. Waiting buys nothing: EDH's next publish is 24h later regardless, and the missing delivery day may appear in a later vintage or never. **Holding would convert an upstream gap into a downstream outage**, which is precisely the mistake EDH's own quality gate made on 09-09 with `ned_production` (aborting 19 healthy feeds over one empty one). So: accept the vintage, raise the alarm, let `latest_feasible_t0` and the t0 guard mark the result — the fail-open principle this gate already has, applied one level down.
-
-⚠️ **Measured vs unverified, and do not collapse them.** *"We asked for four days and got one"* is **measured**. *"ENTSO-E had nothing to give"* is **not** — EDH's four-day window may itself be the trigger (a boundary the API handles differently), and `backfill_entsoe.py` would settle it by re-querying those dates except it is broken against the v2.2+ envelope (their #57). Build the span check on the measured half only.
-
-⚠️ **THIS CLASS IS CURRENTLY UNMONITORED END TO END — not covered-by-the-other-party.** EDH's span check reports `members_with_expectation: 0` for roughly another week; our expectation has decayed to 96 so we would not refuse a short vintage either. **Neither side would catch a short publish today.** An earlier draft of this entry called Augur "the better detector for this class", which was true of the design and false of the deployment — the honest statement is that there is no detector on either side until augur#31 is fixed or their floor is reached. Do not rely on a refusal arriving, on either side.
-
-**Reciprocal-detector note (their observation, worth acting on).** EDH's own span check (`_span_shortfalls.json`, their #53) is shipped but **not armed** — today's run reports `members_checked: 66, members_with_expectation: 0`, no member having reached its 10-observation floor — and a shape signature cannot see span at all, since 96 and 192 hash identically. So Augur's gate is the better detector for this class **by design** — but see the coverage warning above: with `EXPECTED_PTS` at 96 it would not currently refuse a short vintage, so that is a statement about the design and not about what is deployed. Once augur#31 is fixed, a refusal on point count is information upstream does not otherwise have: say so upstream rather than only logging it.
-
-**Live instance, 2026-09-10 — this is not hypothetical and it lands tonight.** EDH recovered with a dispatched publish at **07:41 UTC carrying `entsoe=96`** — same-day prices only, the day-ahead auction not having cleared at that hour. Under the decayed expectation of 96 the gate will **accept** it at 16:30, record it as consumed, and release the run. Their *scheduled* run then publishes again ~17:50–19:30 UTC with the full 192 — but the monotonic contract means that fresher publish is not consumed until tomorrow. Net cost is one night anchored on data with no day-ahead prices in it, for exactly the hours (h+1..24) where the auction result is known truth. Under a 75th-percentile expectation of 192 the gate would simply have waited ~90 minutes and taken the good publish. **This is the 2026-09-04 catch, defeated.**
-
-**Review by:** 2026-09-17, or immediately if a `[ALARM: t0 stale]` lands on a night EDH *did* publish — that would be this failure mode firing.
-
----
+> (it now needs two normal-hour EDH publishes, not 7 calendar days) — see its own note.
+>
+> **Amended 2026-09-14: one more vintage gone, and this one was OURS** — `t0=2026-09-13`, lost when the EDH
+> gate's one-day lag broke (augur#34, now resolved and moved below). Counted 2026-09-14 on sadalsuud:
+> **EXP-018a Stage 1 is at 13 of 14 vintages**, so it takes first claim on the next clean run rather than
+> "≈09-14 at the earliest". EXP-021a follows it; EXP-028a and EXP-023a Stage B are unchanged in kind.
+> The **t0-guard** entry that used to sit here has moved to `## Resolved` — its 14-run review was run on
+> 2026-09-14 and its answer is recorded there.
 
 ### [2026-09-10] ARF is not a backup: it and production die through the same door, and it dies harder
 
@@ -443,76 +311,6 @@ Incumbent = whichever base EXP-018a Stage 1 leaves standing (`lean` if it passes
 
 **Status:** open — pre-committed 2026-08-29 immediately after EXP-021 resolved, before any production path was touched.
 
-### [2026-08-28] The t0 guard plus the publish-hour gate end silent vintage loss; EDH's skipped publishes are the residual, and they are not ours to fix
-
-**Position (provisional):** Two changes shipped today (`4a2afc4`, `05b4d43`) close the failure that cost the 2026-08-25 vintage: `wait_for_edh.sh` now requires the EDH report to be stamped ≥12:00 UTC as well as dated today, so an overnight catch-up publish can no longer release the run early; and `classify_t0_advance` alarms in the commit subject whenever t0 fails to advance exactly one calendar day. Position: from here on, **every vintage is either produced or loudly announced as missing** — no further day is lost without a same-day marker naming the cause. The residual failure rate is then EDH's, not ours: over 2026-07-25..08-28 EDH published on 31 of 35 days (missing 08-03, 08-06, 08-23, 08-27; catch-up double-publishes on 08-09 and 08-24), so expect roughly one `[ALARM: t0 stale …]` per fortnight with no Augur-side defect behind it.
-
-**Alternatives (failure-mode signals):**
-
-1. **The 12:00 UTC floor is mis-set.** If EDH ever moves its schedule earlier, or a legitimate publish lands before noon UTC, the gate waits the full 4h and the run goes out late on stale data every day. **Signal:** `[ALARM: t0 stale …]` on days where EDH *did* publish, with a pre-noon timestamp in `logs/daily_update.log`. Then the floor is the bug, not the publish — move it, or switch to the semantically exact test (report timestamp strictly newer than the one the last successful run consumed, persisted across runs).
-2. **The race is narrower than the fix.** The 08-24 miss was 90 seconds. If EDH's publish drifts to straddle 16:30 routinely, the gate releases on the *previous* day's ≥12:00 publish before today's lands — the same failure with a different clock offset. **Signal:** a `t0 stale` alarm on a day EDH published after 16:30. Then the fix is augur#25 (repository_dispatch, event-driven) rather than any polling threshold.
-3. **Skipped publishes are not random.** Four misses in five weeks may be a systematic EDH failure (a workflow that silently exits 0) rather than transient runner flakiness. **Signal:** the EDH issue filed today identifies a repeating cause. Then Augur's absorption is a band-aid over something fixable upstream, and the residual rate should drop rather than persist.
-
-**Method:** After **14 consecutive daily runs** on the deployed code (2026-08-28 → ≈2026-09-11), from the daily commit subjects and `ml/models/shadow/shadow_state.json`:
-
-```
-# (1) No silent loss: every eval_day gap in calibration_history has a
-#     matching [ALARM: t0 ...] marker on the commit for that date.
-# (2) No false alarms: every [ALARM: t0 stale] day is one where EDH
-#     genuinely published nothing >= 12:00 UTC (check EDH commit history).
-# (3) Alarm rate <= 3 in 14 days, consistent with EDH's observed ~11% miss rate.
-```
-
-Position confirmed if all three hold. (1) failing means the guard has a blind spot — investigate before trusting any trailing-window metric. (2) failing confirms Alternative 1 or 2. (3) failing means EDH reliability degraded and Alternative 3 becomes the priority.
-
-**Revisit trigger:** 14 daily runs on deployed code, ≈2026-09-11 — before EXP-018a Stage 1 (≈2026-09-09) consumes the vintages this guard protects. Surface in `/curate`.
-
-**Review by:** 2026-09-18.
-
-**Domain:** daily pipeline reliability, `wait_for_edh.sh`, `update_shadow.py`, augur#14, augur#25, EDH publish reliability.
-
-**Addendum [2026-08-31] — the Position is falsified on both halves, 11 days before its own review date.**
-
-The 2026-08-30 run lost a vintage. What the Position claimed cannot happen, happened:
-
-1. **"Every vintage is either produced or loudly announced as missing" — half true, and the half that failed is the diagnostic half.** The day *was* announced, as `shadow rc=1/eval rc=skip` in the commit subject. But **no `[ALARM: t0 ...]` marker appeared at all**, because `T0_MARKER` in `daily_update.sh` is computed inside `if [ "${SHADOW_UPDATE_RC:-1}" -eq 0 ]`. That gate is deliberate and its comment is right — on a failed run `shadow_state.json` still holds the previous run's values, so an ungated marker would re-fire a stale alarm. The consequence was not anticipated: **a crash both loses the vintage and suppresses the alarm that would name why.** Criterion (1) of the Method fails as written — the gap in `calibration_history` has no matching t0 marker.
-2. **"The residual failure rate is then EDH's, not ours" — refuted.** The loss was not an EDH skip. EDH published normally at 19:02 UTC. The vintage died on an **Augur-side structural defect**: `t0 = parquet["price_eur_mwh"].dropna().index.max()` followed the longest column while `predict_72h` requires all five feature columns, so when ENTSO-E returned A44 day-ahead prices for 08-31 but not A65 day-ahead load, the feature row was part-NaN and the run raised. The residual was ours, in a component this Position had just declared closed.
-
-**What none of the three Alternatives predicted.** All three are about *publish timing* — a mis-set floor, a narrower race, a systematic skip. The actual mechanism was **feed-horizon divergence inside a publish that arrived exactly on time**. The Position's blind spot was treating "did the data arrive" as the whole question and never asking "does the data that arrived span what the model needs".
-
-**Shipped in response** (2026-08-31): `latest_feasible_t0` (`87ed30c`) anchors t0 on the last *complete* feature row and names the short feeds; `1bfd728` persists `t0_held_back_hours`/`t0_short_feeds` and emits `[ALARM: t0 held back Nh — <feeds> short]`, because the first version of that fix only *logged* the hold-back — repeating this entry's own lesson inside its own remedy. Alerting gained a commit-subject marker reader (`da57139`) after `shadow rc=1` sat unread for ~11 hours.
-
-**Not changed — decided 2026-08-31, deliberately, and this is the record so it is not re-litigated as an oversight.** The `SHADOW_UPDATE_RC -eq 0` gate on `T0_MARKER` stays. Three options were weighed:
-
-- *Ungate it* — rejected as **strictly worse**. On a failed run `shadow_state.json` still holds the previous run's values, so `t0_advance_days` would report yesterday's number as today's: a stale `advance=1` reads as **healthy**, which is worse than silence.
-- *Emit `[t0 unknown — shadow failed]` on non-zero rc* — rejected as redundant. It fires only on days whose subject already carries `shadow rc=N`, so it adds a marker without adding information.
-- *Leave it* — **chosen.** The gate is correct in itself; the heartbeat's commit-subject reader now catches `rc=1` independently, so detection does not route through `T0_MARKER` at all. The residual gap is **forensic, not operational**: a reader of `git log` alone cannot tell from a crashed day's subject whether a vintage was skipped, though `calibration_history` still shows it.
-
-**This review is the point at which to revisit it, on data rather than judgement** — criterion (1) below was rewritten precisely to measure it over 14 runs. If any gap in `calibration_history` turns out to have been diagnosable *only* from the run log, the forensic gap is real and worth closing; if the `rc=N` signal proved sufficient every time, close this as settled.
-
-**Revised Method for the 2026-09-11 review.** Criteria (2) and (3) stand. Criterion (1) is replaced by: *every gap in `calibration_history` has a same-day commit subject carrying **either** a `[ALARM: t0 ...]` marker **or** a non-zero step rc* — the honest version of "loudly announced", which the original conflated with "correctly diagnosed". Add (4): *no `[ALARM: t0 held back Nh]` appears on a day when both feeds were full-length*, which would mean the new anchor is over-triggering.
-
-**REVIEW RUN 2026-09-14, on the 14 daily runs from 2026-08-31 to 2026-09-13** (subjects from `git log --grep '^Daily update'`; `t0` per run from `shadow_state.json` history). Three of four criteria pass, the fourth fails for a reason the entry anticipated — and then the whole set misses the failure that actually occurred.
-
-| # | Criterion | Result |
-|---|---|---|
-| 1 | every `calibration_history` gap has a commit carrying `[ALARM: t0 …]` or a non-zero rc | **PASS** — gaps at 08-30, 09-01/02/03, 09-08, 09-13; announced by `t0 jumped 2d` (08-31), `t0 jumped 4d` (09-04), `t0 jumped 2d` (09-08), `t0 jumped 2d` (09-13) |
-| 2 | every `[ALARM: t0 stale]` is a day EDH genuinely published nothing new | **PASS** — 09-01, 09-03, 09-04, 09-10T05:01, all inside verified upstream outages. No false stale alarms |
-| 3 | alarm rate ≤ 3 in 14 days | **FAIL — 7 of 14 days** |
-| 4 | no `[ALARM: t0 held back Nh]` on a day both feeds were full-length | **PASS** — all four held-back days named a genuinely short feed. No over-triggering |
-
-*Criterion 1's wording is loose and the property still holds.* It says "same-day commit subject", but a gap is by construction learned about on the run that **jumps over** it, one day later. Read as "the gap was announced", every gap was. Worth fixing the wording if this criterion is reused.
-
-*Criterion 3 fails in the direction the entry pre-specified.* "(3) failing means EDH reliability degraded and Alternative 3 becomes the priority" — and that is what happened: **every one of the seven alarms was correct**. The window contains three separate upstream outages (08-31..09-03 the deadlocked shape tripwire, 09-07 ENTSO-E, 09-09 the swallowed NED timeout), far worse than the ~11% miss rate the threshold was calibrated on. So **Alternative 3 is CONFIRMED** — the skipped publishes were systematic, not runner flakiness — and the failing criterion is measuring upstream, not this guard.
-
-**And now the part that matters more than the table: all four criteria were blind to the failure that was actually running.** Throughout 09-05..09-07 and 09-11..09-12 the pipeline was consuming the *previous day's* EDH publish (augur#34, entry [2026-09-14] above). That produced **no gap, no stale marker and no alarm of any kind** — `t0` advanced exactly +1 calendar day every night, which is precisely what `classify_t0_advance` asserts. Criterion 1 cannot see it, because there is nothing to see: a uniformly-offset pipeline has no gaps.
-
-**So the question this entry asked is answered, and the answer is no.** The t0 guard plus the gate end *gap-shaped* silent vintage loss — measured, and they do it well. They are structurally blind to *offset-shaped* loss, where every vintage is produced, one day late, forever. The original Position's blind spot was diagnosed on 2026-08-31 as "treating 'did the data arrive' as the whole question"; this is the same blind spot one level up — treating "did `t0` move correctly" as the whole question, when `t0` moving correctly from the wrong place is a distinct and undetected failure.
-
-**Generalised and promoted** to `memory/gotcha-log.md` [2026-09-14]: *a guard on a delta cannot see a constant offset* — when a cursor is checked for advancing at the right **rate**, something must also check it is in the right **place**.
-
-**Status:** **resolved 2026-09-14** — Position falsified 2026-08-31, revised Method run above: 1/2/4 pass, 3 fails upstream (Alternative 3 confirmed), and the criteria are jointly blind to the offset failure. The residual forensic gap the 2026-08-31 addendum reserved this review for did **not** materialise: every gap in the window was announced. Successor question — detecting an offset rather than a bad delta — is augur#34 and entry [2026-09-14]. Original deployment 2026-08-28.
-
 ### [2026-08-31] The load/price horizon divergence is transient ENTSO-E outage residue, not a new steady state
 
 **Position (provisional):** The 2026-08-30 publish in which EDH's `load_forecast` spanned 24h while `energy_price_forecast` spanned 48h is **one-off outage residue and will not recur**. Basis: the energyDataHub session decrypted the committed publish (`8e5cc52`) and found EDH's request window unchanged at 48h with the envelope still declaring `end_time 2026-08-31T23:59:59+02:00` — so the collector asked for two days and ENTSO-E returned A44 day-ahead prices for 08-31 but not A65 day-ahead load. 2026-08-29 was a total ENTSO-E 503 at EDH (run `33269881393` published nothing), and the 08-30 18:58 run was the first success after it. Every normal-hour publish sampled before that — 08-20, 08-21, 08-24 16:32, 08-25, 08-26 — carried both feeds at 192 points. Filed as energydatahub#51.
@@ -636,7 +434,7 @@ Incumbent = `full`. Treatment = whichever of `drop_rolling` / `drop_rolling_and_
 
 **Domain:** EXP-018a, feature engineering, LightGBM production architecture (ADR-006), augur#19.
 
-**Status:** open — pre-committed 2026-08-25, awaiting fresh vintages. Branch `exp018-feature-reduction`.
+**Status:** open — pre-committed 2026-08-25, awaiting fresh vintages; **13 of 14 as of 2026-09-14**, so it takes first claim on the next clean run. ⚠️ Branch `exp018-feature-reduction` is **planned, not created** — verified 2026-09-14, it exists neither locally nor on origin. Stage 1 is offline and touches no production path, so it needs no branch until Stage 2 swaps `FEATURE_COLUMNS`.
 
 ### [2026-05-29] The Augur method + the M4 arc are publishable if we invest ~2-3 weeks of empirical follow-up
 
@@ -676,6 +474,216 @@ Items 1-5 are ~1 week. Items 6-8 are ~1 week. Item 9 is the polishing pass, ~3-5
 ---
 
 ## Resolved
+
+### [2026-09-14 → resolved 2026-09-14] The forecast anchor moved 24h by accident, because the EDH gate never tested freshness (augur#34)
+
+**Position (provisional):** production has been anchoring on `t0 = <run date> 21:00Z` on any night the gate was consuming the *previous day's* EDH publish — five of the nine nights from 2026-09-05 to 2026-09-13, in two episodes. On 2026-09-13 that lag broke and the anchor moved to `t0 = <run date +1> 21:00Z`. Both regimes are defensible; nobody chose either. **The provisional position is that the new regime (lag-0) is the correct one and should be ratified**, because it is the one where `h=1..24` tests the model instead of restating a cleared auction — but it must be ratified *explicitly*, ~~and the vintages either side of 2026-09-13 must be treated as two series~~ — **that second clause is withdrawn, see Alternative 3 below**; the break costs one vintage, not a regime change.
+
+**Mechanism (measured on sadalsuud 2026-09-14, from `logs/daily_update.log` and `logs/.edh_gate_state`):** the gate's only freshness test is *strictly newer than the last consumed report* (`wait_for_edh.sh`). It has no test for the report being from today. The unit fires 16:30 UTC; EDH publishes ~18:00–18:56 UTC. So whenever a **multi-publish EDH day** leaves one publish unconsumed, every later run finds it waiting at 16:30 and releases on it within seconds — and stays one behind indefinitely, invisibly, because `t0` still advances exactly +1 calendar day per run and every guard reads green.
+
+```
+run          consumed publish     lag
+09-04        2026-09-04T10:16     0    <- 4 publishes that day; 18:46 left unconsumed  [SEEDED]
+09-05        2026-09-04T18:46     1d
+09-06        2026-09-05T17:53     1d
+09-07        2026-09-06T17:57     1d
+09-08        2026-09-08T19:15     0    <- EDH missed 09-07, so the gate had to wait     [CLEARED, free]
+09-10 05:01  (deadline timeout)   -
+09-10 18:31  2026-09-10T07:41     0    <- 2 publishes that day; 18:53 left unconsumed   [RE-SEEDED]
+09-11        2026-09-10T18:53     1d
+09-12        2026-09-11T18:56     1d
+09-13        2026-09-13T18:29     0    <- 4h short-hold ran past 18:29; 09-12 skipped   [CLEARED, costly]
+```
+
+**Seeded twice in seven days**, by two unrelated multi-publish days — this is not a rare configuration. It never clears on its own: both clearings were accidents of something *delaying* a run past ~18:30 UTC (09-08 an EDH outage, 09-13 the augur#31 short-hold). And clearing it is not free. On 09-13 the same-day publish superseded the still-unconsumed 09-12 one, so `t0` went `2026-09-12 → 2026-09-14` and **`t0=2026-09-13` never got a prediction set and is permanently unevaluable**. EDH published normally on both days — that skip was ours, not upstream's.
+
+**Consequence, which is the part that needs a decision:**
+
+```
+09-12 run:  forecast 2026-09-12T22:00 -> 2026-09-15T21:00   (t0 = D   21:00Z)
+09-13 run:  forecast 2026-09-14T22:00 -> 2026-09-17T21:00   (t0 = D+1 21:00Z)
+```
+
+Under the lag, the first ~24 forecast hours covered an auction that had already cleared — that *is* the "zero-latency self-test" recorded against augur#30, and EXP-037 found that block flatters the scores. Under lag-0 the block is gone and `h=1..24` is a genuine test. So the accident moved production toward the more honest measurement. (An earlier draft of this entry also claimed it put a *discontinuity* in the `t0 >= 2026-08-25` window that EXP-018a / EXP-021a / EXP-028a are gated on. It does not — see Alternative 3.)
+
+**Alternatives (falsification signals):**
+
+1. **Ratify lag-0.** The anchor should be as fresh as the data allows; the self-test was an artefact of a lag nobody knew about. **Signal:** augur#30 and ADR-006 nowhere state a *requirement* that `h=1..24` cover a cleared auction — only that it does. Then the fix is to make the gate *hold* the new regime (require a publish newer than the run's start, falling through to the existing 03:00 deadline) and to mark 2026-09-13 as a series break wherever a trailing window reads `eval_log.jsonl`.
+2. **Restore the D-anchor deliberately.** The cleared-auction block is load-bearing — it is the only continuous self-test the pipeline has, and eight months of vintages are anchored that way. **Signal:** any trailing-window metric or experiment harness breaks or shifts when horizons are re-based; or the dashboard depends on the forecast covering the remainder of the current day. Then the honest implementation is an explicit one-publish offset, not a gate that lags by accident.
+3. **The regimes are equivalent for everything that reads them.** **Signal:** `evaluate_shadow.py` matches predictions to realised prices by timestamp, so per-horizon scores are computed the same way in both; if the horizon *composition* of the last 20 eval rows is unchanged across 2026-09-13, the break is cosmetic. Then only the augur#30 note needs correcting and nothing else moves.
+
+   **→ ANSWERED 2026-09-14, structurally, and it is substantially YES.** Not by the empirical check above — post-break rows do not exist yet — but by a stronger route that makes that check a confirmation rather than the decision. `evaluate_shadow.py:t0_for_eval_day` records that **`eval_day` IS `t0.strftime("%Y-%m-%d")`**, so a row is tagged by its vintage's anchor, not by a delivery date. The lag never changed the *set* of `t0` values — under both regimes the anchors are the same daily `…21:00Z` sequence — it changed only how promptly each one is produced (24h earlier under lag-0). `calibration_history` confirms the sequence is continuous with holes and no re-basing: `09-07, [09-08 EDH], 09-09, 09-10, 09-11, 09-12, [09-13 ours], 09-14 pending`. And for a given `t0` the forecast is constructed identically either way — `select_training_window` and the feature row both end at `t0`, not at the wall clock.
+
+   **So the "two series" framing written into this entry, `memory/MEMORY.md` and commit `66c1347` was wrong**, and EXP-018a / EXP-021a / EXP-028a do **not** need a regime break marked at 2026-09-13. What they need marking is one more vintage hole, of the kind they already handle.
+
+   **Two residuals survive, and they are the whole remaining decision.** (a) `apply_cqr`'s window is anchored on `t0` but populated from rows *realised by run time*, and a lag-0 run happens 24h earlier — so bands for a given `t0` may be widened from a less-complete window than the same `t0` would have had under the lag. **Band width only**; point forecasts are untouched. Unquantified: worth one pass over `last_cqr_n_calib_days` once a few lag-0 runs have landed. (b) augur#30's cleared-auction self-test is genuinely gone *at publish time* — under the lag `h=1..24` covered a day whose auction had cleared hours earlier; under lag-0 it covers a day whose auction clears ~16h **after** the forecast is published. That is the substantive change, and it is the one worth ratifying.
+
+**Method / revisit trigger:** decide between 1 and 2 **before** changing the gate — they imply opposite changes to it, and the current state holds regime 1 only by accident (it will stay lag-0 until the next EDH multi-publish day re-seeds the backlog, which will silently return it to regime 2). ~~Check Alternative 3 first: it is decidable from `eval_log.jsonl` alone, costs minutes, and may close this outright.~~ **Done — see above; it removes the eval-comparability argument from the decision entirely and leaves augur#30's self-test as the only substantive stake.** Do **not** add a clock floor to the gate — that was removed 2026-09-01 for good reason (GitHub defers EDH's cron 00:18–21:14 UTC); the run-start comparison achieves the same thing without a wall-clock rule, and must stay fail-open at the deadline.
+
+**RESOLVED 2026-09-14 — Alternative 1 chosen: lag-0 is ratified, and the gate now holds it.**
+
+*Why Alternative 1 and not 2.* The deciding fact was not in the model at all — `static/js/modules/api-client.js:227` already fetches **today + tomorrow + day-after** from Energy Zero every 10 minutes. So the cleared day the forecast no longer covers is on the dashboard as published prices either way, and the D-anchor was not buying coverage; it was spending a third of the forecast's horizon budget restating an auction the page already had, which is the defect augur#30 was filed for (`data-processor.js:256` drew the forecast line over them). Lag-0 gives three unknown days instead of two, makes `h=1..24` a genuine test, and removes the overlap. Against that, the self-test it costs was never designed, nothing reads `h=1..24` as one, and EXP-037 had already shown that block flatters. The run finishing ~2–4h later is a real cost and the right side of the trade: it was finishing earlier on day-old data.
+
+*How the gate holds it.* Clause (c), shipped the same day: the report must have arrived while this run was **waiting**, not already be sitting there when it started (`STALE_GRACE_HOURS`, default 2h — the two populations are ~22h apart, so the number is not delicate). It is relative to the run, so it is **not** the clock floor removed on 2026-09-01 and cron deferral cannot interact with it. And it **holds rather than refuses**, on augur#31's pattern one level over: a stale candidate starts a bounded clock and is accepted with `[ALARM: EDH publish Nh stale accepted after Nh]` if nothing fresher arrives, so the night EDH publishes nothing still gets a forecast. Bootstrap is exempt — with no prior state there is nothing to be behind of. Traced against all three real shapes (normal night, the 09-10 double publish that re-seeded the lag, EDH dead); 7 tests in `tests/test_wait_for_edh.py::TestFreshnessContract`, including `test_the_lag_cannot_re_seed` driven by a mid-wait publish, and an explicit **ablation** test pinning that the suite goes red when clause (c) is removed — verified, 3 of 7 fail without it.
+
+*Left open deliberately.* The augur#19 CQR residual (bands for a given `t0` may now be widened from a less-complete calibration window) is unmeasured; check `last_cqr_n_calib_days` across the break before reading any coverage comparison that spans it. And augur#25 remains the structural fix — an event-driven trigger removes the window in which this can happen at all, rather than bounding it.
+
+**Review by:** 2026-09-21 — confirm from `logs/daily_update.log` that the gate held and took the same-day publish, and that `check_gate_lag.sh` still says CURRENT. Or immediately on EDH's next multi-publish day — that re-seeds the lag (it has done so twice already, 09-04 and 09-10), and the first symptom will be `t0` quietly reverting to `<run date> 21:00Z` with no alarm at all.
+
+---
+
+### [2026-09-10 → resolved 2026-09-11] The EDH gate's derived size expectation has decayed to the catch-up size, and the protection it earned on 09-04 is currently absent
+
+**Position (provisional):** `wait_for_edh.sh`'s `median_points` estimator is the right idea with the wrong statistic. Deriving the expectation from history is what lets an upstream resolution change be absorbed in days instead of reading as short forever — but the *median over the last 10 publishes* tracks a run of degraded publishes just as willingly as a genuine change, and it has. The expectation is now **96, not 192**.
+
+**Evidence (measured on sadalsuud 2026-09-10, before this entry was written):** the gate's own startup line reads `entsoe >= 96 points (median of last 10)`. The sample behind it:
+
+```
+2026-09-08  96     2026-09-04  96
+2026-09-06  192    2026-09-04  96
+2026-09-05  192    2026-08-30  192
+2026-09-04  192    2026-08-29  96
+2026-09-04  96     2026-08-28  96
+```
+
+Six of ten are half-size, and **2026-09-04 contributed four publishes on its own, three of them short** — sampling by publish rather than by day let one bad day set the expectation.
+
+**Why this matters concretely, and is not theoretical:** CLAUDE.md records that this gate *earned its place* on 2026-09-04 by refusing a 06:53 UTC recovery publish whose `entsoe` carried same-day prices only (96 vs 192), the day-ahead auction not having cleared. At an expectation of 96 that publish is now accepted as full, `t0` anchors on data with no day-ahead prices in it, and the only remaining detector is the downstream `t0` alarm — which fires *after* ingestion.
+
+**Alternatives (falsification signals):**
+
+1. **96 is the new normal and the estimator is working exactly as designed.** ENTSO-E may have changed resolution, in which case refusing 96-point publishes would be the bug. **Signal:** the 192-point publishes stop appearing entirely for ≥10 consecutive publishes. Then nothing is wrong and this entry closes — but note the sample above is *mixed*, which is the signature of intermittent degradation rather than a resolution change.
+2. **Per-day deduplication is sufficient.** **Signal:** taking one publish per day (the last) lifts the median back to 192 on the same history. Then the fix is a one-line change to the sampler and no estimator change is needed. ~~This is the cheapest arm and should be measured first.~~
+
+   **→ MEASURED AND REFUTED, same day.** Per-day dedup (last publish of each day, last 10 days) gives `[96, 96, 192, 192, 192, 192, 96, 96, 96, 192]` — median still **96**. The four-publish 09-04 was a red herring: the genuinely short days (08-28, 08-29, 09-08, 09-10) are separate days and dominate on their own. The 75th percentile over the same window gives **192**. So the sampler is not the problem; the *statistic* is, and choosing it is a real decision rather than a one-line fix.
+3. **The point count is the wrong quantity entirely.** A publish carrying tomorrow's auction is what matters, not how many rows it has. **Signal:** a 96-point publish that *does* contain day-ahead hours exists in the history. Then the gate should assert **span** — which is augur's half of the never-built span check already recorded in the gotcha-log Promoted table and EDH's #51 — and point count was always a proxy.
+
+**Method / revisit trigger:** re-measure `median_points` against the same 10-publish window under three estimators — median as-is, median after per-day dedup, and the 75th percentile — plus the day-ahead-span check of Alternative 3. Read-only against committed EDH history; costs minutes and touches no production path. **Do not change the estimator before measuring**, because tightening it wrongly makes the gate refuse good publishes and the gate's one inviolable property is that it never fails closed.
+
+**RESOLVED 2026-09-11 — shipped, and it is neither of the two pure positions.**
+
+*Alternative 3 is answered, and the answer is no.* The span check cannot be built against what EDH publishes. `data_quality_report.json` carries `data_points` and nothing else — no start, no end, no range — and the payload files are fully encrypted base64 with no plaintext metadata. EDH's own commit (`d3e540f`) states it from their side: *"identically by construction, so span has no accidental detector."* So point count is not "always a proxy" for something we could be measuring instead; it is the **only** quantity either repo can currently see. Asserting span would mean decrypting inside the gate — possible, Augur has the keys, but it couples the readiness gate to the crypto path and buys a distinction that only matters for a case the bounded hold below already handles. Recorded as **not implementable at this cost**, not as wrong.
+
+*The estimator, measured before changing as this entry required.* At the deployed `SAMPLE_N=10`, against live EDH history: **median 96, 75th percentile 192**. (At `SAMPLE_N=20` the median also returns 192 — so widening the sample would have masked it today, which is exactly why it is the wrong fix: 11 of those 20 are full, one bad week from flipping back.) Shipped the 75th percentile. The expectation should sit where a *healthy* publish sits, and healthy publishes are the majority of a normal week even when they are not the majority of a bad one.
+
+*And the hold rule, which is where the 09-10 correction lands.* That correction concluded the check must **accept and alarm, never hold**, because a scheduled short means upstream had less data when asked and nothing better is coming. That is right about `2026-09-08T19:15`. It is wrong about the commoner case, and the publish record says so:
+
+```
+2026-09-04   06:53 short, 08:13 short, 10:16 short, then 18:46 FULL (192)
+2026-09-08   19:15 short, and nothing better ever came
+```
+
+Six of the nine shorts in the last twenty publishes are off-schedule catch-ups of the first kind. The gate held ~2h from its 16:30 start on 09-04 and **got the good publish** — a vintage that pure accept-and-alarm would have degraded. Equally, holding is not free: on the 09-08 shape it burns to the 03:00 deadline for nothing.
+
+Also worth correcting in the 09-10 reasoning: holding does **not** "convert an upstream gap into a downstream outage". The gate is fail-open at the deadline, so holding costs a *delay* — the run lands at 03:00 instead of 19:15 — not a lost vintage. That makes the cost of being wrong here bounded on both sides, which is what licenses a middle position rather than forcing a choice between two absolutes.
+
+**Shipped:** hold a short primary for up to `SHORT_HOLD_HOURS` (default **4**, `EDH_SHORT_HOLD_HOURS`), then accept it and alarm — `[ALARM: EDH entsoe short N/M accepted after 4h]`. A superseding publish gets its chance; a genuine short-delivery costs 4h instead of ~8. The bound runs from the first short seen **in this run** and is never reset by a later one, or upstream republishing shorts hourly would extend the hold indefinitely. `SHORT_HOLD_HOURS=0` recovers the pure accept-and-alarm position if the balance of cases changes. The secondary check was factored into `check_secondary()` so both accept paths share it rather than drifting. 7 tests in `tests/test_wait_for_edh.py` (`TestExpectationDoesNotDecay`, `TestBoundedHold`), including one pinning that a genuine upstream resolution change is still absorbed — the property the median existed to provide, which must not be lost to fixing its failure mode.
+
+**Coverage restored.** The ⚠️ below — *"neither side would catch a short publish today"* — no longer holds for Augur as of this commit. EDH's own span check is still unarmed (`members_with_expectation: 0`), so their half remains pending.
+
+**CORRECTION 2026-09-10, from the energyDataHub session, and it changes the fix.** My first reading blamed the decay on *recovery dispatches* — pre-auction publishes that are short because the day-ahead auction has not cleared. That is true of 09-10T07:41 and of the three 09-04 dispatches, and upstream has since ruled out pre-midday recovery dispatches on their side. **But it does not explain two of the ten samples.** `2026-09-08T19:15Z` and `2026-08-26T16:44Z` were *scheduled evening* runs, hours after any auction, and both carry today only. Verified independently against the same EDH history rather than taken on trust. Upstream filed it as their #74; unexplained on both sides.
+
+**Our own gate header already contained the counterexample and drew the wrong rule from it.** `scripts/wait_for_edh.sh:20-32` tabulates `2026-08-26 16:44  entsoe=96  short ENTSO-E at a NORMAL hour` — and then concludes, four lines below it, *"Every catch-up is exactly half size, so content separates them without any clock rule."* Half-size does imply pre-auction-or-degraded; it does **not** imply catch-up, which is the direction the design premise needs and the direction the same table refutes. Eight of the last fourteen publishes are half-size and at least two of those are scheduled runs.
+
+**What this rules out.** Any estimator tuned on "short publishes are a recovery artifact" is built on a refuted premise — the short population contains genuine defects, so a statistic that treats shorts as outliers to be shrugged off will keep absorbing real degradation. This is the second alternative in this entry (per-day dedup) failing for a *second, independent* reason: not only do the short days not collapse, some of them are legitimately short scheduled days.
+
+**It strengthens Alternative 3 specifically.** "Does this publish contain tomorrow's day-ahead hours?" is decidable regardless of *why* a publish is short, so it is the only option here that does not depend on classifying the cause. Prefer it over any percentile choice.
+
+**DESIGN ANSWER 2026-09-10, from upstream's collect logs: the span assertion must ACCEPT AND ALARM, never hold.** Root cause of the two scheduled shorts is upstream short-delivery, silent, with nothing failing on EDH's side. Their comparison against a healthy run:
+
+```
+09-06 17:56:24  Parsed 192 data points from ENTSO-E response   <- healthy
+09-08 19:12:53  Parsed  96 data points from ENTSO-E response   <- short
+```
+
+Identical query shape, window and pagination termination; the `NoMatchingDataError: for offset 100` line appears in both and is normal pagination end, not a failure. No HTTP error, retry or 429 on the price path — the 429 burst in that run is Luchtmeetnet interleaved in the same log, a different collector. The request spanned **four days** (`periodStart=202609062200&periodEnd=202609102200`) and came back with one; **09-07, already in the past at that moment, was missing from the response too**, which is why this does not reduce to auction timing in any form.
+
+**Why that settles the hold-vs-accept question.** A short scheduled publish is not upstream publishing early — it is upstream having less data when asked. Waiting buys nothing: EDH's next publish is 24h later regardless, and the missing delivery day may appear in a later vintage or never. **Holding would convert an upstream gap into a downstream outage**, which is precisely the mistake EDH's own quality gate made on 09-09 with `ned_production` (aborting 19 healthy feeds over one empty one). So: accept the vintage, raise the alarm, let `latest_feasible_t0` and the t0 guard mark the result — the fail-open principle this gate already has, applied one level down.
+
+⚠️ **Measured vs unverified, and do not collapse them.** *"We asked for four days and got one"* is **measured**. *"ENTSO-E had nothing to give"* is **not** — EDH's four-day window may itself be the trigger (a boundary the API handles differently), and `backfill_entsoe.py` would settle it by re-querying those dates except it is broken against the v2.2+ envelope (their #57). Build the span check on the measured half only.
+
+⚠️ **THIS CLASS IS CURRENTLY UNMONITORED END TO END — not covered-by-the-other-party.** EDH's span check reports `members_with_expectation: 0` for roughly another week; our expectation has decayed to 96 so we would not refuse a short vintage either. **Neither side would catch a short publish today.** An earlier draft of this entry called Augur "the better detector for this class", which was true of the design and false of the deployment — the honest statement is that there is no detector on either side until augur#31 is fixed or their floor is reached. Do not rely on a refusal arriving, on either side.
+
+**Reciprocal-detector note (their observation, worth acting on).** EDH's own span check (`_span_shortfalls.json`, their #53) is shipped but **not armed** — today's run reports `members_checked: 66, members_with_expectation: 0`, no member having reached its 10-observation floor — and a shape signature cannot see span at all, since 96 and 192 hash identically. So Augur's gate is the better detector for this class **by design** — but see the coverage warning above: with `EXPECTED_PTS` at 96 it would not currently refuse a short vintage, so that is a statement about the design and not about what is deployed. Once augur#31 is fixed, a refusal on point count is information upstream does not otherwise have: say so upstream rather than only logging it.
+
+**Live instance, 2026-09-10 — this is not hypothetical and it lands tonight.** EDH recovered with a dispatched publish at **07:41 UTC carrying `entsoe=96`** — same-day prices only, the day-ahead auction not having cleared at that hour. Under the decayed expectation of 96 the gate will **accept** it at 16:30, record it as consumed, and release the run. Their *scheduled* run then publishes again ~17:50–19:30 UTC with the full 192 — but the monotonic contract means that fresher publish is not consumed until tomorrow. Net cost is one night anchored on data with no day-ahead prices in it, for exactly the hours (h+1..24) where the auction result is known truth. Under a 75th-percentile expectation of 192 the gate would simply have waited ~90 minutes and taken the good publish. **This is the 2026-09-04 catch, defeated.**
+
+**Review by:** 2026-09-17, or immediately if a `[ALARM: t0 stale]` lands on a night EDH *did* publish — that would be this failure mode firing.
+
+---
+
+### [2026-08-28 → resolved 2026-09-14] The t0 guard plus the publish-hour gate end silent vintage loss; EDH's skipped publishes are the residual, and they are not ours to fix
+
+**Position (provisional):** Two changes shipped today (`4a2afc4`, `05b4d43`) close the failure that cost the 2026-08-25 vintage: `wait_for_edh.sh` now requires the EDH report to be stamped ≥12:00 UTC as well as dated today, so an overnight catch-up publish can no longer release the run early; and `classify_t0_advance` alarms in the commit subject whenever t0 fails to advance exactly one calendar day. Position: from here on, **every vintage is either produced or loudly announced as missing** — no further day is lost without a same-day marker naming the cause. The residual failure rate is then EDH's, not ours: over 2026-07-25..08-28 EDH published on 31 of 35 days (missing 08-03, 08-06, 08-23, 08-27; catch-up double-publishes on 08-09 and 08-24), so expect roughly one `[ALARM: t0 stale …]` per fortnight with no Augur-side defect behind it.
+
+**Alternatives (failure-mode signals):**
+
+1. **The 12:00 UTC floor is mis-set.** If EDH ever moves its schedule earlier, or a legitimate publish lands before noon UTC, the gate waits the full 4h and the run goes out late on stale data every day. **Signal:** `[ALARM: t0 stale …]` on days where EDH *did* publish, with a pre-noon timestamp in `logs/daily_update.log`. Then the floor is the bug, not the publish — move it, or switch to the semantically exact test (report timestamp strictly newer than the one the last successful run consumed, persisted across runs).
+2. **The race is narrower than the fix.** The 08-24 miss was 90 seconds. If EDH's publish drifts to straddle 16:30 routinely, the gate releases on the *previous* day's ≥12:00 publish before today's lands — the same failure with a different clock offset. **Signal:** a `t0 stale` alarm on a day EDH published after 16:30. Then the fix is augur#25 (repository_dispatch, event-driven) rather than any polling threshold.
+3. **Skipped publishes are not random.** Four misses in five weeks may be a systematic EDH failure (a workflow that silently exits 0) rather than transient runner flakiness. **Signal:** the EDH issue filed today identifies a repeating cause. Then Augur's absorption is a band-aid over something fixable upstream, and the residual rate should drop rather than persist.
+
+**Method:** After **14 consecutive daily runs** on the deployed code (2026-08-28 → ≈2026-09-11), from the daily commit subjects and `ml/models/shadow/shadow_state.json`:
+
+```
+# (1) No silent loss: every eval_day gap in calibration_history has a
+#     matching [ALARM: t0 ...] marker on the commit for that date.
+# (2) No false alarms: every [ALARM: t0 stale] day is one where EDH
+#     genuinely published nothing >= 12:00 UTC (check EDH commit history).
+# (3) Alarm rate <= 3 in 14 days, consistent with EDH's observed ~11% miss rate.
+```
+
+Position confirmed if all three hold. (1) failing means the guard has a blind spot — investigate before trusting any trailing-window metric. (2) failing confirms Alternative 1 or 2. (3) failing means EDH reliability degraded and Alternative 3 becomes the priority.
+
+**Revisit trigger:** 14 daily runs on deployed code, ≈2026-09-11 — before EXP-018a Stage 1 (≈2026-09-09) consumes the vintages this guard protects. Surface in `/curate`.
+
+**Review by:** 2026-09-18.
+
+**Domain:** daily pipeline reliability, `wait_for_edh.sh`, `update_shadow.py`, augur#14, augur#25, EDH publish reliability.
+
+**Addendum [2026-08-31] — the Position is falsified on both halves, 11 days before its own review date.**
+
+The 2026-08-30 run lost a vintage. What the Position claimed cannot happen, happened:
+
+1. **"Every vintage is either produced or loudly announced as missing" — half true, and the half that failed is the diagnostic half.** The day *was* announced, as `shadow rc=1/eval rc=skip` in the commit subject. But **no `[ALARM: t0 ...]` marker appeared at all**, because `T0_MARKER` in `daily_update.sh` is computed inside `if [ "${SHADOW_UPDATE_RC:-1}" -eq 0 ]`. That gate is deliberate and its comment is right — on a failed run `shadow_state.json` still holds the previous run's values, so an ungated marker would re-fire a stale alarm. The consequence was not anticipated: **a crash both loses the vintage and suppresses the alarm that would name why.** Criterion (1) of the Method fails as written — the gap in `calibration_history` has no matching t0 marker.
+2. **"The residual failure rate is then EDH's, not ours" — refuted.** The loss was not an EDH skip. EDH published normally at 19:02 UTC. The vintage died on an **Augur-side structural defect**: `t0 = parquet["price_eur_mwh"].dropna().index.max()` followed the longest column while `predict_72h` requires all five feature columns, so when ENTSO-E returned A44 day-ahead prices for 08-31 but not A65 day-ahead load, the feature row was part-NaN and the run raised. The residual was ours, in a component this Position had just declared closed.
+
+**What none of the three Alternatives predicted.** All three are about *publish timing* — a mis-set floor, a narrower race, a systematic skip. The actual mechanism was **feed-horizon divergence inside a publish that arrived exactly on time**. The Position's blind spot was treating "did the data arrive" as the whole question and never asking "does the data that arrived span what the model needs".
+
+**Shipped in response** (2026-08-31): `latest_feasible_t0` (`87ed30c`) anchors t0 on the last *complete* feature row and names the short feeds; `1bfd728` persists `t0_held_back_hours`/`t0_short_feeds` and emits `[ALARM: t0 held back Nh — <feeds> short]`, because the first version of that fix only *logged* the hold-back — repeating this entry's own lesson inside its own remedy. Alerting gained a commit-subject marker reader (`da57139`) after `shadow rc=1` sat unread for ~11 hours.
+
+**Not changed — decided 2026-08-31, deliberately, and this is the record so it is not re-litigated as an oversight.** The `SHADOW_UPDATE_RC -eq 0` gate on `T0_MARKER` stays. Three options were weighed:
+
+- *Ungate it* — rejected as **strictly worse**. On a failed run `shadow_state.json` still holds the previous run's values, so `t0_advance_days` would report yesterday's number as today's: a stale `advance=1` reads as **healthy**, which is worse than silence.
+- *Emit `[t0 unknown — shadow failed]` on non-zero rc* — rejected as redundant. It fires only on days whose subject already carries `shadow rc=N`, so it adds a marker without adding information.
+- *Leave it* — **chosen.** The gate is correct in itself; the heartbeat's commit-subject reader now catches `rc=1` independently, so detection does not route through `T0_MARKER` at all. The residual gap is **forensic, not operational**: a reader of `git log` alone cannot tell from a crashed day's subject whether a vintage was skipped, though `calibration_history` still shows it.
+
+**This review is the point at which to revisit it, on data rather than judgement** — criterion (1) below was rewritten precisely to measure it over 14 runs. If any gap in `calibration_history` turns out to have been diagnosable *only* from the run log, the forensic gap is real and worth closing; if the `rc=N` signal proved sufficient every time, close this as settled.
+
+**Revised Method for the 2026-09-11 review.** Criteria (2) and (3) stand. Criterion (1) is replaced by: *every gap in `calibration_history` has a same-day commit subject carrying **either** a `[ALARM: t0 ...]` marker **or** a non-zero step rc* — the honest version of "loudly announced", which the original conflated with "correctly diagnosed". Add (4): *no `[ALARM: t0 held back Nh]` appears on a day when both feeds were full-length*, which would mean the new anchor is over-triggering.
+
+**REVIEW RUN 2026-09-14, on the 14 daily runs from 2026-08-31 to 2026-09-13** (subjects from `git log --grep '^Daily update'`; `t0` per run from `shadow_state.json` history). Three of four criteria pass, the fourth fails for a reason the entry anticipated — and then the whole set misses the failure that actually occurred.
+
+| # | Criterion | Result |
+|---|---|---|
+| 1 | every `calibration_history` gap has a commit carrying `[ALARM: t0 …]` or a non-zero rc | **PASS** — gaps at 08-30, 09-01/02/03, 09-08, 09-13; announced by `t0 jumped 2d` (08-31), `t0 jumped 4d` (09-04), `t0 jumped 2d` (09-08), `t0 jumped 2d` (09-13) |
+| 2 | every `[ALARM: t0 stale]` is a day EDH genuinely published nothing new | **PASS** — 09-01, 09-03, 09-04, 09-10T05:01, all inside verified upstream outages. No false stale alarms |
+| 3 | alarm rate ≤ 3 in 14 days | **FAIL — 7 of 14 days** |
+| 4 | no `[ALARM: t0 held back Nh]` on a day both feeds were full-length | **PASS** — all four held-back days named a genuinely short feed. No over-triggering |
+
+*Criterion 1's wording is loose and the property still holds.* It says "same-day commit subject", but a gap is by construction learned about on the run that **jumps over** it, one day later. Read as "the gap was announced", every gap was. Worth fixing the wording if this criterion is reused.
+
+*Criterion 3 fails in the direction the entry pre-specified.* "(3) failing means EDH reliability degraded and Alternative 3 becomes the priority" — and that is what happened: **every one of the seven alarms was correct**. The window contains three separate upstream outages (08-31..09-03 the deadlocked shape tripwire, 09-07 ENTSO-E, 09-09 the swallowed NED timeout), far worse than the ~11% miss rate the threshold was calibrated on. So **Alternative 3 is CONFIRMED** — the skipped publishes were systematic, not runner flakiness — and the failing criterion is measuring upstream, not this guard.
+
+**And now the part that matters more than the table: all four criteria were blind to the failure that was actually running.** Throughout 09-05..09-07 and 09-11..09-12 the pipeline was consuming the *previous day's* EDH publish (augur#34, entry [2026-09-14] above). That produced **no gap, no stale marker and no alarm of any kind** — `t0` advanced exactly +1 calendar day every night, which is precisely what `classify_t0_advance` asserts. Criterion 1 cannot see it, because there is nothing to see: a uniformly-offset pipeline has no gaps.
+
+**So the question this entry asked is answered, and the answer is no.** The t0 guard plus the gate end *gap-shaped* silent vintage loss — measured, and they do it well. They are structurally blind to *offset-shaped* loss, where every vintage is produced, one day late, forever. The original Position's blind spot was diagnosed on 2026-08-31 as "treating 'did the data arrive' as the whole question"; this is the same blind spot one level up — treating "did `t0` move correctly" as the whole question, when `t0` moving correctly from the wrong place is a distinct and undetected failure.
+
+**Generalised and promoted** to `memory/gotcha-log.md` [2026-09-14]: *a guard on a delta cannot see a constant offset* — when a cursor is checked for advancing at the right **rate**, something must also check it is in the right **place**.
+
+**Status:** **resolved 2026-09-14** — Position falsified 2026-08-31, revised Method run above: 1/2/4 pass, 3 fails upstream (Alternative 3 confirmed), and the criteria are jointly blind to the offset failure. The residual forensic gap the 2026-08-31 addendum reserved this review for did **not** materialise: every gap in the window was announced. Successor question — detecting an offset rather than a bad delta — is augur#34 and entry [2026-09-14]. Original deployment 2026-08-28.
+
+---
+
 
 ### [2026-08-29 → resolved 2026-08-30] The 2026-08-29 experiment backlog: seven pre-committed arms, all executed
 

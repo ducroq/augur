@@ -10,7 +10,7 @@
 |------|-------------|-------------|
 | `memory/gotcha-log.md` | Stuck or debugging | Problem-fix archive |
 | `memory/upstream-edh.md` | An EDH publish is late, short or missing; a feed changes shape or span; you are about to cite an energydatahub issue number | Who detects what (their alert is diagnosis, ours is detection), the verified issue-number map, and the two 2026-08/09 feed incidents in full |
-| `memory/session-archive.md` | Checking whether something was already done, before re-opening a settled question | Six dated closed-work sections, 2026-05-29 .. 2026-08-28 (27 items) |
+| `memory/session-archive.md` | Checking whether something was already done, before re-opening a settled question | Nine dated closed-work sections, 2026-05-29 .. 2026-09-14 |
 | `memory/data-formats.md` | Working with energyDataHub data | **Schema v2.2 envelope** (`{metadata, data:{...}}`, since 2026-06-07) wrapping the v2.1 inner shape; units, timezone conventions; and the rule that coverage is never read from metadata |
 | `memory/ml-decisions.md` | ML architecture choices | Historical XGBoost plan + River ARF era; superseded by ADR-006. **ARCHIVAL — frozen by design, last edited 2026-05-29.** Its age is correct, not drift: it records what was decided in the ARF era and must not be updated to match the present. `/curate`'s 30-day staleness check will keep flagging it; that flag is expected and should be dismissed, not fixed. Live ML state is this index plus `docs/experiment-results.md`. |
 
