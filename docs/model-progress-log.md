@@ -4,7 +4,31 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
-## 2026-09-10 (latest) — Three detectors that were reporting success while doing nothing
+## 2026-09-14 (latest) — The forecast anchor moved 24h, because the readiness gate never tested freshness
+
+**No model or forecast logic changed today**, and no production path was touched. What changed is the *meaning* of every forecast the pipeline has published since 2026-09-13, which is why it is in this log rather than only in the gotcha record.
+
+**What prompted it.** A heartbeat mail for `[ALARM: t0 jumped 2d]` on the 2026-09-13 run. The RUNBOOK attributed that marker to "the run after an EDH skip", so the first hour went upstream. EDH had published normally on 09-12 **and** 09-13. The skip was ours.
+
+**The mechanism.** `wait_for_edh.sh` releases when the EDH report is strictly newer than the last consumed one. That is monotonicity — it stops a publish being used twice — and it is not freshness. The unit fires 16:30 UTC; EDH publishes ~18:00–18:56 UTC. So any EDH day carrying more than one publish leaves one unconsumed, and every later run then finds it waiting at 16:30 and releases on it within seconds. A stable fixed point: seeded 2026-09-04 (four publishes), cleared by accident on 09-08 when an EDH outage forced the gate to wait, re-seeded 09-10 (two publishes), cleared again on 09-13 when augur#31's 4h short-hold delayed the run past 18:29. Five lagged nights of nine, seeded twice in seven days.
+
+**Why no guard saw it.** `classify_t0_advance` asserts `t0` advances one calendar day per run. A uniformly-lagged pipeline satisfies that exactly. **A guard on a delta cannot see a constant offset** — and the only run that ever alarmed was the one that *recovered*, which then got blamed for the vintage the lag had been quietly costing.
+
+**What it cost.** `t0=2026-09-13` never got a prediction set and is permanently unevaluable — the fourth such hole, and the first that was not upstream. And the anchor moved: `t0` is now `<run date +1> 21:00Z` where it had been `<run date> 21:00Z`.
+
+**The first reading of that shift was wrong, and the correction is the useful part.** It was written up as a regime break splitting the vintage series either side of 2026-09-13. Checking rather than reasoning: `evaluate_shadow.py:t0_for_eval_day` records that `eval_day` **is** `t0`'s date, so a row is tagged by its vintage's anchor and not a delivery date. The lag never changed the *set* of `t0` values — the same daily `…21:00Z` sequence under both regimes, produced 24h earlier under lag-0. `calibration_history` confirms it is continuous with holes and no re-basing. And for a given `t0` the forecast is built identically either way: `select_training_window` and the feature row both end at `t0`, not at the wall clock. **EXP-018a / EXP-021a / EXP-028a therefore need one more vintage hole marked, not a break.**
+
+**What genuinely changed, and it is the one thing worth deciding.** augur#30's cleared-auction block is gone *at publish time*. Under the lag, `h=1..24` covered a day whose day-ahead auction had cleared hours before the forecast was published — the "zero-latency self-test" CLAUDE.md recorded as deliberate. It was neither deliberate nor stable: it was a property of a lag nobody had noticed, and it returns silently if the lag re-seeds. Under lag-0, `h=1..24` covers a day whose auction clears roughly 16h *after* publication, so that region is now a genuine test. EXP-037's finding that the block *flatters* the scores argues for ratifying lag-0 — but it should be ratified, not inherited by accident.
+
+**Residual, unquantified.** `apply_cqr`'s window is anchored on `t0` but populated from rows realised *by run time*, and a lag-0 run happens 24h earlier, so bands for a given `t0` may be widened from a less-complete calibration window. Band width only; point forecasts untouched. Cheap check is `last_cqr_n_calib_days` across the break — flagged on augur#19 because it points the same way as that issue's existing under-coverage symptom and would be easy to mistake for a real calibration change.
+
+**Not fixed, deliberately.** The gate. The two candidate regimes imply opposite changes to it, so hardening it now would cement whichever one today happens to be in. Position with pinned Method in `docs/hypothesis-log.md` [2026-09-14]; augur#34. augur#25 (event-driven EDH trigger) is the structural fix — if the run is started *by* the publish there is no window in which an older unconsumed publish can satisfy the gate at all.
+
+**Standing lesson**, recorded as recurrence #2 of the 2026-08-28 gotcha row *"a freshness gate must test freshness, not a proxy for it"* — whose own promoted fix (`MIN_PUBLISH_HOUR_UTC`) was removed on 2026-09-01, with the replacement reintroducing the same bug in a new form. Third distinct proxy this gate has used for freshness; third to diverge from it. State the property positively — *this publish is the one upstream made for today* — then ask whether the test actually implies it. Both "dated today" and "newer than what I have" are satisfiable by data that is not that.
+
+---
+
+## 2026-09-10 — Three detectors that were reporting success while doing nothing
 
 **No model or forecast logic changed today.** Everything below is the pipeline's *observability* layer. It is in this log because each item is a case of an instrument that looked healthy and was inert — the failure family this project keeps rediscovering — and because one of them silently degraded a live safety property.
 

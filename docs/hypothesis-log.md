@@ -40,7 +40,7 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 > entry's 14-run window is also unaffected in kind: its criteria are about `calibration_history` gaps having
 > a matching alarm, and the five outage days are legitimate data for exactly that.
 
-### [2026-09-14] The forecast anchor moved 24h by accident, and the vintage series is not comparable across the break
+### [2026-09-14] The forecast anchor moved 24h by accident, because the EDH gate never tested freshness (augur#34)
 
 **Position (provisional):** production has been anchoring on `t0 = <run date> 21:00Z` on any night the gate was consuming the *previous day's* EDH publish — five of the nine nights from 2026-09-05 to 2026-09-13, in two episodes. On 2026-09-13 that lag broke and the anchor moved to `t0 = <run date +1> 21:00Z`. Both regimes are defensible; nobody chose either. **The provisional position is that the new regime (lag-0) is the correct one and should be ratified**, because it is the one where `h=1..24` tests the model instead of restating a cleared auction — but it must be ratified *explicitly*, ~~and the vintages either side of 2026-09-13 must be treated as two series~~ — **that second clause is withdrawn, see Alternative 3 below**; the break costs one vintage, not a regime change.
 
@@ -484,7 +484,26 @@ The 2026-08-30 run lost a vintage. What the Position claimed cannot happen, happ
 
 **Revised Method for the 2026-09-11 review.** Criteria (2) and (3) stand. Criterion (1) is replaced by: *every gap in `calibration_history` has a same-day commit subject carrying **either** a `[ALARM: t0 ...]` marker **or** a non-zero step rc* — the honest version of "loudly announced", which the original conflated with "correctly diagnosed". Add (4): *no `[ALARM: t0 held back Nh]` appears on a day when both feeds were full-length*, which would mean the new anchor is over-triggering.
 
-**Status:** open — Position falsified 2026-08-31 and rewritten above; the 14-run window restarts from the 2026-08-31 run on `87ed30c`/`1bfd728`. Original deployment 2026-08-28.
+**REVIEW RUN 2026-09-14, on the 14 daily runs from 2026-08-31 to 2026-09-13** (subjects from `git log --grep '^Daily update'`; `t0` per run from `shadow_state.json` history). Three of four criteria pass, the fourth fails for a reason the entry anticipated — and then the whole set misses the failure that actually occurred.
+
+| # | Criterion | Result |
+|---|---|---|
+| 1 | every `calibration_history` gap has a commit carrying `[ALARM: t0 …]` or a non-zero rc | **PASS** — gaps at 08-30, 09-01/02/03, 09-08, 09-13; announced by `t0 jumped 2d` (08-31), `t0 jumped 4d` (09-04), `t0 jumped 2d` (09-08), `t0 jumped 2d` (09-13) |
+| 2 | every `[ALARM: t0 stale]` is a day EDH genuinely published nothing new | **PASS** — 09-01, 09-03, 09-04, 09-10T05:01, all inside verified upstream outages. No false stale alarms |
+| 3 | alarm rate ≤ 3 in 14 days | **FAIL — 7 of 14 days** |
+| 4 | no `[ALARM: t0 held back Nh]` on a day both feeds were full-length | **PASS** — all four held-back days named a genuinely short feed. No over-triggering |
+
+*Criterion 1's wording is loose and the property still holds.* It says "same-day commit subject", but a gap is by construction learned about on the run that **jumps over** it, one day later. Read as "the gap was announced", every gap was. Worth fixing the wording if this criterion is reused.
+
+*Criterion 3 fails in the direction the entry pre-specified.* "(3) failing means EDH reliability degraded and Alternative 3 becomes the priority" — and that is what happened: **every one of the seven alarms was correct**. The window contains three separate upstream outages (08-31..09-03 the deadlocked shape tripwire, 09-07 ENTSO-E, 09-09 the swallowed NED timeout), far worse than the ~11% miss rate the threshold was calibrated on. So **Alternative 3 is CONFIRMED** — the skipped publishes were systematic, not runner flakiness — and the failing criterion is measuring upstream, not this guard.
+
+**And now the part that matters more than the table: all four criteria were blind to the failure that was actually running.** Throughout 09-05..09-07 and 09-11..09-12 the pipeline was consuming the *previous day's* EDH publish (augur#34, entry [2026-09-14] above). That produced **no gap, no stale marker and no alarm of any kind** — `t0` advanced exactly +1 calendar day every night, which is precisely what `classify_t0_advance` asserts. Criterion 1 cannot see it, because there is nothing to see: a uniformly-offset pipeline has no gaps.
+
+**So the question this entry asked is answered, and the answer is no.** The t0 guard plus the gate end *gap-shaped* silent vintage loss — measured, and they do it well. They are structurally blind to *offset-shaped* loss, where every vintage is produced, one day late, forever. The original Position's blind spot was diagnosed on 2026-08-31 as "treating 'did the data arrive' as the whole question"; this is the same blind spot one level up — treating "did `t0` move correctly" as the whole question, when `t0` moving correctly from the wrong place is a distinct and undetected failure.
+
+**Generalised and promoted** to `memory/gotcha-log.md` [2026-09-14]: *a guard on a delta cannot see a constant offset* — when a cursor is checked for advancing at the right **rate**, something must also check it is in the right **place**.
+
+**Status:** **resolved 2026-09-14** — Position falsified 2026-08-31, revised Method run above: 1/2/4 pass, 3 fails upstream (Alternative 3 confirmed), and the criteria are jointly blind to the offset failure. The residual forensic gap the 2026-08-31 addendum reserved this review for did **not** materialise: every gap in the window was announced. Successor question — detecting an offset rather than a bad delta — is augur#34 and entry [2026-09-14]. Original deployment 2026-08-28.
 
 ### [2026-08-31] The load/price horizon divergence is transient ENTSO-E outage residue, not a new steady state
 
