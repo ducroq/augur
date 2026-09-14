@@ -8,8 +8,9 @@ the wall clock: date must be today, publish hour >= 12 UTC. That failed two ways
 already answers per-dataset.
 
 The contract these tests pin:
-  * READY requires BOTH a strictly newer report than the last consumed AND the
-    primary dataset at full size
+  * READY requires a strictly newer report than the last consumed, the primary
+    dataset at full size, AND (since 2026-09-14, augur#34) a report that
+    arrived while this run was waiting rather than one already sitting there
   * "full size" is the MEDIAN of recent publishes, not a constant, so an
     upstream resolution change is absorbed instead of jamming the gate forever
   * a short SECONDARY feed never blocks — it proceeds and names itself, because
@@ -25,6 +26,7 @@ repo. `origin/main` is faked with update-ref, so no remote is needed.
 import json
 import os
 import subprocess
+import time
 from pathlib import Path
 
 import datetime as dt
@@ -125,6 +127,14 @@ class Hub:
             # the gate samples on every invocation. 3 is enough for a median
             # and keeps this file from dominating the suite's runtime.
             "EDH_SAMPLE_N": "3",
+            # The freshness clause (augur#34) is OFF for every test that does
+            # not ask for it, because these fixtures are stamped with fixed
+            # 2026-08 dates and are therefore all "stale" against any real
+            # clock. A very large grace is the documented way to disable it,
+            # so this exercises that escape hatch rather than bypassing it.
+            # TestFreshnessContract overrides it and dates its own fixtures
+            # relative to now.
+            "EDH_STALE_GRACE_HOURS": "999999",
         })
         if getattr(self, "bin", None):
             env["PATH"] = f"{self.bin}:{env['PATH']}"
@@ -572,3 +582,157 @@ class TestBoundedHold:
         r = h.run()
         assert "READY" not in r.stdout
         assert "Holding up to 4h" in r.stdout
+
+
+def _ago(hours=0, minutes=0):
+    """An ISO timestamp that many hours/minutes before now, in the gate's format."""
+    t = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=hours, minutes=minutes)
+    return t.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+
+
+class TestFreshnessContract:
+    """augur#34 — clause (c): the report must have arrived while we were waiting.
+
+    Clause (a) is monotonicity, not freshness. It stops a publish being used
+    twice; it does not require the publish to be the one upstream made today.
+    The unit fires ~2h before EDH publishes, so any EDH day carrying more than
+    one publish leaves one unconsumed, and every later run then releases on it
+    within seconds — a stable fixed point that cost five vintage-nights in
+    2026-09 and was invisible to every guard, because t0 still advanced exactly
+    one day per run.
+
+    These fixtures are dated relative to NOW, unlike the rest of this file.
+    """
+
+    # 2h of grace, and a hold expressed in seconds so a test need not wait 4h.
+    FRESH = {"EDH_STALE_GRACE_HOURS": "2"}
+
+    def test_a_publish_from_before_this_run_is_not_consumed(self, tmp_path):
+        """The founding case: yesterday's full publish, sitting there at 16:30."""
+        h = Hub(tmp_path)
+        history(h)
+        h.stub_systemctl("infinity")
+        seeded = _ago(hours=48)
+        h.seed(seeded)
+        h.publish(_ago(hours=22), NORMAL)          # yesterday's, left unconsumed
+        r = h.run(max_wait=2, poll=1, env_extra=self.FRESH)
+        assert r.returncode == 0                    # fail open, always
+        assert "STALE publish" in r.stdout
+        assert h.consumed == seeded, (
+            "the stale publish must not be recorded as consumed — the next run "
+            "still has to be allowed to take a fresher one"
+        )
+        assert "stale" in h.marker
+
+    def test_a_publish_that_arrives_while_waiting_is_taken_at_once(self, tmp_path):
+        h = Hub(tmp_path)
+        history(h)
+        h.stub_systemctl("infinity")
+        h.seed(_ago(hours=26))
+        h.publish(_ago(minutes=1), NORMAL)
+        r = h.run(max_wait=4, poll=1, env_extra=self.FRESH)
+        assert "READY" in r.stdout
+        assert "STALE" not in r.stdout
+        assert h.consumed is not None
+        assert h.marker == "", "a current full publish is unremarkable"
+
+    def test_the_grace_tolerates_a_publish_from_just_before_we_fired(self, tmp_path):
+        """A publish landing minutes before the unit starts is tonight's, not yesterday's."""
+        h = Hub(tmp_path)
+        history(h)
+        h.stub_systemctl("infinity")
+        h.seed(_ago(hours=26))
+        h.publish(_ago(hours=1, minutes=30), NORMAL)   # inside the 2h grace
+        r = h.run(max_wait=4, poll=1, env_extra=self.FRESH)
+        assert "READY" in r.stdout
+        assert "STALE" not in r.stdout
+        assert h.marker == ""
+
+    def test_a_stale_publish_is_accepted_once_the_hold_expires(self, tmp_path):
+        """Never fail closed: if nothing fresher comes, take it and alarm."""
+        h = Hub(tmp_path)
+        history(h)
+        h.stub_systemctl("infinity")
+        h.seed(_ago(hours=48))
+        stale = _ago(hours=22)
+        h.publish(stale, NORMAL)
+        r = h.run(max_wait=6, poll=1,
+                  env_extra={**self.FRESH, "EDH_STALE_HOLD_SEC": "0"})
+        assert "ACCEPTING stale publish" in r.stdout
+        assert h.consumed == stale, "an accepted publish IS consumed"
+        assert "ALARM" in h.marker and "stale" in h.marker
+
+    def test_bootstrap_is_exempt(self, tmp_path):
+        """With no prior state there is nothing to be behind of."""
+        h = Hub(tmp_path)
+        history(h)
+        h.stub_systemctl("infinity")
+        old = _ago(hours=30)
+        h.publish(old, NORMAL)
+        r = h.run(max_wait=4, poll=1, env_extra=self.FRESH)
+        assert "READY" in r.stdout
+        assert "bootstrapping" in r.stdout
+        assert h.consumed == old
+        assert h.marker == ""
+
+    def test_the_lag_cannot_re_seed(self, tmp_path):
+        """THE regression test for augur#34.
+
+        Yesterday's publish is unconsumed and sitting there when the run
+        starts; tonight's lands while we wait. Before this clause the gate took
+        yesterday's within seconds and stayed one day behind forever. It must
+        now take tonight's.
+        """
+        h = Hub(tmp_path)
+        history(h)
+        h.stub_systemctl("infinity")
+        h.seed(_ago(hours=48))
+        h.publish(_ago(hours=22), NORMAL)          # the leftover
+        tonight = _ago(minutes=0)
+
+        env = dict(os.environ)
+        env.update({
+            "DATAHUB_DIR": str(h.hub), "AUGUR_DIR": str(h.augur),
+            "EDH_MAX_WAIT_SEC": "20", "EDH_POLL_SEC": "1",
+            "EDH_ISSUE_POLL_EVERY": "0", "EDH_SAMPLE_N": "3",
+            "PATH": f"{h.bin}:{os.environ['PATH']}",
+            **self.FRESH,
+        })
+        proc = subprocess.Popen(["bash", str(SCRIPT)], env=env,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True)
+        try:
+            time.sleep(3)                          # let it poll and hold
+            assert proc.poll() is None, "it released before tonight's publish existed"
+            h.publish(tonight, NORMAL)
+            out, _ = proc.communicate(timeout=30)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+        assert "STALE publish" in out, "it should have held on the leftover"
+        assert "READY" in out
+        assert h.consumed == tonight, (
+            "the gate took the leftover instead of tonight's publish — augur#34 "
+            "has re-seeded"
+        )
+        assert "stale" not in h.marker
+
+    def test_the_clause_is_what_holds_it_ablation(self, tmp_path):
+        """Deletion check: with the clause disabled, the bug reproduces exactly.
+
+        Without this, a green suite above cannot distinguish "the freshness
+        clause works" from "these fixtures never triggered it".
+        """
+        h = Hub(tmp_path)
+        history(h)
+        h.stub_systemctl("infinity")
+        h.seed(_ago(hours=48))
+        leftover = _ago(hours=22)
+        h.publish(leftover, NORMAL)
+        r = h.run(max_wait=4, poll=1,
+                  env_extra={"EDH_STALE_GRACE_HOURS": "999999"})
+        assert "STALE" not in r.stdout
+        assert h.consumed == leftover, (
+            "with the clause off the gate must consume the leftover — if it "
+            "does not, these tests are passing for some other reason"
+        )

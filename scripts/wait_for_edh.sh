@@ -40,13 +40,55 @@
 #      crashed update_shadow and forced latest_feasible_t0. Both were described
 #      in the report at publish time. Nothing was reading them.
 #
-# READINESS CONTRACT. Proceed when BOTH hold:
+# READINESS CONTRACT. Proceed when ALL THREE hold:
 #   (a) the report timestamp is strictly newer than the one we last consumed --
 #       monotonic, so a publish is never used twice. This is also what stops the
 #       "t0 did not advance, vintage overwritten" shape at its source: if EDH
 #       has published nothing new, we do not treat yesterday's data as ready.
 #   (b) the primary dataset carries a full publish, measured against the median
 #       of recent publishes rather than a hardcoded constant -- see EXPECTED_PTS.
+#   (c) the report arrived while we were WAITING, rather than already sitting
+#       there when we started -- see FRESHNESS, below. Added 2026-09-14.
+#
+# FRESHNESS (augur#34, 2026-09-14). Clause (a) is MONOTONICITY, NOT FRESHNESS,
+# and for nine days nothing here knew the difference. It stops a publish being
+# used twice; it does not require the publish to be the one upstream made for
+# today. The unit fires at 16:30 UTC and EDH publishes ~18:00-18:56 UTC, so at
+# gate time there is ALWAYS a candidate that satisfies (a) and (b) if any
+# publish was left unconsumed -- and an EDH day carrying more than one publish
+# leaves exactly that. The run then releases on it within seconds and the whole
+# pipeline sits one day behind, indefinitely:
+#
+#   09-04  consumed 10:16  0    4 publishes that day; 18:46 left over  [SEEDED]
+#   09-05  consumed 09-04T18:46  1d
+#   ...
+#   09-08  consumed 09-08T19:15  0    EDH missed 09-07, gate had to wait
+#   09-10  consumed 07:41  0    2 publishes that day; 18:53 left over  [RE-SEEDED]
+#   09-11  consumed 09-10T18:53  1d
+#   09-12  consumed 09-11T18:56  1d
+#   09-13  consumed 09-13T18:29  0    short-hold ran past 18:29       [CLEARED]
+#
+# Seeded twice in seven days. It never clears on its own -- both clearings were
+# accidents of something DELAYING a run past ~18:30 -- and clearing it costs a
+# vintage, because the publish it was still owed gets superseded. Invisible the
+# whole time: `classify_t0_advance` asserts t0 moves one day per run, which a
+# uniformly-lagged pipeline satisfies exactly. A guard on a DELTA cannot see a
+# constant OFFSET.
+#
+# ⚠️ NOT A CLOCK FLOOR. `MIN_PUBLISH_HOUR_UTC` was removed on 2026-09-01 for
+# good reason -- GitHub defers EDH's cron unpredictably (00:18-21:14 UTC
+# observed) and a wall-clock test shut the gate on good publishes. This test is
+# relative to THIS RUN's start, so cron deferral is irrelevant to it: the
+# question is only "did this arrive while I was waiting, or was it already
+# here?". STALE_GRACE_HOURS tolerates a publish that landed just before we
+# fired.
+#
+# ⚠️ AND IT HOLDS, IT DOES NOT REFUSE -- the augur#31 shape, one level over.
+# Refusing a stale publish outright would fail closed on the night EDH never
+# publishes at all. So a stale candidate starts the same bounded clock a short
+# one does; if nothing fresher arrives it is accepted with an alarm, and the
+# 03:00 deadline still backstops everything. Cost of being wrong is a delay,
+# never a lost vintage.
 #
 # A short SECONDARY feed (load_forecast) does NOT block. 08-26 proves blocking
 # would be wrong: that day's only publish was short, so refusing it would have
@@ -106,6 +148,17 @@ FALLBACK_PRIMARY_PTS="${EDH_FALLBACK_PRIMARY_PTS:-192}"
 # 0 disables the hold entirely (accept-and-alarm on the first short).
 SHORT_HOLD_HOURS="${EDH_SHORT_HOLD_HOURS:-4}"
 
+# How far before this run's start a report may be stamped and still count as
+# "arrived while we were waiting" (augur#34). 2h absorbs a publish that landed
+# just before the unit fired without admitting yesterday's, which is ~22h old
+# at gate time -- the two populations are nowhere near each other, so this is
+# not a finely-tuned number. A very large value disables the freshness clause
+# and recovers the pre-2026-09-14 behaviour exactly.
+STALE_GRACE_HOURS="${EDH_STALE_GRACE_HOURS:-2}"
+# Bound on the stale hold. Defaults to the short hold so there is one dial to
+# reason about unless an operator deliberately splits them.
+STALE_HOLD_HOURS="${EDH_STALE_HOLD_HOURS:-$SHORT_HOLD_HOURS}"
+
 # Upstream publish-failure signal. Polled every Nth iteration rather than every
 # one: at the default 120s poll that is a GitHub API read every 10 minutes,
 # which stays well inside even the unauthenticated hourly budget. 0 disables.
@@ -134,7 +187,25 @@ case "$SHORT_HOLD_SEC" in
 esac
 FIRST_SHORT_TS=""
 
+case "$STALE_HOLD_HOURS" in
+    ''|*[!0-9]*)
+        echo "[wait_for_edh] WARN: EDH_STALE_HOLD_HOURS='${STALE_HOLD_HOURS}' is not a number — using ${SHORT_HOLD_HOURS}."
+        STALE_HOLD_HOURS="$SHORT_HOLD_HOURS" ;;
+esac
+STALE_HOLD_SEC="${EDH_STALE_HOLD_SEC:-$(( STALE_HOLD_HOURS * 3600 ))}"
+case "$STALE_HOLD_SEC" in
+    ''|*[!0-9]*) STALE_HOLD_SEC=$(( STALE_HOLD_HOURS * 3600 )) ;;
+esac
+case "$STALE_GRACE_HOURS" in
+    ''|*[!0-9]*)
+        echo "[wait_for_edh] WARN: EDH_STALE_GRACE_HOURS='${STALE_GRACE_HOURS}' is not a number — using 2."
+        STALE_GRACE_HOURS=2 ;;
+esac
+FIRST_STALE_TS=""
+
 START_TS=$(date -u +%s)
+# Anything stamped at or after this counts as "arrived while we were waiting".
+STALE_CUTOFF_TS=$(( START_TS - STALE_GRACE_HOURS * 3600 ))
 mkdir -p "$(dirname "$VERDICT")" 2>/dev/null || true
 : > "$VERDICT"
 
@@ -366,6 +437,20 @@ while : ; do
         IS_FULL=1
     fi
 
+    # (c) Did this report arrive while we were waiting? augur#34. An
+    # unparseable timestamp counts as CURRENT: this clause must never be the
+    # reason a run is held, and every other way of not knowing in this script
+    # falls through to proceeding.
+    IS_CURRENT=1
+    REPORT_AGE_H=""
+    if [ -n "$UPSTREAM_TS" ]; then
+        UPSTREAM_EPOCH=$(date -u -d "$UPSTREAM_TS" +%s 2>/dev/null || true)
+        if printf '%s' "${UPSTREAM_EPOCH:-}" | grep -qE '^[0-9]+$'; then
+            REPORT_AGE_H=$(( (START_TS - UPSTREAM_EPOCH) / 3600 ))
+            [ "$UPSTREAM_EPOCH" -lt "$STALE_CUTOFF_TS" ] && IS_CURRENT=0
+        fi
+    fi
+
     # Bounded hold on a SHORT primary (augur#31, 2026-09-11). Neither pure
     # position is right, and the publish record says so plainly:
     #
@@ -401,7 +486,32 @@ while : ; do
         fi
     fi
 
-    if [ "$IS_NEW" = "1" ] && [ "$IS_FULL" = "1" ]; then
+    # Bounded hold on a STALE publish (augur#34, 2026-09-14). A report that is
+    # new and full but was already sitting there when we started is the lag's
+    # signature: it is yesterday's, left unconsumed by a multi-publish day.
+    # Holding gives tonight's publish its chance. Never refusing means the
+    # night EDH publishes nothing still gets a forecast, degraded and named.
+    #
+    # Bootstrap is exempt. With no prior state there is nothing to be behind
+    # OF, and holding a first run for 4h to re-learn that would be pure cost.
+    if [ "$IS_NEW" = "1" ] && [ "$IS_FULL" = "1" ] && [ "$IS_CURRENT" = "0" ] \
+       && [ -n "$LAST_CONSUMED" ]; then
+        if [ -z "$FIRST_STALE_TS" ]; then
+            FIRST_STALE_TS=$(date -u +%s)
+            echo "[wait_for_edh] STALE publish: ${UPSTREAM_TS} is ${REPORT_AGE_H}h old, from before this run started. Holding up to ${STALE_HOLD_HOURS}h for tonight's, then accepting anyway. (augur#34 — this is how the one-day lag seeds.)"
+        fi
+        STALE_HELD_SEC=$(( $(date -u +%s) - FIRST_STALE_TS ))
+        if [ "$STALE_HELD_SEC" -ge "$STALE_HOLD_SEC" ]; then
+            check_secondary
+            echo "[wait_for_edh] ACCEPTING stale publish after $(( STALE_HELD_SEC / 60 ))min: nothing fresher arrived."
+            echo "[wait_for_edh] READY: ${UPSTREAM_TS} (${REPORT_AGE_H}h old, accepted after hold), ${PRIMARY_DATASET}=${PRIMARY_PTS}, ${SECONDARY_DATASET}=${SECONDARY_PTS:-?}."
+            record_and_go "$UPSTREAM_TS" \
+                " [ALARM: EDH publish ${REPORT_AGE_H}h stale accepted after ${STALE_HOLD_HOURS}h]${SECONDARY_MARKER}"
+        fi
+    fi
+
+    if [ "$IS_NEW" = "1" ] && [ "$IS_FULL" = "1" ] \
+       && { [ "$IS_CURRENT" = "1" ] || [ -z "$LAST_CONSUMED" ]; }; then
         check_secondary
         MARKER="$SECONDARY_MARKER"
         [ -z "$LAST_CONSUMED" ] && echo "[wait_for_edh] NOTE: no prior state — bootstrapping from this publish. Subsequent runs require a strictly newer one."
@@ -428,6 +538,8 @@ while : ; do
             REASON="report unreadable"
         elif [ "$IS_NEW" != "1" ]; then
             REASON="no new publish since ${LAST_CONSUMED}"
+        elif [ "$IS_CURRENT" != "1" ] && [ "$IS_FULL" = "1" ]; then
+            REASON="newest publish is ${REPORT_AGE_H}h stale — nothing arrived tonight"
         else
             REASON="${PRIMARY_DATASET} only ${PRIMARY_PTS:-?} points (want >= ${EXPECTED_PTS})"
         fi
@@ -438,6 +550,6 @@ while : ; do
         exit 0
     fi
 
-    echo "[wait_for_edh] not ready (ts=${UPSTREAM_TS:-<empty>} new=${IS_NEW} ${PRIMARY_DATASET}=${PRIMARY_PTS:-?}/${EXPECTED_PTS}); $(( (DEADLINE_TS - NOW_TS) / 60 ))min to deadline; sleeping ${POLL_SEC}s"
+    echo "[wait_for_edh] not ready (ts=${UPSTREAM_TS:-<empty>} new=${IS_NEW} current=${IS_CURRENT} ${PRIMARY_DATASET}=${PRIMARY_PTS:-?}/${EXPECTED_PTS}); $(( (DEADLINE_TS - NOW_TS) / 60 ))min to deadline; sleeping ${POLL_SEC}s"
     sleep "$POLL_SEC"
 done
