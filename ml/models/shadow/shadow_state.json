@@ -26666,7 +26666,7 @@
       "realized": 194.35250000000002
     }
   ],
-  "last_run_utc": "2026-10-04T19:03:14.405618+00:00",
+  "last_run_utc": "2026-10-06T03:01:02.450912+00:00",
   "last_t0": "2026-10-04T21:00:00+00:00",
   "t0_advance_days": 0,
   "last_train_window": {
@@ -26677,7 +26677,5 @@
   "last_cqr_q": 6.3423,
   "last_cqr_n_calib_days": 7,
   "t0_held_back_hours": 0.0,
-  "t0_short_feeds": [
-    "solar_gen_forecast_mw"
-  ]
+  "t0_short_feeds": []
 }
