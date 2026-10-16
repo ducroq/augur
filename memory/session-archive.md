@@ -5,6 +5,16 @@
      Moved out of memory/MEMORY.md 2026-09-06 — it is history, not current state,
      and the index is read at every session start. Nothing here was edited. -->
 
+## Closed 2026-10-16
+
+Ask: answer infra-f3's home-cleanup questions (sadalsuud, then b650-gpu). It grew into moving the experiment data out of the working tree, then a wrap-up with read-surface pruning.
+- ✅ sadalsuud `~/augur-latency` (EXP-033 run dir, 1.2G) deleted by infra on owner's go. Every file was a duplicate (checked by sha256).
+- ✅ Gitignored experiment dumps moved to `/home/jeroen/lab/augur`, linked back in place, plus `scripts/link_lab.sh` (`adb3fef`). 28 sha256 matched through the links.
+- ✅ b650-gpu: ~10MB of EXP-024/026/027/028 dumps existed only there. Pulled and verified (18 files; `e28eacb`).
+- ⏳ b650 `~/augur-fm` + `~/augur-run` delete: owner-approved, waiting on infra's restic snapshot check. It's queue item 1 in `MEMORY.md`.
+- ✅ Read surface pruned. `CLAUDE.md` 38.4k → 9.6k chars; `memory/MEMORY.md` 46.6k → 8.4k; resolved gotchas (63) and resolved hypotheses (13) archived unedited. Hypothesis log `## Open` now opens with a dated trigger table: every gate met except EXP-023a Stage B.
+- Lesson: "regenerable" in a .gitignore comment meant *the code exists*, not *the bytes come back*. Inputs are rebuilt from EDH history, so dumps are data.
+
 ## Closed 2026-09-14
 
 - ✅ **augur#34 OPENED AND CLOSED same day** — **the EDH gate had no freshness test**, so it settled into a one-day lag: readiness was *strictly newer than the last consumed report*, which is monotonicity, not freshness. The unit fires ~2h before EDH publishes, so any multi-publish EDH day leaves one publish unconsumed and every later run releases on it within seconds. Seeded twice in seven days (09-04 four publishes, 09-10 two), five lagged nights of nine, and **invisible to every guard** because `classify_t0_advance` checks the *delta*, which a uniformly-lagged pipeline satisfies exactly. Cost `t0=2026-09-13` — the fourth permanent `eval_log` hole and **the first that was ours, not upstream's**. Fixed by **clause (c)**: the report must have arrived *while this run was waiting* (`EDH_STALE_GRACE_HOURS`, 2h); relative to the run so it is **not** the clock floor removed 2026-09-01, and it **holds rather than refuses** (`[ALARM: EDH publish Nh stale accepted after Nh]`), bootstrap exempt. 7 tests incl. a mid-wait-publish regression test and an ablation **verified to turn 3 of them red**. Deployed to sadalsuud by hand — `ExecStartPre` runs before `daily_update.sh` pulls, so a gate change is otherwise one run late.
