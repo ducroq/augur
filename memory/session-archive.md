@@ -11,7 +11,7 @@ Ask: answer infra-f3's home-cleanup questions (sadalsuud, then b650-gpu). It gre
 - ✅ sadalsuud `~/augur-latency` (EXP-033 run dir, 1.2G) deleted by infra on owner's go. Every file was a duplicate (checked by sha256).
 - ✅ Gitignored experiment dumps moved to `/home/jeroen/lab/augur`, linked back in place, plus `scripts/link_lab.sh` (`adb3fef`). 28 sha256 matched through the links.
 - ✅ b650-gpu: ~10MB of EXP-024/026/027/028 dumps existed only there. Pulled and verified (18 files; `e28eacb`).
-- ⏳ b650 `~/augur-fm` + `~/augur-run` delete: owner-approved, waiting on infra's restic snapshot check. It's queue item 1 in `MEMORY.md`.
+- ✅ b650 `~/augur-fm` + `~/augur-run` (8.3G, venvs + EXP-027 checkpoints included) deleted after all 18 pulled files matched restic snapshot `c163fe7f` (2026-10-16 12:10 CEST) by sha256. `~/.cache/huggingface` (Chronos weights) kept.
 - ✅ Read surface pruned. `CLAUDE.md` 38.4k → 9.6k chars; `memory/MEMORY.md` 46.6k → 8.4k; resolved gotchas (63) and resolved hypotheses (13) archived unedited. Hypothesis log `## Open` now opens with a dated trigger table: every gate met except EXP-023a Stage B.
 - Lesson: "regenerable" in a .gitignore comment meant *the code exists*, not *the bytes come back*. Inputs are rebuilt from EDH history, so dumps are data.
 
