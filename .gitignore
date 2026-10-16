@@ -123,6 +123,8 @@ ml/shadow/exp024_lag_richness/predictions.parquet
 ml/shadow/exp027_finetune/ft_predictions.parquet
 ml/shadow/exp027_finetune/ckpt_*/
 ml/shadow/exp023a_stage_a/predictions.parquet
+# EXP-026 size-ladder FM runs (pulled from b650-gpu 2026-10-16); links into the lab tree
+ml/shadow/exp026_size_ladder/size_chronos-bolt-*
 
 # Lab tree: gitignored experiment data lives in /home/jeroen/lab/augur and is
 # linked back in by scripts/link_lab.sh (see its header).
