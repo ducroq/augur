@@ -5,6 +5,15 @@
      Moved out of memory/MEMORY.md 2026-09-06 — it is history, not current state,
      and the index is read at every session start. Nothing here was edited. -->
 
+## Closed 2026-10-28
+
+Ask: `/update-drift`, then "how is augur doing", then a rethink in plan mode, then "go".
+- Drift v1.37.0 → v1.50.0: 13 releases already in force via the global skills, v1.40.0 review-profile declined (`5bef4f9`). Closed.
+- Product criterion pre-committed; EXP-018a and EXP-023a parked (`a6672d8`). Closed.
+- Nightly regret step, backfilled (`5f20b0a`). Closed; first live run is tonight's job.
+- EXP-038 early Chronos read PASS (`91e18ce`, `1ccd2b0`); EXP-039 Stage 2 feasible (`040daa7`). Closed.
+- Open: EXP-021a Stage 3 shadow, augur#29 verdict, formal Stage 1 ≈11-16. In the ON CONTINUE queue.
+
 ## Closed 2026-10-16
 
 Ask: answer infra-f3's home-cleanup questions (sadalsuud, then b650-gpu). It grew into moving the experiment data out of the working tree, then a wrap-up with read-surface pruning.
