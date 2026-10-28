@@ -29,16 +29,37 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 >
 > | Entry | Trigger | Status 2026-10-16 |
 > |---|---|---|
-> | [2026-08-25] EXP-018a Stage 1 | ≥14 vintages | **TRIGGERED** (30) — first claim; Review by 09-16 passed |
-> | [2026-08-29] EXP-021a Stage 1 | ≥14, after 018a | **TRIGGERED** — Review by 10-15 passed |
+> | [2026-08-25] EXP-018a Stage 1 | ≥14 vintages | **PARKED 2026-10-28**, see [2026-10-28] park entry |
+> | [2026-08-29] EXP-021a Stage 1 | ≥14 vintages | **TRIGGERED**, first claim since 2026-10-28 (gate vs `lean`, per its own Method) |
 > | [2026-09-06] augur#29 verdict | ≥21 qualifying rows | **TRIGGERED** (~33) — consumes no vintages; Review by 10-20 |
 > | [2026-08-30] EXP-028a | ≥28 vintages | **TRIGGERED** (30) — Review by 10-31 |
-> | [2026-08-30] EXP-023a Stage B | ≥45 vintages | waiting (30/45); Review by 11-15 |
+> | [2026-08-30] EXP-023a Stage B | ≥45 vintages | **PARKED 2026-10-28**, see [2026-10-28] park entry |
+> | [2026-10-28] product criterion | FM Stage 3 shadow reaches 14 vintages | pre-committed; gates the swap beside ADR-007 |
 > | [2026-08-31] feed divergence | two normal-hour publishes | **DUE** — Review by 09-30 passed |
 > | [2026-09-10] ARF not a backup | ARF failure / date | **DUE** — Review by 10-01 passed |
 > | [2026-05-29] publishable | engineer's call | not due (12-31) |
 >
 > Vintage holes: count them from `calibration_history` at run time; do not trust a list here. Holes since 2026-09-14 have not been enumerated.
+
+### [2026-10-28] Product criterion: a forecaster earns the dashboard only by ranking cheap hours at least as well as the profile floor, in every horizon group
+
+**Position (provisional):** the dashboard's job is choosing *when* to run a heat pump or charge a car, so the metric that decides what it serves is cheap-hour cost regret, not MAE. EXP-037 showed the two disagree: production LightGBM improves MAE by flattening (forecast amplitude 14–15 vs realised 42 EUR/MWh beyond 24h) and so ranks cheap hours *worse* than the carry (k6 regret 9.2 / 10.7 at h25_48 / h49_72 vs the carry's 5.3 / 4.8). EXP-036 pre-committed that a scalar floor is the wrong shape, so the bar is per horizon group.
+
+**Why now, and why this is a new entry, not an edit:** no fresh-vintage regret has been computed for any arm at the time of writing (the daily eval log carries MAE only). ADR-007's skill gate and EXP-021a's four Stage 1 gates are untouched; this adds a second, product-level condition to the *swap*, written before its data exists.
+
+**Method (pre-committed 2026-10-28):** at the end of any live shadow (first use: the EXP-021a Stage 3 Chronos shadow, 14 evaluable vintages), score each 24-slot block (h1_24, h25_48, h49_72) per vintage with `score_block` from `scripts/exp037_rank_metric.py` (k = 3 and 6, stable-sort ties, partial blocks dropped, never padded). The candidate passes iff, **in each of the three blocks**, its mean **k6** regret is at or below the EXP-036 profile floor's (`naive_profile_prediction`, 5 matching day types) on the same blocks. k3 and Spearman are reported, never gated. A paired DM (HAC lags 3, one-sided) is reported per block as the strength of evidence; it does not gate, because 14 blocks per group cannot carry a p < 0.10 test reliably, and a gate that cannot pass at the available n is an abstention, not a criterion.
+
+**Alternatives (failure-mode signals):**
+1. **Regret is too noisy at n = 14 to rank anything.** **Signal:** the per-block regret standard error exceeds the candidate-floor difference in two or more groups. Then extend the shadow to 28 vintages before deciding; do not loosen the bar.
+2. **The floor wins at h1_24 only, where both are already good.** **Signal:** the candidate fails h1_24 by under 0.5 EUR/MWh and wins the other two by more than 2. That is a real failure under this Method; a hybrid (floor for h1_24) is a new entry, not a reading of this one.
+
+**Review by:** when the first Stage 3 shadow reaches 14 vintages.
+
+### [2026-10-28] Park EXP-018a Stage 1 and EXP-023a Stage B: LightGBM tuning cannot move the decision that is open
+
+**Position:** both entries tune the incumbent (feature set, window length) while every standing finding says the bottleneck is the model class (`memory/model-class-findings.md`: feature engineering closed at 56 days; the FM's context advantage is not recoverable inside LightGBM). Their Methods stand as written and are not edited; they are parked, not refuted. EXP-018a's only downstream role was choosing EXP-021a's incumbent arm, and EXP-021a's own Method already says that, with 018a unconcluded, *"the primary gate stays against `lean`, the harder bar"*.
+
+**Revisit trigger:** EXP-021a fails Stage 1 or Stage 2 (then LightGBM stays in production and tuning it matters again), or the engineer asks.
 
 ### [2026-09-10] ARF is not a backup: it and production die through the same door, and it dies harder
 
