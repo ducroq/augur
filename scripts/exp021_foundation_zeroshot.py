@@ -96,7 +96,9 @@ def mode_contexts(args: argparse.Namespace) -> None:
     from exp018_stage0_ablation import vintage_t0s
     from exp020_fundamentals_ablation import load_frame_ext, required_columns
 
-    require = required_columns(list(CTL_VARIANTS))
+    # Default reproduces EXP-021. A run whose incumbents were trained on fewer
+    # variants must pass the same list, or the FM reads a different row set.
+    require = required_columns(args.ctl_variants.split(","))
     features, prices = load_frame_ext(Path(args.parquet), require)
 
     start = pd.Timestamp(args.start, tz="UTC")
@@ -193,7 +195,7 @@ def mode_contexts(args: argparse.Namespace) -> None:
         "vintage_end": args.end,
         "window_days": WINDOW_DAYS,
         "max_horizon": MAX_HORIZON,
-        "ctl_variants_defining_row_set": list(CTL_VARIANTS),
+        "ctl_variants_defining_row_set": args.ctl_variants.split(","),
         "require_columns": require,
         "n_vintages": int(lengths.size),
         "n_skipped_short": len(skipped),
@@ -620,6 +622,12 @@ def main() -> None:
         help="end each context this many hours before t0. 0 = everything known "
         "at t0. 1 = matched to the incumbent, whose features are shift(1) and "
         "therefore stop at t0-1h (code-review battery, 2026-08-29).",
+    )
+    c.add_argument(
+        "--ctl-variants",
+        default=",".join(CTL_VARIANTS),
+        help="variants whose required columns define the row set; must equal the "
+        "--variants of the incumbent run being paired against (EXP-038).",
     )
     c.set_defaults(func=mode_contexts)
 

@@ -34,12 +34,30 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 > | [2026-09-06] augur#29 verdict | ≥21 qualifying rows | **TRIGGERED** (~33) — consumes no vintages; Review by 10-20 |
 > | [2026-08-30] EXP-028a | ≥28 vintages | **TRIGGERED** (30) — Review by 10-31 |
 > | [2026-08-30] EXP-023a Stage B | ≥45 vintages | **PARKED 2026-10-28**, see [2026-10-28] park entry |
+> | [2026-10-28] EXP-038 FM early read | runs 2026-10-28 | pre-committed; a PASS opens Stage 2 early, anything else waits for 021a Stage 1 |
 > | [2026-10-28] product criterion | FM Stage 3 shadow reaches 14 vintages | pre-committed; gates the swap beside ADR-007 |
 > | [2026-08-31] feed divergence | two normal-hour publishes | **DUE** — Review by 09-30 passed |
 > | [2026-09-10] ARF not a backup | ARF failure / date | **DUE** — Review by 10-01 passed |
 > | [2026-05-29] publishable | engineer's call | not due (12-31) |
 >
 > Vintage holes: count them from `calibration_history` at run time; do not trust a list here. Holes since 2026-09-14 have not been enumerated.
+
+### [2026-10-28] EXP-038: an early, tripwire-exempt read of EXP-021a Stage 1 on the window the EDH outage compromised
+
+**Position (provisional):** Chronos-Bolt's zero-shot win reproduces on the 60 fresh vintages that exist now (t0 2026-08-25 .. 2026-10-25), even though their contexts contain the 2026-08-31 EDH outage.
+
+**Why a new entry:** EXP-021a Stage 1 cannot run as written yet. Its contexts tripwire (missing fraction ≤ 5% and no run > 48h, `exp021_foundation_zeroshot.py` contexts mode) reads **COMPROMISED** on this window: 6.67% missing, longest run 90h, almost all of it the 72h EDH price outage from 2026-08-31 22:00 UTC. ADR-007 forbids loosening that tripwire, so EXP-021a Stage 1 stays as written and runs on clean vintages (t0 ≥ 2026-10-30, so 14 realised ≈ 2026-11-16). This entry is a separate, smaller bet on the compromised window, with an asymmetric reading fixed in advance.
+
+**Why the asymmetry is honest:** the outage is a hole in *both* arms' information set: LightGBM trains on the same 56 days minus the dropped rows, and the FM reads the same prices with the hole marked NaN. Neither arm sees any value the other cannot. What the tripwire protects against is asking the FM to read a series that is mostly hole, which degrades the FM, not the incumbent. So a hole can make the FM look worse than it is, and is not a plausible route to it looking better.
+
+**Method (pre-committed 2026-10-28, before any prediction on this window exists):**
+- Contexts: `contexts --ctl-variants full,lean --start 2026-08-25 --end 2026-10-26 --context-end-offset-h 1`, parquet snapshot `~/lab/augur/data/training_history_2026-10-28.parquet` (sha256 recorded in the registry row). `--ctl-variants full,lean` makes the FM row set equal the incumbent run's (`exp020_fundamentals_ablation.py --variants full,lean`, same window and parquet), where EXP-021 used all four control variants. Already built: 60 vintages, 4,108 targets on both sides.
+- Predict `chronos-bolt-base` on CPU (situla), score with the unchanged `score` mode.
+- Gates: **EXP-021a Stage 1's four, verbatim**, primary against `lean`: DM on per-observation quantile score one-sided p < 0.10 (HAC 71); FM QS ≥ 10% better; coverage each side not more than 0.02 worse; Winkler ≤ 1.05×.
+- **Reading:** all four pass → **PASS**: Stage 2 (sadalsuud feasibility) may start now, and EXP-021a Stage 1 still runs on clean vintages as the formal confirmation. Anything else → **INCONCLUSIVE**, never "refuted": the compromised window cannot refute, by the asymmetry above. Then wait for EXP-021a Stage 1.
+- Descriptive only: cheap-hour regret per block against carry and profile (`ml/shadow/regret.py:score_block`).
+
+**Review by:** 2026-10-29 (runs today).
 
 ### [2026-10-28] Product criterion: a forecaster earns the dashboard only by ranking cheap hours at least as well as the profile floor, in every horizon group
 
