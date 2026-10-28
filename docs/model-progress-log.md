@@ -4,7 +4,25 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
-## 2026-09-14 (latest) — The forecast anchor moved 24h, because the readiness gate never tested freshness
+## 2026-10-28 (latest) — Live cheap-hour regret: hours 25–72 were never scored, and the profile floor ranks twice as well everywhere
+
+**No model or forecast logic changed.** A new nightly step, `python -m ml.shadow.regret`, appends k3/k6 cost regret per 24-slot horizon block (h1_24, h25_48, h49_72) for the shipped `p50`, the carry and the EXP-036 profile to `ml/shadow/regret_log.jsonl`. It is its own step in `daily_update.sh`, and a failure rides the subject as `[ALARM: regret pass failed rc=N]`. It serves the product criterion pre-committed in `docs/hypothesis-log.md` [2026-10-28].
+
+**Why it could not live in `eval_log.jsonl`.** A day is logged once, as soon as 24 hours are realised, so every eval row covers horizons 1–24 (`naive_min/max_horizon_h` = 1/24 on every recent row). Hours 25–72, where EXP-037 found the amplitude collapse, have never been scored live. Every live MAE or skill number quoted from `eval_log` is an h1_24 number.
+
+**First reading** (backfilled from the committed states of 2026-10-14 and 2026-10-28; vintages with t0 ≥ 2026-09-14 where all three arms are complete; 36–38 per block; mean k6 regret, EUR/MWh):
+
+| block | LightGBM | carry | profile | LightGBM amplitude | realised amplitude |
+|---|---|---|---|---|---|
+| h1_24 | 12.32 | 10.68 | 6.37 | 31.6 | 51.8 |
+| h25_48 | 11.03 | 11.09 | 6.25 | 23.8 | 54.1 |
+| h49_72 | 9.65 | 11.63 | 6.40 | 20.5 | 54.4 |
+
+Descriptive, not a gate (the criterion gates a future shadow, not the incumbent). It reproduces EXP-037's mechanism live: the shipped forecast carries 40–60% of the real daily swing, and the seven-line profile floor picks cheap hours about twice as well as production in every block. Re-derive from the log: rows with `date >= 2026-09-14`, not `incomplete`, and non-null `naive_regret_k6` and `profile_regret_k6`.
+
+**Blocks that can never complete** (a withheld or non-ENTSO-E hour) are logged once as `incomplete: true` with their slot count, 48h after the block's last hour, rather than dropped silently. 9 of 126 rows at backfill.
+
+## 2026-09-14 — The forecast anchor moved 24h, because the readiness gate never tested freshness
 
 **No model or forecast logic changed today**, and no production path was touched. What changed is the *meaning* of every forecast the pipeline has published since 2026-09-13, which is why it is in this log rather than only in the gotcha record.
 

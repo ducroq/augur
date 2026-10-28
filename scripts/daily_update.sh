@@ -188,6 +188,17 @@ if [ $SHADOW_CONSOLIDATE_RC -eq 0 ] && [ $DEP_PROBE_OK -eq 1 ]; then
         if [ $SHADOW_EVAL_RC -ne 0 ]; then
             echo "WARN: shadow evaluation failed (rc=$SHADOW_EVAL_RC) — continuing"
         fi
+        # Product criterion (hypothesis-log [2026-10-28]): cheap-hour regret per
+        # horizon block. Its own step and rc, so a failure is an ALARM in the
+        # subject rather than a log line: calibration_history holds 30 days,
+        # and blocks not scored within them are lost.
+        echo "Running regret pass..."
+        python -m ml.shadow.regret --state $AUGUR_DIR/ml/models/shadow/shadow_state.json \
+            --regret-log $AUGUR_DIR/ml/shadow/regret_log.jsonl
+        REGRET_RC=$?
+        if [ $REGRET_RC -ne 0 ]; then
+            echo "WARN: regret pass failed (rc=$REGRET_RC) — continuing"
+        fi
     else
         echo "WARN: shadow update failed (rc=$SHADOW_UPDATE_RC) — dashboard forecast will be stale"
     fi
@@ -484,6 +495,7 @@ git add ml/models/river_model.pkl ml/models/state.json static/data/augur_forecas
 [ -f ml/models/shadow/shadow_state.json ] && git add ml/models/shadow/shadow_state.json
 [ -f static/data/augur_forecast_shadow.json ] && git add static/data/augur_forecast_shadow.json
 [ -f ml/shadow/eval_log.jsonl ] && git add ml/shadow/eval_log.jsonl
+[ -f ml/shadow/regret_log.jsonl ] && git add ml/shadow/regret_log.jsonl
 
 # Compose status string from per-step return codes — replaces the
 # hardcoded "ARF + LGBM-shadow" message that hid the May 1-7 silent
@@ -496,6 +508,8 @@ DEP_MARKER=""
 # ARF is now a non-fatal backup signal — report its real rc, don't hardcode "OK".
 ARF_STATUS="ARF OK"
 [ "${ARF_UPDATE_RC:-0}" -ne 0 ] && ARF_STATUS="ARF FAIL rc=${ARF_UPDATE_RC}"
+REGRET_MARKER=""
+[ "${REGRET_RC:-0}" -ne 0 ] && REGRET_MARKER=" [ALARM: regret pass failed rc=${REGRET_RC}]"
 SMOKE_MARKER=""
 [ "${SMOKE_OK:-1}" = "0" ] && SMOKE_MARKER=" [ALARM: smoke tests failed]"
 
@@ -512,7 +526,7 @@ if [ -f "$EDH_VERDICT_FILE" ]; then
 fi
 
 git diff --cached --quiet && echo "No changes to commit" || {
-    git commit -m "Daily update $(date -u '+%Y-%m-%d') — ${ARF_STATUS} | ${SHADOW_STATUS}${STALE_MARKER}${DEP_MARKER}${SMOKE_MARKER}${ARF_EMPTY_MARKER}${EVAL_STALE_MARKER}${NAIVE_MARKER}${T0_MARKER}${EDH_MARKER}"
+    git commit -m "Daily update $(date -u '+%Y-%m-%d') — ${ARF_STATUS} | ${SHADOW_STATUS}${STALE_MARKER}${DEP_MARKER}${SMOKE_MARKER}${REGRET_MARKER}${ARF_EMPTY_MARKER}${EVAL_STALE_MARKER}${NAIVE_MARKER}${T0_MARKER}${EDH_MARKER}"
     git push
 }
 
