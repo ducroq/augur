@@ -2,7 +2,7 @@
 
 **Generated file — do not edit.** Rendered from `experiments/registry.jsonl` and the `summary.json` artifacts it references, by `scripts/render_results.py`. Regenerate after appending to the registry; `--check` fails if this file is stale.
 
-Registry state: **35 entries**, rendered at `bad615b`. Integrity of the underlying record is verified separately by `scripts/audit_registry.py` (schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed).
+Registry state: **36 entries**, rendered at `91e18ce`. Integrity of the underlying record is verified separately by `scripts/audit_registry.py` (schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed).
 
 Decision values: `kept` (evidence stands / in production) · `parked` (works, not adopted, revisit) · `rejected` (does not work) · `rolled_back` · `superseded`.
 
@@ -62,6 +62,7 @@ The registry records *what was found*; the **revisit trigger and review-by date 
 | EXP-033 | EXP-021a Stage 2 latency gate discharged on the real host |
 | EXP-036 | The skill floor was too weak |
 | EXP-037 | The product lens does not rescue the incumbent |
+| EXP-038 | Chronos-Bolt's zero-shot win reproduces on 60 fresh vintages |
 | EXP-001 | Initial ARF warmup baseline (pre-backfill) |
 
 ## Summary
@@ -103,6 +104,7 @@ The registry records *what was found*; the **revisit trigger and review-by date 
 | EXP-035 | 2026-09-06 | parked | — | Every stored arm re-scored against a seasonal-naive floor: the foundation model clears it in all 9 months, no LightGBM configuration clears it in August |
 | EXP-036 | 2026-09-11 | **kept** | — | The skill floor was too weak: every profile baseline beats the single-day carry, and against the best one the incumbent is 12.4% BELOW the floor |
 | EXP-037 | 2026-09-11 | **kept** | — | The product lens does not rescue the incumbent: on cost regret it is WORSE than the carry it already barely beat on MAE, and the cause is amplitude collapse |
+| EXP-038 | 2026-10-28 | **kept** | — | Chronos-Bolt's zero-shot win reproduces on 60 fresh vintages: 21.5% better quantile score than lean LightGBM, better calibrated, and best on cheap-hour regret at h1-48 |
 
 ## EXP-001 — Initial ARF warmup baseline (pre-backfill)
 
@@ -1511,5 +1513,40 @@ The registry records *what was found*; the **revisit trigger and review-by date 
 **Caveats.** No GPU, no fresh vintages, no production path touched: pure re-scoring of predictions already stored by EXP-018 and EXP-021, on the identical vintage set EXP-035 used, so the two experiments are comparable line for line. 755 blocks from 253 vintages survived the all-arms-defined intersection out of 253*3=759. The baseline function is IMPORTED from scripts/exp035_naive_floor.py rather than reimplemented, so the carry is bit-identical to the one augur#29's floor is measured against. Method pre-committed 2026-09-11 before any rank or regret number existed, including HAC bandwidth 3 (the observation is a block, not an hour) and the 1.0 EUR/MWh materiality bar, so a statistically real but economically irrelevant win could not have been reported as a product finding. The author's stated position was wrong in direction and magnitude; it is recorded above unedited. Caveat inherited from EXP-035: the LightGBM arms are the EXP-018 harness's walk-forward rebuilds, production-shaped but not the literal deployed model. One nuance worth not over-reading: in August 2026 the incumbent BEATS the carry on regret (+0.26) although it is that month's worst MAE performer - regret is small for everyone in August (1.26 for the carry) because a deep solar midday dip makes the cheap hours easy to find. It is one month and the pre-committed reading is the pooled one.
 
 **Artifacts.** `ml/shadow/exp037_rank_metric/summary.json` · `ml/shadow/exp037_rank_metric/diagnostics.json` · `scripts/exp037_rank_metric.py` · `scripts/exp037_diagnostics.py`
+
+---
+
+## EXP-038 — Chronos-Bolt's zero-shot win reproduces on 60 fresh vintages: 21.5% better quantile score than lean LightGBM, better calibrated, and best on cheap-hour regret at h1-48
+
+****kept**** · 2026-10-28 · model: amazon/chronos-bolt-base zero-shot (CPU, situla) vs LightGBM-Quantile full and lean retrained per vintage (EXP-020 control harness)
+
+**Hypothesis.** Early, tripwire-exempt read of EXP-021a Stage 1 on t0 2026-08-25..2026-10-25, whose contexts include the 2026-08-31 72h EDH outage (tripwire COMPROMISED: 6.67% missing, 90h run). Pre-committed reading: all four Stage 1 gates pass -> PASS, Stage 2 may start; anything else -> INCONCLUSIVE, never refuted.
+
+**Outcome.** All four EXP-021a Stage 1 gates pass against lean (and full), so by the pre-committed reading Stage 2 (sadalsuud feasibility) may start now. EXP-021a Stage 1 still runs unchanged on clean vintages (~2026-11-16) as the formal confirmation.
+
+<details><summary>All recorded metrics (12)</summary>
+
+| metric | value |
+|---|---|
+| `fm_quantile_score` | 12.2228 |
+| `lean_quantile_score` | 15.5768 |
+| `qs_delta_pct_vs_lean` | -21.5317 |
+| `dm_p_one_sided_vs_lean` | 7.51312e-09 |
+| `fm_coverage_lower` | 0.867575 |
+| `fm_coverage_upper` | 0.880964 |
+| `lean_coverage_lower` | 0.805015 |
+| `lean_coverage_upper` | 0.780672 |
+| `fm_winkler` | 179.024 |
+| `lean_winkler` | 238.193 |
+| `regret_k6_h49_72_fm` | 7.867 |
+| `regret_k6_h49_72_profile` | 7.811 |
+
+</details>
+
+**Caveats.** Descriptive only: k6 regret at h49_72 is a tie with the EXP-036 profile floor (FM 7.867 vs profile 7.811), the one block where the product criterion could fail in the Stage 3 shadow. Parquet snapshot ~/lab/augur/data/training_history_2026-10-28.parquet, sha256 62322996746cdd68b8a6b8c71eb76f0616c939920bcd4b031b121e4aef1bc889. Prediction dumps in /home/jeroen/lab/augur/shadow/exp038_*.
+
+**Artifacts.** `ml/shadow/exp038_fm_early/summary.json` · `ml/shadow/exp038_fm_early/contexts_meta.json` · `ml/shadow/exp038_fm_early/fm_predict_meta.json` · `ml/shadow/exp038_incumbents/summary.json` · `scripts/exp021_foundation_zeroshot.py`
+
+**Commits.** `91e18ce`
 
 ---

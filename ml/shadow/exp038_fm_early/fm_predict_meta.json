@@ -1,0 +1,31 @@
+{
+  "model": "amazon/chronos-bolt-base",
+  "device": "cpu",
+  "torch_dtype": "float32",
+  "quantile_levels": [
+    0.1,
+    0.5,
+    0.9
+  ],
+  "prediction_length": 73,
+  "context_end_offset_h": 1,
+  "native_prediction_length": 64,
+  "native_context_length": 2048,
+  "native_quantile_levels": [
+    0.1,
+    0.2,
+    0.3,
+    0.4,
+    0.5,
+    0.6,
+    0.7,
+    0.8,
+    0.9
+  ],
+  "batch_size": 32,
+  "n_vintages": 60,
+  "n_rows": 4108,
+  "n_quantile_crossings_raw": 0,
+  "torch_version": "2.14.1+cpu",
+  "cuda_device": null
+}

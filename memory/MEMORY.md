@@ -4,17 +4,17 @@
      Rewritten lean 2026-10-16 (was 46.6k chars); the previous text is verbatim in
      memory/archive/memory-index-2026-10-16.md. Do not grow narrative back here. -->
 
-## ON "CONTINUE" — the queue (set 2026-10-16)
+## ON "CONTINUE" — the queue (set 2026-10-28)
 
-The gates are met and nothing has run against them since 2026-09-14. Counts as of 2026-10-16 are in `docs/hypothesis-log.md` `## Open` (table at the top). Count again before running; don't trust a date. Work the queue in this order:
+Direction since 2026-10-28: judge forecasters on cheap-hour regret per horizon block against the EXP-036 profile floor (`docs/hypothesis-log.md` [2026-10-28] product criterion), and take the Chronos ladder first. LightGBM tuning (EXP-018a, EXP-023a Stage B, EXP-034) is parked.
 
-1. (Done 2026-10-16: the b650-gpu `~/augur-fm` and `~/augur-run` dirs were deleted after all 18 pulled files matched restic snapshot `c163fe7f`.)
-2. **EXP-018a Stage 1** (`lean` vs `full`). First claim on the fresh window. Runner: `scripts/exp018_stage0_ablation.py`.
-3. **augur#29 verdict**: production vs seasonal-naive floor, ≥21 qualifying rows (about 33 now). Consumes no vintages, so it can run beside 2.
-4. **EXP-021a Stage 1** (FM ladder on fresh vintages), then **EXP-028a** (Chronos-2 covariates, 30 of 28 vintages). GPU arms follow the b650 rule: pull the results to `~/lab/augur`, then delete there.
+1. **EXP-021a Stage 2** (sadalsuud feasibility): unblocked by **EXP-038 PASS** (2026-10-28; −21.5% QS vs `lean`, better coverage). Measure CPU latency (10 runs, ≤60s), whether torch installs beside the pins, and the p95 per-vintage MAE ratio (≤1.5), as pre-committed in the EXP-021a entry. Then Stage 3: a 14-vintage shadow writing `augur_forecast_fm.json`, dashboard untouched.
+2. **augur#29 verdict**: overdue (Review by 10-20). Uses no new vintages. Note that `eval_log` rows cover h1–24 only.
+3. **EXP-021a Stage 1, formal**: unchanged, on clean vintages (t0 ≥ 2026-10-30; 14 realised ≈ 2026-11-16). Its contexts tripwire fired on the EDH-outage window, which is why EXP-038 exists.
+4. **EXP-028a** (Chronos-2 covariates): Review by 10-31.
 5. Due reviews, no run needed: **[2026-09-10] ARF not a backup** (augur#32) and **[2026-08-31] feed divergence**.
-6. Waiting: EXP-023a Stage B (30/45 vintages); EXP-034 runs after 018a.
-7. Pruning (token cost, 2026-10-28): move `memory/session-archive.md` into `memory/archive/` (fix its pointers); `/audit-context` Step 8 retirement pass over `docs/model-progress-log.md` (117k), `hypothesis-log.md` `## Open` (71k), `experiment-backlog.md` (57k); once upstream v1.50.1 is tagged, run `install-global-skills.sh` and re-check byte identity.
+6. Watch `ml/shadow/regret_log.jsonl` (nightly since 2026-10-28). At h49–72 Chronos only ties the profile floor (EXP-038: 7.87 vs 7.81), which is where the product criterion could fail.
+7. Pruning (token cost, 2026-10-28): move `memory/session-archive.md` into `memory/archive/` (fix its pointers); `/audit-context` Step 8 retirement pass over `docs/model-progress-log.md`, `hypothesis-log.md` `## Open` and `experiment-backlog.md`; once upstream v1.50.1 is tagged, run `install-global-skills.sh` and re-check byte identity.
 
 Before any model work, read `docs/experiment-results.md` Decision state and `memory/model-class-findings.md` (EXP-036 rescales every effect size).
 
@@ -40,8 +40,8 @@ Before any model work, read `docs/experiment-results.md` Decision state and `mem
   Plus post-run output guards. <!-- verify: grep -q "ARF_FC_HOURS" scripts/daily_update.sh && grep -q "EVAL_LAG_DAYS" scripts/daily_update.sh && echo PASS || echo FAIL -->
 - **Alerting**: OnFailure + 06:00 heartbeat, which reads the commit subject. `[ALARM:]` is a fault; `[NOTE:]` is invisible by design. The heartbeat can't see sadalsuud itself being down (accepted). <!-- verify: [ -f scripts/notify_email.py ] && [ -f scripts/alert_failure.sh ] && [ -f scripts/heartbeat_check.sh ] && grep -q "OnFailure=augur-alert" scripts/systemd/augur-daily.service.d/alert.conf && echo PASS || { echo FAIL; exit 1; } -->
 - **Skill floor (augur#29)**: production doesn't reliably beat seasonal-naive; against EXP-036's profile floor it sits at −12.4%. The eval log scores both floors daily. <!-- verify: grep -q "lightgbm_skill_vs_naive" ml/shadow/evaluate_shadow.py && grep -q "NAIVE_MARKER" scripts/daily_update.sh && grep -q "t0_utc" ml/shadow/update_shadow.py && echo "floor, reader and anchor all present" || exit 1 -->
-- **Model-class record**: EXP-001..037 in the registry (gaps at 017 and 034). The FM wins (EXP-021), but quote EXP-036's halving beside it. <!-- verify: [ -f scripts/exp021_foundation_zeroshot.py ] && .venv/bin/python -c "import json;g=json.load(open('ml/shadow/exp021_foundation_aligned/summary.json'))['gates']['primary'];print('primary verdict',g['verdict']);raise SystemExit(0 if g['verdict'].startswith('SUPERIORITY') else 1)" -->
-  <!-- verify: n=$(wc -l < experiments/registry.jsonl); last=$(tail -1 experiments/registry.jsonl | .venv/bin/python -c "import json,sys; print(json.load(sys.stdin)['id'])"); echo "$n lines, last $last"; [ "$n" = 35 ] && [ "$last" = EXP-037 ] || exit 1 -->
+- **Model-class record**: EXP-001..038 in the registry (gaps at 017 and 034). The FM wins (EXP-021), but quote EXP-036's halving beside it. <!-- verify: [ -f scripts/exp021_foundation_zeroshot.py ] && .venv/bin/python -c "import json;g=json.load(open('ml/shadow/exp021_foundation_aligned/summary.json'))['gates']['primary'];print('primary verdict',g['verdict']);raise SystemExit(0 if g['verdict'].startswith('SUPERIORITY') else 1)" -->
+  <!-- verify: n=$(wc -l < experiments/registry.jsonl); last=$(tail -1 experiments/registry.jsonl | .venv/bin/python -c "import json,sys; print(json.load(sys.stdin)['id'])"); echo "$n lines, last $last"; [ "$n" = 36 ] && [ "$last" = EXP-038 ] || exit 1 -->
 - **Experiment data** (gitignored dumps) lives in `/home/jeroen/lab/augur/shadow/`, linked back to its old paths; `scripts/link_lab.sh` recreates the links (2026-10-16). It isn't byte-reproducible, so treat it as data. Since 2026-10-16 it also holds the EXP-024/026/027/028 dumps pulled from b650-gpu. <!-- verify: [ -L lab ] && [ -L ml/shadow/exp021_foundation_aligned/contexts.parquet ] && [ -f ml/shadow/exp028_chronos2/c2_predictions.parquet ] && echo "lab link + data links resolve" || { echo "links missing: run scripts/link_lab.sh"; exit 1; } -->
 - **Tests**: 389 collected. <!-- verify: n=$(.venv/bin/python -m pytest tests/ --collect-only -q 2>&1 | grep -oE "[0-9]+ tests" | grep -oE "[0-9]+"); echo "collected ${n:-none}"; [ "$n" = 389 ] || exit 1 -->
 - **Calibration (augur#19)**: the P80 band under-covers on the upper side (Aug: 0.887 lower / 0.774 upper). EXP-015/016's premise is stale. Confound: CQR window depth changed with the 2026-09-13 anchor shift.

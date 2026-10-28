@@ -1,0 +1,144 @@
+{
+  "config": {
+    "parquet": "/home/jeroen/lab/augur/data/training_history_2026-10-28.parquet",
+    "vintage_start": "2026-08-25",
+    "vintage_end": "2026-10-26",
+    "window_days": 56,
+    "max_horizon": 72,
+    "hac_lags": 71,
+    "quantiles": [
+      0.1,
+      0.5,
+      0.9
+    ],
+    "cqr_applied": false,
+    "n_vintages": 60,
+    "residual_load_definition": "load_forecast - wind_gen_forecast_mw - solar_gen_forecast_mw",
+    "primary_comparison": "lean_fund vs lean",
+    "confirmatory_comparison": "full_fund vs full",
+    "purpose": "discovery \u2014 winners must clear fresh-vintage gates (docs/hypothesis-log.md [2026-08-29])"
+  },
+  "variants": {
+    "full": {
+      "n_obs": 4108,
+      "n_vintages": 60,
+      "mae": 46.684549414025,
+      "quantile_score": 16.223790723627932,
+      "coverage_lower": 0.7799415774099319,
+      "coverage_upper": 0.7986854917234664,
+      "coverage_band": 0.5786270691333982,
+      "band_width_median": 103.65551743012458,
+      "winkler": 250.49504132809017,
+      "n_features": 24,
+      "columns": [
+        "price_lag_1h",
+        "price_lag_2h",
+        "price_lag_3h",
+        "price_lag_6h",
+        "price_lag_12h",
+        "price_lag_24h",
+        "price_lag_48h",
+        "price_lag_168h",
+        "price_rolling_mean_6h",
+        "price_rolling_mean_24h",
+        "price_rolling_mean_168h",
+        "price_rolling_std_6h",
+        "price_rolling_std_24h",
+        "price_rolling_std_168h",
+        "hour",
+        "hour_sin",
+        "hour_cos",
+        "dow_sin",
+        "dow_cos",
+        "is_weekend",
+        "month_sin",
+        "wind_speed_80m",
+        "solar_ghi",
+        "load_forecast"
+      ],
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 354,
+          "mae": 23.766173005244838,
+          "quantile_score": 8.591780412946433,
+          "coverage_lower": 0.652542372881356,
+          "coverage_upper": 0.8050847457627118
+        },
+        "h7_24": {
+          "n_obs": 1050,
+          "mae": 43.42210208324236,
+          "quantile_score": 15.28892209591952,
+          "coverage_lower": 0.7704761904761904,
+          "coverage_upper": 0.7885714285714286
+        },
+        "h25_72": {
+          "n_obs": 2704,
+          "mae": 50.9518108585627,
+          "quantile_score": 17.585974047990018,
+          "coverage_lower": 0.8002958579881657,
+          "coverage_upper": 0.8017751479289941
+        }
+      }
+    },
+    "lean": {
+      "n_obs": 4108,
+      "n_vintages": 60,
+      "mae": 45.56368398936251,
+      "quantile_score": 15.576778240124161,
+      "coverage_lower": 0.805014605647517,
+      "coverage_upper": 0.7806718597857838,
+      "coverage_band": 0.5856864654333008,
+      "band_width_median": 106.80463177225036,
+      "winkler": 238.1926890429417,
+      "n_features": 15,
+      "columns": [
+        "price_lag_1h",
+        "price_lag_2h",
+        "price_lag_3h",
+        "price_lag_6h",
+        "price_lag_12h",
+        "price_lag_24h",
+        "price_lag_48h",
+        "price_lag_168h",
+        "hour",
+        "hour_sin",
+        "hour_cos",
+        "dow_sin",
+        "dow_cos",
+        "is_weekend",
+        "month_sin"
+      ],
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 354,
+          "mae": 25.307192524361522,
+          "quantile_score": 9.049513567149747,
+          "coverage_lower": 0.7288135593220338,
+          "coverage_upper": 0.7598870056497176
+        },
+        "h7_24": {
+          "n_obs": 1050,
+          "mae": 42.34900762212584,
+          "quantile_score": 14.581933660077024,
+          "coverage_lower": 0.8114285714285714,
+          "coverage_upper": 0.7638095238095238
+        },
+        "h25_72": {
+          "n_obs": 2704,
+          "mae": 49.463908902161634,
+          "quantile_score": 16.817620881870624,
+          "coverage_lower": 0.8125,
+          "coverage_upper": 0.7899408284023669
+        }
+      },
+      "dm_variant_beats_base": {
+        "base": "full",
+        "statistic": -1.3305411577675867,
+        "p_one_sided": 0.09167001755279652,
+        "mean_loss_diff_variant_minus_base": -0.6470124835037684,
+        "hac_lags": 71
+      }
+    }
+  },
+  "gates": {}
+}
