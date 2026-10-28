@@ -1,0 +1,56 @@
+{
+  "precommit": "docs/hypothesis-log.md [2026-08-29] EXP-021a Stage 2",
+  "host": "sadalsuud (8 cores, 30 GB, CPU only)",
+  "date": "2026-10-28",
+  "a_latency": {
+    "context_len": 1343,
+    "prediction_length": 73,
+    "threads": 4,
+    "model_load_s": 1.01,
+    "median_s": 1.175,
+    "max_s": 2.218,
+    "runs_s": [
+      2.218,
+      1.165,
+      1.163,
+      1.163,
+      1.18,
+      1.192,
+      1.172,
+      1.178,
+      1.166,
+      1.181
+    ],
+    "bar_median_s": 60,
+    "pass": true
+  },
+  "b_dependencies": {
+    "method": "fresh venv: pip install -r requirements.lock, then torch (CPU index), then chronos-forecasting==2.3.1; pip check; lock pins compared against pip freeze",
+    "pip_check": "No broken requirements found",
+    "lock_pins": 27,
+    "lock_pins_changed": 0,
+    "torch_resolved": "2.15.0+cpu",
+    "venv_size_production": "577M",
+    "venv_size_with_fm": "1.7G",
+    "pass": true
+  },
+  "c_tail": {
+    "source": "EXP-038 per-vintage MAE of p50, chronos_bolt_base vs lean",
+    "last_14_vintages": {
+      "p95_fm": 87.06,
+      "p95_lean": 109.97,
+      "ratio": 0.792,
+      "worst_day_ratio": 1.38
+    },
+    "all_60_vintages": {
+      "p95_fm": 69.79,
+      "p95_lean": 77.35,
+      "ratio": 0.902,
+      "worst_day_ratio": 1.45
+    },
+    "bar_ratio": 1.5,
+    "pass": true
+  },
+  "verdict": "FEASIBLE",
+  "notes": "torch resolved 2.15.0 on sadalsuud vs 2.14.1 on situla: pin it when Stage 3 adds it to the lockfile. Probe venv in /tmp, removed after the run."
+}

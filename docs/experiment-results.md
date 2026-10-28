@@ -2,7 +2,7 @@
 
 **Generated file — do not edit.** Rendered from `experiments/registry.jsonl` and the `summary.json` artifacts it references, by `scripts/render_results.py`. Regenerate after appending to the registry; `--check` fails if this file is stale.
 
-Registry state: **36 entries**, rendered at `91e18ce`. Integrity of the underlying record is verified separately by `scripts/audit_registry.py` (schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed).
+Registry state: **37 entries**, rendered at `1ccd2b0`. Integrity of the underlying record is verified separately by `scripts/audit_registry.py` (schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed).
 
 Decision values: `kept` (evidence stands / in production) · `parked` (works, not adopted, revisit) · `rejected` (does not work) · `rolled_back` · `superseded`.
 
@@ -63,6 +63,7 @@ The registry records *what was found*; the **revisit trigger and review-by date 
 | EXP-036 | The skill floor was too weak |
 | EXP-037 | The product lens does not rescue the incumbent |
 | EXP-038 | Chronos-Bolt's zero-shot win reproduces on 60 fresh vintages |
+| EXP-039 | Chronos-Bolt is feasible on sadalsuud |
 | EXP-001 | Initial ARF warmup baseline (pre-backfill) |
 
 ## Summary
@@ -105,6 +106,7 @@ The registry records *what was found*; the **revisit trigger and review-by date 
 | EXP-036 | 2026-09-11 | **kept** | — | The skill floor was too weak: every profile baseline beats the single-day carry, and against the best one the incumbent is 12.4% BELOW the floor |
 | EXP-037 | 2026-09-11 | **kept** | — | The product lens does not rescue the incumbent: on cost regret it is WORSE than the carry it already barely beat on MAE, and the cause is amplitude collapse |
 | EXP-038 | 2026-10-28 | **kept** | — | Chronos-Bolt's zero-shot win reproduces on 60 fresh vintages: 21.5% better quantile score than lean LightGBM, better calibrated, and best on cheap-hour regret at h1-48 |
+| EXP-039 | 2026-10-28 | **kept** | — | Chronos-Bolt is feasible on sadalsuud: 1.2s per forecast on CPU, installs beside every pin, and no heavier error tail than lean |
 
 ## EXP-001 — Initial ARF warmup baseline (pre-backfill)
 
@@ -1548,5 +1550,31 @@ The registry records *what was found*; the **revisit trigger and review-by date 
 **Artifacts.** `ml/shadow/exp038_fm_early/summary.json` · `ml/shadow/exp038_fm_early/contexts_meta.json` · `ml/shadow/exp038_fm_early/fm_predict_meta.json` · `ml/shadow/exp038_incumbents/summary.json` · `scripts/exp021_foundation_zeroshot.py`
 
 **Commits.** `91e18ce`
+
+---
+
+## EXP-039 — Chronos-Bolt is feasible on sadalsuud: 1.2s per forecast on CPU, installs beside every pin, and no heavier error tail than lean
+
+****kept**** · 2026-10-28 · model: amazon/chronos-bolt-base zero-shot, CPU
+
+**Hypothesis.** EXP-021a Stage 2, opened by EXP-038's PASS: median CPU latency <= 60s, torch installs alongside the existing pins, and p95 per-vintage MAE ratio (FM / incumbent) <= 1.5.
+
+**Outcome.** All three pre-committed feasibility checks pass by wide margins, so Stage 3 (a 14-vintage live shadow, dashboard untouched) may start.
+
+<details><summary>All recorded metrics (5)</summary>
+
+| metric | value |
+|---|---|
+| `latency_median_s` | 1.175 |
+| `latency_max_s` | 2.218 |
+| `lock_pins_changed` | 0 |
+| `p95_mae_ratio_last_14` | 0.792 |
+| `p95_mae_ratio_all_60` | 0.902 |
+
+</details>
+
+**Caveats.** Venv grows 577M -> 1.7G. torch resolved 2.15.0+cpu on sadalsuud; pin it when Stage 3 lands it in requirements.lock.
+
+**Artifacts.** `ml/shadow/exp039_stage2_feasibility/summary.json`
 
 ---
