@@ -14,6 +14,7 @@ The gates are met and nothing has run against them since 2026-09-14. Counts as o
 4. **EXP-021a Stage 1** (FM ladder on fresh vintages), then **EXP-028a** (Chronos-2 covariates, 30 of 28 vintages). GPU arms follow the b650 rule: pull the results to `~/lab/augur`, then delete there.
 5. Due reviews, no run needed: **[2026-09-10] ARF not a backup** (augur#32) and **[2026-08-31] feed divergence**.
 6. Waiting: EXP-023a Stage B (30/45 vintages); EXP-034 runs after 018a.
+7. Pruning (token cost, 2026-10-28): move `memory/session-archive.md` into `memory/archive/` (fix its pointers); `/audit-context` Step 8 retirement pass over `docs/model-progress-log.md` (117k), `hypothesis-log.md` `## Open` (71k), `experiment-backlog.md` (57k); once upstream v1.50.1 is tagged, run `install-global-skills.sh` and re-check byte identity.
 
 Before any model work, read `docs/experiment-results.md` Decision state and `memory/model-class-findings.md` (EXP-036 rescales every effect size).
 
@@ -46,7 +47,7 @@ Before any model work, read `docs/experiment-results.md` Decision state and `mem
 - **Calibration (augur#19)**: the P80 band under-covers on the upper side (Aug: 0.887 lower / 0.774 upper). EXP-015/016's premise is stale. Confound: CQR window depth changed with the 2026-09-13 anchor shift.
 - **Upstream**: EDH misses ~11% of days, and their alerting is diagnosis, not detection. See `upstream-edh.md`.
 - **Branches**: `wip/drop-epex-target` (REVIEW-class, stale number) and two April feature branches stay parked, unmerged and undeleted on purpose. Reasons in `memory/archive/memory-index-2026-10-16.md`.
-- **Framework**: agent-ready-projects v1.37.0 (drift-checked 2026-09-06).
+- **Framework**: agent-ready-projects v1.50.0 (drift-checked 2026-10-28; v1.38–v1.50 already in force via the global skills, byte-identical to v1.50.0). **Declined v1.40.0** (`review-changes` + `.claude/review-profile.md`): pre-commit review stays on the built-in `/code-review`, cheaper than the full battery. Without a profile, `/review-changes` stops by design; v1.41.0, v1.45.1 and v1.50.0 are N/A for that reason.
 - **Index size**: ceiling 20k chars. Past it, move a topic out; don't compress. <!-- verify: n=$(wc -m < memory/MEMORY.md); echo "index chars: $n (ceiling 20000)"; [ "$n" -lt 20000 ] || { echo "OVER 20k: move a topic out"; exit 1; } -->
 
 ## Active decisions
