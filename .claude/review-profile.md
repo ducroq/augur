@@ -64,8 +64,9 @@ MEDIUM. A hand edit to them is a carve-out below.
   never edited once committed.** A changed method is a new, dated entry. In the hypothesis
   log, dated notes and addenda may follow a Method. In the backlog, check 5 hashes the
   **whole** `## EXP-NNN` section, so anything added later goes in a section of its own
-  (`## Addendum … to EXP-NNN`). Check 5 covers the backlog only; the hypothesis log rests
-  on review.
+  (`## Addendum YYYY-MM-DD to EXP-NNN`), which check 5 hashes and which must be pinned in
+  `PRECOMMIT_REV_BY_ID` too. Check 5 covers the backlog only; the hypothesis log rests on
+  review.
 - `experiments/registry.jsonl`, `scripts/audit_registry.py`, `scripts/render_results.py`: the
   registry is append-only for decided experiments. The audit exits non-zero on drift,
   including check 5, the sha256 of backlog Method bodies. `docs/experiment-results.md` is only

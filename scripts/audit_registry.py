@@ -55,6 +55,7 @@ PRECOMMIT_REV_BY_ID = {
     "EXP-036": "2113e1f",
     "EXP-037": "2e96bb9",
     "EXP-040": "d53af7a",
+    "EXP-040/addendum-2026-10-29": "47b2f16",
 }
 BACKLOG = "docs/experiment-backlog.md"
 
@@ -125,12 +126,17 @@ def method_sections(text):
     """
     out = {}
     for part in re.split(r"\n## ", text)[1:]:
-        m = re.match(r"(EXP-\d+)", part.split("\n", 1)[0].strip())
-        if m:
+        head = part.split("\n", 1)[0].strip()
+        m = re.match(r"(EXP-\d+)", head)
+        # A dated addendum supersedes part of a pinned Method, so it is
+        # hashed and pinned like one: `## Addendum YYYY-MM-DD to EXP-NNN …`.
+        a = re.match(r"Addendum (\d{4}-\d{2}-\d{2}) to (EXP-\d+)", head)
+        key = m.group(1) if m else f"{a.group(2)}/addendum-{a.group(1)}" if a else None
+        if key:
             body = part.rstrip()
             if body.endswith("---"):
                 body = body[: -len("---")].rstrip()
-            out[m.group(1)] = body
+            out[key] = body
     return out
 
 

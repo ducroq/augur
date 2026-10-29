@@ -41,6 +41,7 @@ Review findings turned into a deterministic check (`review-changes` Step 3.1). `
 | 2026-10-29 | An unreachable pre-commit pin skipped check 5 for **every** entry with a WARN and still exited 0 | `scripts/audit_registry.py` check 5: `CalledProcessError` is a FAIL naming the unread revision | live (seeded `deadbee`) | 0 |
 | 2026-10-29 | An amended or rebased pin still resolves from the reflog, so `git show` alone can't detect it | `scripts/audit_registry.py` check 5: each pin must pass `git merge-base --is-ancestor <pin> HEAD` | live (seeded orphan commit) | 0 |
 | 2026-10-29 | Run before committing, check 5 hashed HEAD only, so an uncommitted edit to a pinned Method passed | `scripts/audit_registry.py` check 5: the working-tree backlog is hashed too | live (seeded G2 30 → 25) | 0 |
+| 2026-10-29 | A dated addendum that supersedes a pinned Method sat in a section check 5 never hashed, so it could be edited after results landed | `scripts/audit_registry.py` `method_sections`: `## Addendum YYYY-MM-DD to EXP-NNN` is keyed `EXP-NNN/addendum-DATE` and must be pinned | live (seeded 28 → 14 days) | 0 |
 
 ---
 
