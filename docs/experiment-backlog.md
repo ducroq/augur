@@ -29,6 +29,9 @@ Different from its neighbours:
 | 7 | EXP-027 fine-tuning dissociation | GPU hours | jwasys | **RUN 2026-08-30 — `rejected`**; both halves degrade, zero-shot is the deployment mode |
 | 8 | EXP-034 fragility-conditioned bands | minutes | CPU | **Added 2026-08-31, not run.** Queued *after* EXP-018a Stage 1 — see its own sequencing note |
 | 9 | EXP-036 profile baseline as the skill floor | minutes | CPU | **Added 2026-09-10, not run.** Independent of the fresh-vintage queue; see its own sequencing note |
+| 10 | EXP-040 TabPFN-2/3, a tabular foundation model with covariates | GPU min–h (unverified) | b650-gpu | **Added 2026-10-29, not run.** License and feasibility checks first; see its own sequencing note |
+
+**Entry 10 was added 2026-10-29** from Lipiecki & Weron (2026, arXiv:2609.00089), the first outside evidence that a *tabular* foundation model beats Chronos-2 on electricity prices. Its Method was fixed before any TabPFN number existed for Augur.
 
 **Entry 9 was added 2026-09-10** and belongs to neither batch — it descends from the 2026-09-06 naive-floor finding (augur#29) and its Method was fixed on 2026-09-10 before any profile baseline was computed.
 
@@ -401,3 +404,56 @@ Candidates scored against each arm: LightGBM `full`, LightGBM `drop_rolling` (EX
 **What it would change.** If the position holds and G2 clears, the Model tab is measuring the wrong thing and `evaluate_shadow.py` should log regret alongside MAE. If Alternative 1 fires, the ranking problem is a weather problem and EXP-028 is revived on rank grounds. If G3 fires, augur#29 gets simpler and harder: the incumbent is not rescued by any lens.
 
 **Cost.** Minutes of CPU on the existing window. No GPU, no fresh vintages, no production path touched.
+
+## EXP-040 — A tabular foundation model keeps the diurnal amplitude LightGBM loses, and uses the covariates
+
+**Priority: after the EXP-028a review (due 2026-10-31), so the two covariate results aren't read together.** It runs on stored data and uses no fresh vintages. Provisional id; take the next free one from the registry at run time.
+
+**Source.** Lipiecki & Weron (2026, arXiv:2609.00089); deep-dive in `docs/foundation-models-epf-literature-review.md`. On DE/PL/ES day-ahead over 2021–2025, zero-shot TabPFN beats Chronos-2 by 10–22% CRPS and DDNN-JSU by 12–15%, significant at 1% in every market. TabPFN-2 is within 1.7–4.4% of TabPFN-3. Both are pretrained on **synthetic data only**, so test-window contamination is ruled out by construction. In battery arbitrage TabPFN wins the riskier strategies and DDNN-JSU the risk-averse ones. **Their horizon is day-ahead only**, so nothing there speaks to 25–72h, which is where Augur's product question sits.
+
+**Question.** EXP-037 traced LightGBM's regret loss to amplitude collapse: within-block forecast spread of 14.9 EUR/MWh at 49–72h against a realised 42.7. TabPFN is a tabular regressor like LightGBM, but it is a pretrained in-context learner: its predictive distribution comes from a synthetic prior over generative processes rather than from minimising pinball loss on a short window. Does it keep the diurnal shape beyond 24h, and do the covariates help it rank the cheap hours?
+
+**Position (provisional).** TabPFN with covariates holds a within-block spread **≥ 30 EUR/MWh at 49–72h**, and its mean k6 regret is at or below the EXP-036 profile floor's **in all three horizon blocks**. That is the bar the 2026-10-28 product criterion in `docs/hypothesis-log.md` sets for any live candidate.
+
+**Alternatives (falsification signals).**
+
+1. **Tabular means flat.** Fitting rows of (lags, covariates) → price shrinks toward the conditional median, as LightGBM does. **Signal:** spread at 49–72h below 20 EUR/MWh and k6 regret above the floor at 25–48h and 49–72h. Then the amplitude problem belongs to the tabular framing, not to LightGBM, and the sequence models (Chronos) keep first claim.
+2. **The paper's lead is a day-ahead lead.** **Signal:** TabPFN beats bolt-base on regret at 1–24h and loses at 25–48h and 49–72h. Then the paper is consistent with Augur, but the result doesn't transfer to the horizons the dashboard depends on.
+3. **The covariate gain is backtest freshness.** Same failure mode as EXP-028a Alternative 4: the harness feeds vintage-overwritten covariates. **Signal:** the lagged-covariate arm loses more than half of the covariate arm's k6 regret advantage over the univariate arm. Then stop; the result can't survive deployment.
+4. **Accuracy without regret.** The paper's own split, replayed on NL. **Signal:** the covariate arm beats bolt-base on quantile score but not on k6 regret in at least two blocks. Then it counts against TabPFN under the product criterion, whatever its QS.
+5. **Short history erases the advantage.** The paper gave TabPFN 1,449 days of context; Augur's consolidated history starts 2025-09-28, so the earliest vintages see about 10 weeks. **Signal:** TabPFN's regret relative to bolt-base improves monotonically with available history (first vs last third of the vintages, by block). Then the verdict on the early vintages understates it, and a re-run belongs after history has grown, not a rejection.
+
+**Pre-run checks (not gates; any failure stops the entry before data is scored).**
+
+- **License.** The paper marks TabPFN-3 and TabPFN-TS-3 as not free for commercial use and does not mark TabPFN-2. Read the actual licenses. If TabPFN-2's doesn't permit use in Augur's pipeline either, the whole entry is research-only and says so in its registry row.
+- **Contamination: confirm, don't assume.** Confirm from the model cards that the checkpoints used are synthetic-only, as the paper states. If one isn't, restrict that arm to vintages after its release date and record the reduced n.
+- **Feasibility.** Time one vintage per arm on b650-gpu and on sadalsuud's CPU. Record both; a CPU time above 10 minutes per vintage is reported as a deployment blocker, not a reason to skip the run.
+
+**Method (pre-committed 2026-10-29, before any TabPFN number has been computed on Augur data).** Same **260 paired vintages** (2025-12-05..2026-08-21) and context tape as EXP-035/037.
+
+*Rows.* One fit per vintage per horizon block, pooled over the block's 24 target hours, one row per (day, hour) with hour of day as a feature. This deviates from the paper, which fits one model per hour of day; pooling is chosen because our history gives a per-hour model only 70–330 rows. Features follow the paper's Eq. 5, shifted so every input is known at t0: price at the target hour on the three most recent days available for that block and 7 days before the target; the known-future covariates (the `KNOWN_FUTURE` columns of `scripts/exp028_chronos2_covariates.py`) for the target hour, and their values 1 and 7 days earlier; day of week as a categorical. **Context: every row available at t0 (expanding window)**, which is the paper's choice of using all the context the model takes. Zero-shot, default settings, no tuning.
+
+*Arms.*
+
+```
+tabpfn2_covariates        Eq. 5 features with covariates          — PRIMARY (the arm that could ship)
+tabpfn3_covariates        same, TabPFN-3                          — research arm, same gates
+tabpfn2_univariate        price lags + calendar only
+tabpfn2_cov_lagged        covariates as known at t0 (Alternative 3)
+references                profile floor (naive_profile, 5 day types), carry, LightGBM full, chronos-bolt-base
+```
+
+*Scoring.* Per 24-slot block with `score_block` from `scripts/exp037_rank_metric.py` (k = 3 and 6, stable-sort ties, partial blocks dropped, never padded, identical surviving block set for every arm). Quantile score from the p10/p50/p90 of each arm's predictive distribution. Within-block forecast spread (max − min of p50) per block.
+
+**Gates** (applied to the primary arm; the TabPFN-3 arm is gated identically and reported beside it).
+
+- **G1 — product.** Mean k6 regret ≤ the profile floor's in **each** of the three blocks. Paired DM per block (HAC lags 3, one-sided) is reported as strength of evidence and does not gate.
+- **G2 — amplitude.** Spread at 49–72h ≥ 30 EUR/MWh. Reported beside LightGBM's 14.9 and bolt-base's 35.7.
+- **G3 — covariates.** `tabpfn2_covariates` beats `tabpfn2_univariate` on k6 regret pooled over blocks. If `tabpfn2_cov_lagged` loses more than half of that gain, Alternative 3 is confirmed and the entry stops there.
+- **Reported, never gated:** QS against every reference, k3 regret, Spearman, bolt-base on the identical blocks, and the Alternative 5 history split.
+
+**Pre-commitment boundary.** Stored-data corroboration only. Passing G1 earns a live-shadow entry of its own on fresh vintages under the 2026-10-28 criterion; it doesn't move the EXP-021a queue or touch production.
+
+**What it would change.** G1 and G2 pass on the primary arm → TabPFN-2 joins Chronos as a live-shadow candidate, and the first one that uses Augur's exogenous data. Only the TabPFN-3 arm passes → the result stands as research until its license is settled. Alternative 1 fires → the amplitude problem is the tabular framing, and the covariate route runs through Chronos-2 (EXP-028a) only. Alternative 2 fires → the paper is filed as day-ahead evidence that doesn't extend to 72h.
+
+**Cost.** Unverified until the feasibility check: 260 vintages × 3 blocks × 4 arms of in-context fits on up to ~8k rows each, which should be GPU minutes to low hours on b650-gpu. No fresh vintages, no production path touched.

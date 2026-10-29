@@ -18,6 +18,9 @@ own file under `docs/` and are linked here.
 
 ## Topic deep-dives
 
+- [Foundation models for EPF — Lipiecki & Weron 2026](foundation-models-epf-literature-review.md) (2026-10-29)
+  — tabular FM (TabPFN) with covariates beats TS FMs and EPF benchmarks
+    day-ahead; accuracy ≠ trading profit; input to EXP-040 and EXP-028a review.
 - [Metric redesign for probabilistic EPF with negative prices](metric-redesign-literature-review.md) (2026-05-29)
   — input to EXP-012; covers CRPS/pinball/twCRPS, Diebold-Mariano,
     forecaster's dilemma, what to drop from M4 criterion (a).
@@ -43,6 +46,26 @@ own file under `docs/` and are linked here.
   evaluation methodology for negative-price markets.
 - Uniejewski & Weron (2021). "Regularized quantile regression averaging."
   *Energy Economics*. — LQRA; quantile averaging for EPF.
+
+### Foundation models for EPF
+
+Deep-dive: [`foundation-models-epf-literature-review.md`](foundation-models-epf-literature-review.md).
+
+- Lipiecki & Weron (2026). "Foundation models for electricity price
+  forecasting and battery arbitrage: Can they replace market-specific
+  forecasting models?" arXiv:2609.00089. — nine zero-shot FMs vs LEAR+CP and
+  DDNN-JSU, DE/PL/ES 2021–2025, **day-ahead only**. Only TabPFN beats the
+  benchmarks everywhere; synthetic-only pretraining (TabPFN, Chronos-2-synth)
+  costs nothing and rules out contamination; the most accurate model loses to
+  DDNN-JSU under risk-averse battery trading.
+- Hornek, Sartipi, Tchappi & Fridgen (2025). "Benchmarking pre-trained time
+  series models for electricity price forecasting." EEM 2025. — six TS FMs
+  incl. Chronos-Bolt on five markets **incl. NL**, 2024; none beats MSTL.
+- Grinsztajn et al. (2026). "TabPFN-3: technical report." arXiv:2605.13986;
+  Hollmann et al. (2025), *Nature* 637: 319–326 (TabPFN-2). — tabular
+  in-context learners, synthetic prior.
+- Hirsch & Ziel (2026). arXiv:2604.19580. — battery trading strategies as the
+  economic evaluation of probabilistic EPF.
 
 ### Proper scoring rules and metric theory
 

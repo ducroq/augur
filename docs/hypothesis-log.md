@@ -73,6 +73,8 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 
 **Review by:** when the first Stage 3 shadow reaches 14 vintages.
 
+**Related evidence (added 2026-10-29, outside the Method, which is unchanged):** Lipiecki & Weron (2026, arXiv:2609.00089) reach the same split on battery arbitrage. TabPFN has the best CRPS in every market, yet DDNN-JSU earns the most under the risk-averse strategies. Their caveat applies here too: trading profit, like k6 regret, is **not a proper scoring rule**. That supports this entry's shape, regret as an *added* swap condition beside ADR-007's proper-score gate, never a replacement for it. Their gaps between top models are mostly ~1%, and they warn against reading the order of close models, which matches Alternative 1's noise concern.
+
 ### [2026-10-28] Park EXP-018a Stage 1 and EXP-023a Stage B: LightGBM tuning cannot move the decision that is open
 
 **Position:** both entries tune the incumbent (feature set, window length) while every standing finding says the bottleneck is the model class (`memory/model-class-findings.md`: feature engineering closed at 56 days; the FM's context advantage is not recoverable inside LightGBM). Their Methods stand as written and are not edited; they are parked, not refuted. EXP-018a's only downstream role was choosing EXP-021a's incumbent arm, and EXP-021a's own Method already says that, with 018a unconcluded, *"the primary gate stays against `lean`, the harder bar"*.
@@ -297,6 +299,8 @@ bolt_base                reference  (frozen weights, contamination-free anchor)
 **Domain:** EXP-028a, foundation models (augur#15), exogenous features (augur#3, augur#22), augur#19, ADR-006, ADR-007.
 
 **Status:** open — pre-committed 2026-08-30, before any fresh vintage was scored.
+
+**Related evidence (added 2026-10-29, outside the Method, which is unchanged):** Lipiecki & Weron (2026, arXiv:2609.00089; deep-dive `docs/foundation-models-epf-literature-review.md`), DE/PL/ES day-ahead 2021–2025. Two points for this review. **(a) Alternative 1 has a cheap, direct test that this Method doesn't contain:** `Chronos-2-synth`, pretrained on synthetic data only, matches Chronos-2 there (CRPS better in DE and PL, 2% worse in ES). Re-running EXP-028's covariate-vs-univariate pair with it would be contamination-free by construction and could use all 260 stored vintages instead of the 77 after 2026-06-05. **(b) Chronos-2 is not the strongest covariate model:** TabPFN-3 and TabPFN-2, tabular and also synthetic-only, beat it by 10–22% CRPS in every market (backlog EXP-040). Both are new entries. Day-ahead only, so neither speaks to 25–72h.
 
 ### [2026-08-29] EXP-021a: Chronos-Bolt's 20% zero-shot win survives on fresh vintages, and survives contact with production constraints
 
