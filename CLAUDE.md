@@ -22,7 +22,7 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 | **energyDataHub data formats** | `memory/data-formats.md` (schema v2.2 envelope, units, timezones) |
 | **Deployment, build pipeline, alarms** | `docs/RUNBOOK.md`: Netlify build, `--force`, every `[ALARM:]`/`[NOTE:]` marker symptom by symptom |
 | **Making or parking a decision** | ADRs → `docs/decisions/`. Provisional positions → `docs/hypothesis-log.md` (`## Open` starts with a dated trigger table; resolved entries in `docs/archive/hypothesis-log-resolved.md`). Citations → `docs/literature.md`. |
-| **Session rhythm** | Before committing structural changes: `/code-review`, then `python -m pytest tests/`. If `experiments/` or `docs/experiment-results.md` changed, also run `scripts/audit_registry.py` and `scripts/render_results.py --check` (both exit non-zero on drift). Ending a session: `/curate`. Monthly: `/audit-context`, then `/update-drift`. |
+| **Session rhythm** | Before committing structural changes: `/review-changes` (tiers, guarantees and lenses in `.claude/review-profile.md`; `/code-review` is an optional extra pass for code bugs), then `python -m pytest tests/`. If `experiments/`, `docs/experiment-backlog.md`, `docs/hypothesis-log.md` or `docs/experiment-results.md` changed, also run `scripts/audit_registry.py` and `scripts/render_results.py --check` (both exit non-zero on drift). Ending a session: `/curate`. Monthly: `/audit-context`, then `/update-drift`. |
 
 ## Hard Constraints
 

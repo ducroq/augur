@@ -12,7 +12,8 @@ venv/
 secrets.ini
 config/local/
 .env
-.env.local
+.env.*
+!.env.example
 *.key
 *.pem
 
@@ -53,7 +54,11 @@ Thumbs.db
 # IDE and Editor files
 .vscode/
 .idea/
-.claude/
+# .claude/ stays local except the review profile (agent-ready-projects v1.40.0).
+# `/*`, not `/`: git cannot re-include a file inside an ignored directory.
+# `**/` keeps nested .claude/ dirs ignored, as the old `.claude/` did.
+**/.claude/*
+!/.claude/review-profile.md
 *.sublime-project
 *.sublime-workspace
 

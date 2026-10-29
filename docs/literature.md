@@ -56,11 +56,11 @@ Deep-dive: [`foundation-models-epf-literature-review.md`](foundation-models-epf-
   forecasting models?" arXiv:2609.00089. — nine zero-shot FMs vs LEAR+CP and
   DDNN-JSU, DE/PL/ES 2021–2025, **day-ahead only**. Only TabPFN beats the
   benchmarks everywhere; synthetic-only pretraining (TabPFN, Chronos-2-synth)
-  costs nothing and rules out contamination; the most accurate model loses to
+  costs nothing measurable and rules out contamination; the most accurate model loses to
   DDNN-JSU under risk-averse battery trading.
 - Hornek, Sartipi, Tchappi & Fridgen (2025). "Benchmarking pre-trained time
   series models for electricity price forecasting." EEM 2025. — six TS FMs
-  incl. Chronos-Bolt on five markets **incl. NL**, 2024; none beats MSTL.
+  incl. Chronos-Bolt on five markets **incl. NL**, 2024; none beats MSTL significantly.
 - Grinsztajn et al. (2026). "TabPFN-3: technical report." arXiv:2605.13986;
   Hollmann et al. (2025), *Nature* 637: 319–326 (TabPFN-2). — tabular
   in-context learners, synthetic prior.

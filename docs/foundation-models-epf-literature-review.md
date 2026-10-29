@@ -68,7 +68,9 @@ horizons beyond 24h, which is where Augur's product question sits.
 
 1. **Only the TabPFN family beats the benchmarks everywhere.** All three
    variants beat DDNN-JSU at the 1% level on MAE, RMSE and CRPS in all three
-   markets: 12–15% CRPS over DDNN-JSU and **10–22% over Chronos-2**.
+   markets. CRPS gains differ by variant. TabPFN-3 is 12–15% better than
+   DDNN-JSU and **10–22% better than Chronos-2**. TabPFN-2 is 10–11% and 8–19%
+   better; TabPFN-TS-3 is 10–13% better than DDNN-JSU.
 2. **TabPFN-2 is nearly as good as TabPFN-3**, within 1.7–4.4% CRPS and best on
    MAE/RMSE in Spain, at a fifth of the size.
 3. **Synthetic-only pretraining costs nothing measurable.** Chronos-2-synth
@@ -83,9 +85,10 @@ horizons beyond 24h, which is where Augur's product question sits.
    **DDNN-JSU wins the risk-averse settings** (α 60–50% everywhere, 80–70% in
    ES), despite never having the best statistical score. TabPFN-TS-3 out-earns
    TabPFN-3 in every QB setting, though TabPFN-3 has the better CRPS.
-6. **Most gaps are small.** In DE at α 60%, DDNN-JSU leads TabPFN-TS-3 by 1.0%,
-   and the UB leaders differ by under 1%. The exception is ES at α 50%:
-   DDNN-JSU 46,714 vs TabPFN-3 39,610, a gap of 18%. The authors themselves
+6. **Most gaps are small, but not in Spain.** In DE at α 60%, DDNN-JSU leads
+   TabPFN-TS-3 by 1.0%, and the UB leaders differ by under 1%. In ES at
+   α 70–50%, DDNN-JSU earns 3.9–10.8% more than the best TabPFN. At α 50% it
+   earns 18% more than TabPFN-3, the CRPS winner (46,714 vs 39,610). The authors themselves
    warn against reading the order of close models.
 7. Best UB captures 92.5% (DE), 86.4% (PL) and 83.3% (ES) of Oracle profit.
 8. QB trades less often but earns more per trade, because the limits avoid
@@ -110,7 +113,7 @@ horizons beyond 24h, which is where Augur's product question sits.
   current candidate) was frozen 2025-11-21 and was already contamination-free
   by date.
 - **Covariates need a model that is built to use them.** Their pattern matches
-  ours: LightGBM can't use exogenous data (EXP-019/020/024/029), Chronos-2 can
+  ours: LightGBM gets nothing from exogenous data (EXP-018, EXP-020), Chronos-2 does
   (EXP-028), and in the paper the univariate or bolt-on models (Moirai-2,
   TimesFM-XReg) are the weakest. Marchesi et al. 2025, in their review, found
   limited covariate gains for Moirai.
@@ -130,9 +133,12 @@ horizons beyond 24h, which is where Augur's product question sits.
   collapse, EXP-037; the Chronos tie with the profile floor at h49–72,
   EXP-038). The paper is silent there.
 - **History length.** They give TabPFN 1,449 days of context. Augur's
-  consolidated history starts **2025-09-28** (situla parquet, 7,894 hourly
-  rows), so at most ~13 months. TabPFN is designed for small data, but the
-  paper's numbers are for 4× more context than we can supply.
+  price history starts **2025-09-28** (the 2026-10-28 snapshot,
+  `~/lab/augur/data/training_history_2026-10-28.parquet`, is ~13 months), and
+  the covariates start later still: load, wind and solar forecasts only from
+  2025-11-30..2025-12-02 (`training_history_fundamentals.parquet`). TabPFN is
+  designed for small data, but the paper's numbers are for ~4× more context
+  than we can supply today, and less again for the covariate rows.
 - **The decision.** One battery round trip per day, buying low and selling
   high, which depends on both ends of the daily range. Augur's k-cheapest-hours
   load shift depends only on the bottom of the ranking. The two are related,
@@ -175,7 +181,7 @@ our QS magnitudes with their CRPS numbers.
   economic evaluation of probabilistic EPF; the reference for the QB/UB
   design.
 - Yu et al. (2026), arXiv:2508.04875. PriceFM, an EPF-specific FM over 38
-  European zones (NL included) with covariates. Trained through 2024, so it
+  European bidding zones, with covariates. Trained through 2024, so it
   needs a contamination check against our window.
 - Lipiecki, Bilińska, Kourentzes & Weron (2026), *IJF*. THieF: reconciling
   hourly, block and baseload forecasts improves accuracy. Possibly relevant to
