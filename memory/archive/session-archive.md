@@ -5,6 +5,14 @@
      Moved out of memory/MEMORY.md 2026-09-06 — it is history, not current state,
      and the index is read at every session start. Nothing here was edited. -->
 
+## Closed 2026-10-29
+
+Ask: assess a pasted summary of Lipiecki & Weron 2026 (arXiv:2609.00089), ingest it, review, re-run drift, wrap up.
+- Paper ingested: `docs/foundation-models-epf-literature-review.md`; EXP-040 (TabPFN-2/3 with covariates) pre-committed in the backlog (`d53af7a`) plus a dated addendum (`47b2f16`). Closed.
+- v1.40.0 review-profile **adopted**, reversing the 2026-10-28 decline; `/review-changes` is the pre-commit review (`47b2f16`). Closed.
+- Its first run found two blockers in EXP-040 and four audit holes (all fixed, seeded, logged in gotcha-log Mechanized; `47b2f16`, `b9f7fe4`). Closed.
+- Pruning started: model-progress-log split at 2026-08-28 (118k → 64k chars live), this file moved to `memory/archive/`. Partial: the backlog and hypothesis-log retirement pass is queue item 1.
+
 ## Closed 2026-10-28
 
 Ask: `/update-drift`, then "how is augur doing", then a rethink in plan mode, then "go".

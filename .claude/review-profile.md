@@ -77,7 +77,7 @@ MEDIUM. A hand edit to them is a carve-out below.
   versions. ⚠️ The Netlify build doesn't: `scripts/netlify_build.sh` installs `cryptography`
   unpinned, `/requirements-netlify.txt` is read by nothing, and Netlify probably also
   auto-installs the root `/requirements.txt` (loose ranges) because `PYTHON_VERSION` is set.
-  That last part is unverified: check a deploy log. Either way it's a known gap, not a
+  That last part is unverified: check a deploy log. Either way it's a known gap (augur#35), not a
   guarantee.
 - `.claude/review-profile.md`: every guarantee surface above stays in the HIGH row.
 

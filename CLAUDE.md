@@ -14,7 +14,7 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 | When | Read |
 |------|------|
 | **Starting a session — orient first** | `memory/MEMORY.md`. It opens with the **ON "CONTINUE"** queue. Not auto-loaded; read it before reconstructing state from anything deeper. |
-| **Stuck or debugging something weird** | `memory/gotcha-log.md` (Promoted patterns + open entries; resolved ones in `memory/archive/`). EDH publish late, short or missing → `memory/upstream-edh.md`. Already done? → `memory/session-archive.md`. |
+| **Stuck or debugging something weird** | `memory/gotcha-log.md` (Promoted patterns + open entries; resolved ones in `memory/archive/`). EDH publish late, short or missing → `memory/upstream-edh.md`. Already done? → `memory/archive/session-archive.md`. |
 | **Anything touching experiments or model work** | `docs/experiment-results.md` **Decision state**: closed / live / standing evidence, generated from the registry by `scripts/render_results.py` (never hand-edit). Then `memory/model-class-findings.md`, which **opens with the EXP-036 correction that rescales every effect size here**. Log or cite → `experiments/registry.jsonl` (schema in `experiments/README.md`). Next experiment → `docs/experiment-backlog.md`. |
 | **⚠️ Before quoting any effect size** | augur#29: production `p50` doesn't reliably beat a seasonal-naive floor, and against EXP-036's profile floor it sits at **−12.4%**. Every other metric here is *relative*. |
 | **ML features, training, forecast logic** | `ml/shadow/` (production) and `ml/features/`, `ml/training/` (ARF). Architecture questions → `memory/ml-decisions.md`, `docs/river-arf-retrospective.md`. Any pipeline/model change → a dated entry in `docs/model-progress-log.md`. |
@@ -86,7 +86,7 @@ Browser: 5 tabs (Prices, Weather, Grid, Market, Model); augur_forecast_shadow.js
 | `scripts/wait_for_edh.sh` | Readiness gate. **Read its header before changing any clause** |
 | `scripts/check_gate_lag.sh` | The only detector for gate lag (augur#34); run over ssh with `bash -s` |
 | `scripts/heartbeat_check.sh`, `alert_failure.sh`, `notify_email.py`, `scripts/systemd/` | Alerting and the canonical units (install/rollback in its README) |
-| `experiments/registry.jsonl`, `scripts/audit_registry.py`, `scripts/render_results.py` | Experiment record (EXP-001..037), its auditor, the generated digest |
+| `experiments/registry.jsonl`, `scripts/audit_registry.py`, `scripts/render_results.py` | Experiment record (EXP-001..039; EXP-040 is pre-committed in the backlog), its auditor, the generated digest |
 | `scripts/exp0NN_*.py` | One runner per experiment; each docstring states its pre-commitment and host |
 | `ml/shadow/expNNN_*/summary.json` | Committed experiment records. Gitignored dumps next to them are **links into `/home/jeroen/lab/augur/shadow/`**. They aren't byte-reproducible, so treat them as data |
 | `scripts/link_lab.sh` | Recreates the lab links after `git clean -xfd` or in a new worktree. To adopt a new experiment's dumps, move them into the lab tree at the same relative path, then rerun |

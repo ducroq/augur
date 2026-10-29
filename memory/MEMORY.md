@@ -4,17 +4,24 @@
      Rewritten lean 2026-10-16 (was 46.6k chars); the previous text is verbatim in
      memory/archive/memory-index-2026-10-16.md. Do not grow narrative back here. -->
 
-## ON "CONTINUE" — the queue (set 2026-10-28)
+## ON "CONTINUE" — the queue (set 2026-10-29)
 
-Direction since 2026-10-28: judge forecasters on cheap-hour regret per horizon block against the EXP-036 profile floor (`docs/hypothesis-log.md` [2026-10-28] product criterion), and take the Chronos ladder first. LightGBM tuning (EXP-018a, EXP-023a Stage B, EXP-034) is parked.
+Direction since 2026-10-28: judge forecasters on cheap-hour regret per horizon block against the EXP-036 profile floor (`docs/hypothesis-log.md` [2026-10-28] product criterion), and take the Chronos ladder first. LightGBM tuning (EXP-018a, EXP-023a Stage B, EXP-034) is parked. **Since 2026-10-29 the read surface is a first-class task: prune, thin, mechanize, retire.**
 
-1. **EXP-021a Stage 3** (live shadow): Stage 2 **FEASIBLE** (EXP-039, 2026-10-28: 1.2s per forecast on sadalsuud CPU, 0 of 27 pins moved, p95 MAE ratio 0.79). Build `ml/shadow/update_fm.py` writing `static/data/augur_forecast_fm.json` (same schema, CQR via `conformal.py`), a NON-FATAL step after `update_shadow` in `daily_update.sh`, torch pinned in `requirements.lock`. Score it in `regret.py` too. After 14 vintages: the ADR-007 gate plus the product criterion. Dashboard untouched until then.
-2. **augur#29 verdict**: overdue (Review by 10-20). Uses no new vintages. Note that `eval_log` rows cover h1–24 only.
-3. **EXP-021a Stage 1, formal**: unchanged, on clean vintages (t0 ≥ 2026-10-30; 14 realised ≈ 2026-11-16). Its contexts tripwire fired on the EDH-outage window, which is why EXP-038 exists.
-4. **EXP-028a** (Chronos-2 covariates): Review by 10-31.
-5. Due reviews, no run needed: **[2026-09-10] ARF not a backup** (augur#32) and **[2026-08-31] feed divergence**.
-6. Watch `ml/shadow/regret_log.jsonl` (nightly since 2026-10-28). At h49–72 Chronos only ties the profile floor (EXP-038: 7.87 vs 7.81), which is where the product criterion could fail.
-7. Pruning (token cost, 2026-10-28): move `memory/session-archive.md` into `memory/archive/` (fix its pointers); `/audit-context` Step 8 retirement pass over `docs/model-progress-log.md`, `hypothesis-log.md` `## Open` and `experiment-backlog.md`; once upstream v1.50.1 is tagged, run `install-global-skills.sh` and re-check byte identity.
+1. **Read-surface pass, continued** (started 2026-10-29). Live chars that day: `hypothesis-log.md` 76k, `experiment-backlog.md` 70k, `model-progress-log.md` 64k (split at 2026-08-28; was 118k), `memory/` 80k (92k before `session-archive.md` moved). In order:
+   a. **Backlog: mechanize, then retire.** Move the executed entries (EXP-023..029, 036, 037) to `docs/archive/experiment-backlog-run.md`. Blocked on `scripts/audit_registry.py` check 5, which reads only `docs/experiment-backlog.md`: a moved Method would read as EDITED. Teach it the archive path first, seed a positive, then move.
+   b. **Hypothesis log `## Open`** (10 entries): resolve the two DUE entries ([2026-08-31] feed divergence, [2026-09-10] ARF not a backup, augur#32) and move the two parked LightGBM entries to the archive as parked.
+   c. **`memory/gotcha-log.md`** (33k): thin the long Promoted rows to the rule plus a pointer.
+   d. Then `/audit-context`.
+2. **EXP-028a review, due 2026-10-31.** Decide it on its own frozen Method. The notes beside it name two new candidate entries (a Chronos-2-synth re-run on all 260 vintages, which is contamination-free; TabPFN = EXP-040). They also name the source for its mandatory lagged arm, the EDH publish archive in the energydatahub repo (`data/YYMMDD_HHMMSS_<feed>.json`, encrypted, from 2025-12-01).
+3. **EXP-021a Stage 3** (live shadow): Stage 2 **FEASIBLE** (EXP-039: 1.2s per forecast on sadalsuud CPU). Build `ml/shadow/update_fm.py` writing `static/data/augur_forecast_fm.json` (same schema, CQR via `conformal.py`), a NON-FATAL step after `update_shadow` in `daily_update.sh`, torch pinned in `requirements.lock`. Score it in `regret.py` too. After 14 vintages: the ADR-007 gate plus the product criterion.
+4. **augur#29 verdict**: overdue (Review by 10-20). Uses no new vintages. `eval_log` rows cover h1–24 only.
+5. **EXP-021a Stage 1, formal**: on clean vintages (t0 ≥ 2026-10-30; 14 realised ≈ 2026-11-16).
+6. **EXP-040** (TabPFN-2/3, backlog + addendum): after the EXP-028a review. Pre-run checks first: license (TabPFN-3 isn't free for commercial use), feasibility.
+7. Watch `ml/shadow/regret_log.jsonl`. At h49–72 Chronos only ties the profile floor (EXP-038: 7.87 vs 7.81).
+8. Once upstream v1.50.1 is tagged: `/update-drift`, `install-global-skills.sh`, re-check byte identity.
+
+Pre-commit review is `/review-changes` (profile `.claude/review-profile.md`). Never rebase or amend a commit pinned in `PRECOMMIT_REV_BY_ID` (five today, incl. `d53af7a`, `47b2f16`): check 5 fails on an unreachable pin.
 
 Before any model work, read `docs/experiment-results.md` Decision state and `memory/model-class-findings.md` (EXP-036 rescales every effect size).
 
@@ -25,7 +32,7 @@ Before any model work, read `docs/experiment-results.md` Decision state and `mem
 | `memory/model-class-findings.md` | Any model work: standing conclusions, opens with the EXP-036 correction |
 | `memory/upstream-edh.md` | An EDH publish is late, short or missing; you're citing an energydatahub issue number |
 | `memory/gotcha-log.md` | Stuck: Promoted patterns + open entries. Resolved ones are in `memory/archive/gotcha-log-resolved.md`; grep it by mechanism |
-| `memory/session-archive.md` | Before re-opening a settled question: dated closed-work sections |
+| `memory/archive/session-archive.md` | Before re-opening a settled question: dated closed-work sections |
 | `memory/data-formats.md` | EDH schema v2.2 envelope, units, timezones |
 | `memory/ml-decisions.md` | ARF-era architecture (archival, frozen 2026-05-29) |
 | `memory/archive/` | Retired text, unedited: the 2026-10-16 index, resolved gotchas |
