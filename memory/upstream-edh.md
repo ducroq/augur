@@ -37,7 +37,7 @@ spot (the heartbeat runs *on* sadalsuud, so it cannot report sadalsuud down).
 |---|---|
 | `energydatahub#47` | member-drift duration guard |
 | `energydatahub#50` | skipped publishes ("silently skips whole days") — **live and correct, do not strike** |
-| `energydatahub#51` | load-forecast horizon — closed as **resolved-upstream**, not transient |
+| `energydatahub#51` | load-forecast horizon — verdict **resolved-upstream**, not transient; closed 2026-11-06 |
 | *(none)* | the abandoned time-boxed drift block — **it has no number, because it does not exist** |
 | `energydatahub#69` | publish-failure issue for the 09-07 outage — opened 09-07 19:51Z, auto-closed 09-08 19:16Z |
 | `energydatahub#70` | publish-failure issue for the 09-09 outage — opened 09-09 19:13Z, auto-closed 09-10 ~07:4xZ |

@@ -48,6 +48,13 @@ Review findings turned into a deterministic check (`review-changes` Step 3.1). `
 
 **Resolved entries live in `memory/archive/gotcha-log-resolved.md`** (moved 2026-10-16 to cut the read surface). Grep it by mechanism before filing a new entry: a recurrence of an archived gotcha is filed here with `[xN]` and a pointer to the archived one.
 
+### A known defect fell out of the index, and its cost was never measured (2026-11-06) [OPEN]
+**Problem**: delivered P80 coverage is well under target, and `last_cqr_q` swings hard: 72 on 10-29, 0 from 11-03, while coverage fell to 0.44–0.62 on 11-03..11-05.
+**Root cause**: `compute_cqr_q` (`ml/shadow/update_shadow.py`) passes the stored `p10`/`p90`, which are already CQR-widened, to `apply_cqr`. After a wide spell the scores go negative, `max(q, 0.0)` gives 0, the band collapses to raw, and the cycle restarts. EXP-015 recorded this on 2026-06-12 as a standing finding; the 2026-10-16 index rewrite did not carry it over, and EXP-025's "lean + production CQR 0.788" applies CQR once, so it is not what production ships.
+**Measured**: causal replay over `calibration_history` rebuilt from committed state, 130 days 2026-06..11, all 72 horizons, 7-day window. Delivered 0.701; same bands with q from unwidened scores (sorted `*_raw`) 0.788; no CQR 0.574. Mean q 13.1 vs 23.7. `q` below 1 on 19 days vs 1. Paired gain +0.086 per day; days are autocorrelated, so no significance is claimed. Wider bands cost width, and Winkler was not scored.
+**Fix**: not applied, REVIEW-class. Score unwidened sorted quantiles in `compute_cqr_q`. Stored rows hold `*_raw` from 2026-05-29, so no backfill is needed. Check against ADR-007 and log it in `docs/model-progress-log.md`.
+**Pattern**: when an index is rewritten lean, check standing defects survive as open items, not only as caveats inside experiment records.
+
 ### A rolling cap read as a count (2026-11-06)
 **Problem**: The 2026-10-16 trigger table said "30 vintages" and "EXP-023a Stage B 30 of 45". The true figure was about twice that; EXP-038 used 60 on 10-28.
 **Root cause**: `calibration_history` is trimmed to `MAX_HISTORY_DAYS = 30`, so any count over it returns 30. `CLAUDE.md` said to count there.
