@@ -13,7 +13,11 @@ A false EDITED verdict is expensive twice over: it blocks a legitimate commit,
 and it teaches the reader that check 5 cries wolf.
 """
 import importlib.util
+import subprocess
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "audit_registry.py"
 _spec = importlib.util.spec_from_file_location("audit_registry", SCRIPT)
@@ -57,3 +61,111 @@ class TestSectionBoundaries:
     def test_only_exp_headings_are_captured(self):
         text = HEADER + ENTRY_A + "\n## Some prose heading\n\nnot an entry\n"
         assert set(audit.method_sections(text)) == {"EXP-101"}
+
+
+class TestMergedSections:
+    def test_an_entry_reads_the_same_from_either_home(self):
+        here, _ = audit.merged_sections(HEADER + ENTRY_A + "\n---\n\n" + ENTRY_B, "")
+        moved, dup = audit.merged_sections(HEADER + ENTRY_B, HEADER + ENTRY_A)
+        assert here == moved and dup == []
+
+    def test_an_entry_in_both_homes_is_reported(self):
+        _, dup = audit.merged_sections(HEADER + ENTRY_A, HEADER + ENTRY_A)
+        assert dup == ["EXP-101"]
+
+
+class TestCheckFiveAcrossTheArchive:
+    """Seeded positives, run against a real git repo.
+
+    Moving an entry must pass, and every way of losing or altering one in the
+    move must fail. EXP-101 is covered by the default pin; EXP-102 by its own,
+    which is the case a key set built from HEAD alone cannot see once it is gone.
+    """
+
+    @pytest.fixture
+    def repo(self, tmp_path, monkeypatch):
+        def git(*a):
+            return subprocess.run(
+                ["git", "-c", "user.name=t", "-c", "user.email=t@t", *a],
+                cwd=tmp_path, check=True, capture_output=True, text=True).stdout.strip()
+
+        def commit(msg):
+            git("add", "-A")
+            git("commit", "-qm", msg)
+            return git("rev-parse", "HEAD")
+
+        (tmp_path / "docs" / "archive").mkdir(parents=True)
+        backlog = tmp_path / audit.BACKLOG
+        archive = tmp_path / audit.BACKLOG_ARCHIVE
+        git("init", "-q")
+        backlog.write_text(HEADER + ENTRY_A)
+        base = commit("pre-commit A")
+        backlog.write_text(HEADER + ENTRY_A + "\n---\n\n" + ENTRY_B)
+        pin = commit("pre-commit B")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(audit, "PRECOMMIT_REV", base)
+        monkeypatch.setattr(audit, "PRECOMMIT_REV_BY_ID", {"EXP-102": pin})
+        return SimpleNamespace(backlog=backlog, archive=archive, commit=commit)
+
+    @staticmethod
+    def run():
+        fails, warns = [], []
+        return audit.check_precommit(fails, warns), fails
+
+    def test_no_archive_at_all_passes(self, repo):
+        assert self.run() == (True, [])
+
+    def test_an_uncommitted_move_passes(self, repo):
+        repo.backlog.write_text(HEADER)
+        repo.archive.write_text(HEADER + ENTRY_A + "\n---\n\n" + ENTRY_B)
+        assert self.run() == (True, [])
+
+    def test_a_committed_move_passes(self, repo):
+        repo.backlog.write_text(HEADER)
+        repo.archive.write_text(HEADER + ENTRY_A + "\n---\n\n" + ENTRY_B)
+        repo.commit("move")
+        assert self.run() == (True, [])
+
+    def test_an_edit_during_the_move_fails(self, repo):
+        repo.backlog.write_text(HEADER + ENTRY_B)
+        repo.archive.write_text(HEADER + ENTRY_A.replace("Do the thing.", "Do a thing."))
+        ok, fails = self.run()
+        assert not ok and "EXP-101: Method body EDITED in the working tree" in fails[0]
+
+    def test_an_edit_committed_in_the_archive_fails(self, repo):
+        repo.backlog.write_text(HEADER + ENTRY_B)
+        repo.archive.write_text(HEADER + ENTRY_A)
+        repo.commit("move")
+        repo.archive.write_text(HEADER + ENTRY_A.replace("Do the thing.", "Do a thing."))
+        repo.commit("edit")
+        ok, fails = self.run()
+        assert not ok and "EXP-101: Method body EDITED since" in fails[0]
+
+    def test_a_later_pinned_entry_lost_in_the_move_fails(self, repo):
+        repo.backlog.write_text(HEADER)
+        repo.archive.write_text(HEADER + ENTRY_A)
+        repo.commit("lost EXP-102")
+        ok, fails = self.run()
+        assert not ok and "EXP-102: Method body EDITED since" in fails[0]
+
+    def test_deleting_the_archive_fails(self, repo):
+        repo.backlog.write_text(HEADER)
+        repo.archive.write_text(HEADER + ENTRY_A + "\n---\n\n" + ENTRY_B)
+        repo.commit("move")
+        repo.archive.unlink()
+        repo.commit("delete")
+        ok, fails = self.run()
+        assert not ok and len(fails) == 2
+
+    def test_a_copy_left_in_both_homes_fails(self, repo):
+        repo.archive.write_text(HEADER + ENTRY_A)
+        ok, fails = self.run()
+        assert not ok and fails == [
+            f"EXP-101: in both {audit.BACKLOG} and {audit.BACKLOG_ARCHIVE}"]
+
+    def test_the_archive_cannot_establish_a_baseline(self, repo):
+        """An entry that first appears in the archive was never pre-committed."""
+        repo.archive.write_text(HEADER + "## EXP-103 — late\n\nWritten after.\n")
+        repo.commit("archive only")
+        ok, fails = self.run()
+        assert not ok and "EXP-103: no Method body at its pre-commit" in fails[0]

@@ -21,6 +21,9 @@ Five checks:
   5. PRECOMMIT   for entries pre-committed in `docs/experiment-backlog.md`, the
                  Method body at the pre-commit revision is byte-identical to
                  HEAD, proving no Method was edited after its result landed.
+                 An executed entry may live in the backlog or in
+                 `docs/archive/experiment-backlog-run.md`, never both; the
+                 baseline is always read from the backlog at the pin.
 
 Exit code is non-zero if any check fails, so it can gate `/curate` or CI.
 
@@ -58,6 +61,10 @@ PRECOMMIT_REV_BY_ID = {
     "EXP-040/addendum-2026-10-29": "47b2f16",
 }
 BACKLOG = "docs/experiment-backlog.md"
+# Executed entries retire here, bytes unchanged. It is a location for HEAD and
+# the working tree only: baselines stay in BACKLOG at the pin, so nothing written
+# to the archive can establish a pre-commitment.
+BACKLOG_ARCHIVE = "docs/archive/experiment-backlog-run.md"
 
 # Which artifacts back which entry's numbers. Entries absent from this map are
 # skipped by check 4 (their numbers predate the artifact convention).
@@ -140,6 +147,88 @@ def method_sections(text):
     return out
 
 
+def merged_sections(backlog_text, archive_text):
+    """Sections across both homes, plus the ids found in both.
+
+    A duplicate is reported, not resolved: picking a winner would let the copy
+    that was not hashed carry an edit.
+    """
+    live, run = method_sections(backlog_text), method_sections(archive_text)
+    return {**run, **live}, sorted(set(live) & set(run))
+
+
+def check_precommit(fails, warns):
+    """Check 5. Appends to fails/warns; returns True if every Method verified."""
+    precommit_ok = True
+    try:
+        def sections_at(rev):
+            return method_sections(subprocess.run(
+                ["git", "show", f"{rev}:{BACKLOG}"],
+                capture_output=True, text=True, check=True).stdout)
+
+        cache = {PRECOMMIT_REV: sections_at(PRECOMMIT_REV)}
+        # No archive at HEAD is legal (it predates the file). Should it vanish
+        # later, its entries read as empty below and fail as EDITED.
+        arch = subprocess.run(["git", "show", f"HEAD:{BACKLOG_ARCHIVE}"],
+                              capture_output=True, text=True)
+        b, dup_b = merged_sections(
+            subprocess.run(["git", "show", f"HEAD:{BACKLOG}"],
+                           capture_output=True, text=True, check=True).stdout,
+            arch.stdout if arch.returncode == 0 else "")
+        # The working tree too: the audit runs BEFORE committing, when HEAD
+        # cannot show an uncommitted edit to a pinned Method.
+        with open(BACKLOG) as fh:
+            live_text = fh.read()
+        arch_text = ""
+        if os.path.exists(BACKLOG_ARCHIVE):
+            with open(BACKLOG_ARCHIVE) as fh:
+                arch_text = fh.read()
+        w, dup_w = merged_sections(live_text, arch_text)
+        for k in sorted(set(dup_b) | set(dup_w)):
+            fails.append(f"{k}: in both {BACKLOG} and {BACKLOG_ARCHIVE}")
+            precommit_ok = False
+        for k in sorted(set(w) - set(b)):
+            if k not in PRECOMMIT_REV_BY_ID:
+                warns.append(f"{k}: new in the working tree; pin it in "
+                             f"PRECOMMIT_REV_BY_ID once its commit exists")
+        # The pins belong in this set: an entry added after PRECOMMIT_REV is in
+        # neither of the others once it is lost, and would pass unchecked.
+        for k in sorted(set(cache[PRECOMMIT_REV]) | set(b) | set(PRECOMMIT_REV_BY_ID)):
+            rev = PRECOMMIT_REV_BY_ID.get(k, PRECOMMIT_REV)
+            if rev not in cache:
+                # A pin must be in HEAD's history: an amended or rebased commit
+                # survives in the reflog, so `git show` alone still succeeds.
+                if subprocess.run(["git", "merge-base", "--is-ancestor", rev, "HEAD"],
+                                  capture_output=True).returncode != 0:
+                    fails.append(f"{k}: pin {rev} is not an ancestor of HEAD "
+                                 f"(amended, rebased or unfetched?)")
+                    precommit_ok = False
+                    continue
+                cache[rev] = sections_at(rev)
+            baseline = cache[rev].get(k, "")
+            if not baseline:
+                fails.append(f"{k}: no Method body at its pre-commit {rev} — "
+                             f"pin it in PRECOMMIT_REV_BY_ID, or it is not pre-committed")
+                precommit_ok = False
+                continue
+            ha = hashlib.sha256(baseline.encode()).hexdigest()
+            hb = hashlib.sha256(b.get(k, "").encode()).hexdigest()
+            if ha != hb:
+                fails.append(f"{k}: Method body EDITED since pre-commit {rev}")
+                precommit_ok = False
+            elif hashlib.sha256(w.get(k, "").encode()).hexdigest() != ha:
+                fails.append(f"{k}: Method body EDITED in the working tree "
+                             f"since pre-commit {rev}")
+                precommit_ok = False
+    except subprocess.CalledProcessError as e:
+        # A FAIL, not a WARN: an unreachable pin (rewritten or unfetched commit,
+        # shallow clone) used to skip check 5 for every entry and still exit 0.
+        fails.append(f"could not read {e.cmd[2]} (pin unreachable?); "
+                     f"pre-commit check 5 did not run for any entry")
+        precommit_ok = False
+    return precommit_ok
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--registry", default="experiments/registry.jsonl")
@@ -207,57 +296,7 @@ def main() -> int:
             untraceable.append(f"{e['id']}: metric '{k}' = {v} not traceable to any artifact")
     fails.extend(untraceable)
 
-    # 5 PRECOMMIT
-    precommit_ok = True
-    try:
-        def sections_at(rev):
-            return method_sections(subprocess.run(
-                ["git", "show", f"{rev}:{BACKLOG}"],
-                capture_output=True, text=True, check=True).stdout)
-
-        cache = {PRECOMMIT_REV: sections_at(PRECOMMIT_REV)}
-        b = sections_at("HEAD")
-        # The working tree too: the audit runs BEFORE committing, when HEAD
-        # cannot show an uncommitted edit to a pinned Method.
-        with open(BACKLOG) as fh:
-            w = method_sections(fh.read())
-        for k in sorted(set(w) - set(b)):
-            if k not in PRECOMMIT_REV_BY_ID:
-                warns.append(f"{k}: new in the working tree; pin it in "
-                             f"PRECOMMIT_REV_BY_ID once its commit exists")
-        for k in sorted(set(cache[PRECOMMIT_REV]) | set(b)):
-            rev = PRECOMMIT_REV_BY_ID.get(k, PRECOMMIT_REV)
-            if rev not in cache:
-                # A pin must be in HEAD's history: an amended or rebased commit
-                # survives in the reflog, so `git show` alone still succeeds.
-                if subprocess.run(["git", "merge-base", "--is-ancestor", rev, "HEAD"],
-                                  capture_output=True).returncode != 0:
-                    fails.append(f"{k}: pin {rev} is not an ancestor of HEAD "
-                                 f"(amended, rebased or unfetched?)")
-                    precommit_ok = False
-                    continue
-                cache[rev] = sections_at(rev)
-            baseline = cache[rev].get(k, "")
-            if not baseline:
-                fails.append(f"{k}: no Method body at its pre-commit {rev} — "
-                             f"pin it in PRECOMMIT_REV_BY_ID, or it is not pre-committed")
-                precommit_ok = False
-                continue
-            ha = hashlib.sha256(baseline.encode()).hexdigest()
-            hb = hashlib.sha256(b.get(k, "").encode()).hexdigest()
-            if ha != hb:
-                fails.append(f"{k}: Method body EDITED since pre-commit {rev}")
-                precommit_ok = False
-            elif hashlib.sha256(w.get(k, "").encode()).hexdigest() != ha:
-                fails.append(f"{k}: Method body EDITED in the working tree "
-                             f"since pre-commit {rev}")
-                precommit_ok = False
-    except subprocess.CalledProcessError as e:
-        # A FAIL, not a WARN: an unreachable pin (rewritten or unfetched commit,
-        # shallow clone) used to skip check 5 for every entry and still exit 0.
-        fails.append(f"could not read {e.cmd[2]} (pin unreachable?); "
-                     f"pre-commit check 5 did not run for any entry")
-        precommit_ok = False
+    precommit_ok = check_precommit(fails, warns)
 
     n_nums = sum(len([1 for k, v in e["metrics"].items()
                       if isinstance(v, (int, float)) and not isinstance(v, bool)])
