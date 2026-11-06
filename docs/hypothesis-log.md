@@ -30,7 +30,7 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 > | [2026-08-29] EXP-021a Stage 1 | 14 clean vintages | **7 of 14**, ≈2026-11-16; Review by 10-15 passed, gate vs `lean` per its own Method |
 > | [2026-09-06] augur#29 verdict | ≥21 qualifying rows | **TRIGGERED**, consumes no vintages; Review by 10-20 passed |
 > | [2026-08-30] EXP-028a | ≥28 vintages | **TRIGGERED**; Review by 10-31 passed. Lagged-arm source: the EDH publish archive (see the entry's notes) |
-> | [2026-11-06] CQR on unwidened scores | 28 post-deploy vintages | replay done; fix awaits engineer review, then live check |
+> | [2026-11-06] CQR on unwidened scores | 28 post-deploy vintages | fix merged 2026-11-06; live check running |
 > | [2026-10-28] product criterion | FM Stage 3 shadow reaches 14 vintages | pre-committed; gates the swap beside ADR-007 |
 > | [2026-05-29] publishable | engineer's call | not due (12-31) |
 >
