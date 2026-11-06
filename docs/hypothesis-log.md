@@ -30,9 +30,9 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 > | [2026-08-29] EXP-021a Stage 1 | 14 clean vintages | **7 of 14**, ≈2026-11-16; Review by 10-15 passed, gate vs `lean` per its own Method |
 > | [2026-09-06] augur#29 verdict | ≥21 qualifying rows | **TRIGGERED**, consumes no vintages; Review by 10-20 passed |
 > | [2026-08-30] EXP-028a | ≥28 vintages | **TRIGGERED**; Review by 10-31 passed. Lagged-arm source: the EDH publish archive (see the entry's notes) |
-> | [2026-11-06] CQR on unwidened scores | 28 post-deploy vintages | pre-committed; replay first, then live |
-| [2026-10-28] product criterion | FM Stage 3 shadow reaches 14 vintages | pre-committed; gates the swap beside ADR-007 |
-> > > | [2026-05-29] publishable | engineer's call | not due (12-31) |
+> | [2026-11-06] CQR on unwidened scores | 28 post-deploy vintages | replay done; fix awaits engineer review, then live check |
+> | [2026-10-28] product criterion | FM Stage 3 shadow reaches 14 vintages | pre-committed; gates the swap beside ADR-007 |
+> | [2026-05-29] publishable | engineer's call | not due (12-31) |
 >
 > EXP-018a Stage 1 and EXP-023a Stage B are parked and moved to `docs/archive/hypothesis-log-resolved.md`; the [2026-10-28] park entry below holds their revisit trigger.
 >
@@ -51,6 +51,15 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 **Alternatives (failure-mode signals):**
 1. **The loop was accidentally useful.** **Signal:** the guardrail fails on either side. Then do not implement; open a new entry.
 2. **The loop is not the main problem.** **Signal:** live coverage stays below 0.75 with `q` stable. Then the gap is the 7-day window lagging regime shifts, which is EXP-016's first-shift-day finding.
+
+**Replay result (2026-11-06, `scripts/replay_cqr_unwidened.py`, 130 eval days, 8,939 rows):** guardrail **PASS**. Lower side 0.852 → 0.887, upper side 0.851 → 0.901, band 0.703 → 0.788. Descriptive: median width 113.3 → 132.4 EUR/MWh (+17%), Winkler 216.2 → 214.6, lower on 75 of 130 days. Band coverage stays under 0.80, and the replay can't show how the changed band behaves live, so the live check stands.
+
+**Note added 2026-11-06, after review; the Method above is unchanged.**
+
+- **The guardrail PASS is not evidence.** It could not have failed: for the same rows the replay's `q` is never below the delivered `q` (below on 0 of 130 days), so the bands nest and neither side can lose coverage. Alternative 1 could not fire either. The per-day `q` series had been computed before this entry was written, and it wasn't disclosed above, including `q` below 1 on 1 replayed day against 19 delivered. The live gate's "at most 2 days" was therefore set knowing that count.
+- **What the evidence is:** the removed collapse, and the trade below. The fix removes a defect; it does not improve the score. In-sample, delivered bands plus a constant 8.5 EUR/MWh reach band 0.790 at Winkler 212.0, so adaptive `q` shows no sharpness gain over a constant.
+- **The cost is larger recently** (`--rev acb1a5b`). Since the 2026-09-13 anchor shift: band 0.703 → 0.790, median width 144 → 178 (+24%), Winkler 273.1 → 273.5. November, 288 rows on 5 partly filled days: band 0.701 → 0.934, width 107 → 197 (+84%), Winkler 185.7 → 198.2, so the replay over-covers after the spike. That is the 7-day window lagging, which this fix does not touch.
+- **Reading the live check:** coverage is pooled over rows, all 72 horizons, as the replay script prints it; 0.701 elsewhere is the mean of daily values. Read `q` from `last_cqr_q`. Rebuild from git snapshots, because `MAX_HISTORY_DAYS` trims the first vintages before the last one fills. The first vintage is the first run after deploy. In Alternative 2, "`q` stable" means `q` below 1 on at most 2 of the days. A single outcome is noisy: 8.7% of overlapping 28-vintage replay windows fall outside 0.75–0.85.
 
 **Review by:** 2026-12-15.
 
@@ -272,6 +281,8 @@ Incumbent = whichever base EXP-018a Stage 1 leaves standing (`lean` if it passes
 **Domain:** EXP-021a, augur#15 (foundation models), augur#19 (calibration), model class, ADR-006, ADR-007.
 
 **Status:** open — pre-committed 2026-08-29 immediately after EXP-021 resolved, before any production path was touched.
+
+**Note added 2026-11-06 (Method unchanged):** the CQR fix in [2026-11-06] shifts CQR-widened live coverage at its deploy date, so read Alternative 4's signal across that date with care. The Stage 1 gate uses raw bands and is unaffected.
 
 ### [2026-05-29] The Augur method + the M4 arc are publishable if we invest ~2-3 weeks of empirical follow-up
 

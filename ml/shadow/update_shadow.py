@@ -195,6 +195,33 @@ def trim_to_recent_days(rows: list[dict], max_days: int) -> list[dict]:
 # ---------- CQR -------------------------------------------------------------
 
 
+def unwidened_bands(df: pd.DataFrame) -> pd.DataFrame:
+    """Replace stored p10/p90 with the sorted quantiles before any CQR widening.
+
+    Stored p10/p90 already include the q applied on their own day. Scoring those
+    makes q a residual on top of earlier q: after a wide spell the scores go
+    negative, q clips to 0 and the band collapses (hypothesis-log [2026-11-06]).
+    Row-sorted p10/p90 equal the min/max of the raw quantiles. Rows without raw
+    fields keep their stored bands.
+    """
+    raw_cols = ["p10_raw", "p50_raw", "p90_raw"]
+    if not set(raw_cols) <= set(df.columns):
+        logger.warning("CQR: calibration rows have no raw quantiles; scoring stored bands")
+        return df
+    raw = df[raw_cols]
+    complete = raw.notna().all(axis=1)
+    if not complete.all():
+        logger.warning(
+            "CQR: %d of %d calibration rows lack raw quantiles; scoring their stored bands",
+            int((~complete).sum()),
+            len(df),
+        )
+    out = df.copy()
+    out["p10"] = raw.min(axis=1).where(complete, df["p10"])
+    out["p90"] = raw.max(axis=1).where(complete, df["p90"])
+    return out
+
+
 def compute_cqr_q(
     calibration_history: list[dict],
     today: str,
@@ -216,6 +243,7 @@ def compute_cqr_q(
     df = df.dropna(subset=["realized"])
     if df.empty:
         return 0.0, 0
+    df = unwidened_bands(df)
     # Insert a placeholder row for `today` so apply_cqr returns its q. The
     # placeholder has realized=NaN, which produces nonconformity=NaN in
     # apply_cqr (line 49) and is therefore dropped by the .dropna() at line 61
