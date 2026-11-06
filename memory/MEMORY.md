@@ -1,5 +1,7 @@
 # Memory
 
+Last audit: 2026-11-06 (defects)
+
 <!-- Read at session start. POINTERS ONLY: one line per fact, depth lives in topic files.
      Rewritten lean 2026-10-16 (was 46.6k chars); the previous text is verbatim in
      memory/archive/memory-index-2026-10-16.md. Do not grow narrative back here. -->
@@ -12,17 +14,13 @@ Direction since 2026-10-28: judge forecasters on cheap-hour regret per horizon b
    a. **Backlog: done 2026-11-06** (70k → 22k). Executed entries are in `docs/archive/experiment-backlog-run.md`; check 5 reads both files and now also keys on the pins.
    b. **Hypothesis log `## Open`** (8 entries, was 10; parked LightGBM entries archived 2026-11-06): resolve the two DUE entries ([2026-08-31] feed divergence, [2026-09-10] ARF not a backup, augur#32).
    c. **`memory/gotcha-log.md`** (33k): thin the long Promoted rows to the rule plus a pointer.
-   d. Then `/audit-context`.
+   d. **`/audit-context`: done 2026-11-06**, ahead of b and c; findings fixed the same day.
 2. **EXP-028a review, overdue since 2026-10-31.** Decide it on its own frozen Method. The notes beside it name two new candidate entries (a Chronos-2-synth re-run on all 260 vintages, which is contamination-free; TabPFN = EXP-040). They also name the source for its mandatory lagged arm, the EDH publish archive in the energydatahub repo (`data/YYMMDD_HHMMSS_<feed>.json`, encrypted, from 2025-12-01).
-3. **EXP-021a Stage 3** (live shadow): Stage 2 **FEASIBLE** (EXP-039: 1.2s per forecast on sadalsuud CPU). Build `ml/shadow/update_fm.py` writing `static/data/augur_forecast_fm.json` (same schema, CQR via `conformal.py`), a NON-FATAL step after `update_shadow` in `daily_update.sh`, torch pinned in `requirements.lock`. Score it in `regret.py` too. After 14 vintages: the ADR-007 gate plus the product criterion.
+3. **EXP-021a Stage 3** (live shadow): Stage 2 **FEASIBLE** (EXP-039: 1.2s per forecast on sadalsuud CPU). Build `ml/shadow/update_fm.py` <!-- placeholder --> writing `static/data/augur_forecast_fm.json` <!-- placeholder --> (same schema, CQR via `conformal.py`), a NON-FATAL step after `update_shadow` in `daily_update.sh`, torch pinned in `requirements.lock`. Score it in `regret.py` too. After 14 vintages: the ADR-007 gate plus the product criterion.
 4. **augur#29 verdict**: overdue (Review by 10-20). Uses no new vintages. `eval_log` rows cover h1–24 only.
 5. **EXP-021a Stage 1, formal**: on clean vintages (t0 ≥ 2026-10-30; 7 of 14 on 2026-11-06, 14 realised ≈ 2026-11-16).
 6. **EXP-040** (TabPFN-2/3, backlog + addendum): after the EXP-028a review. Pre-run checks first: license (TabPFN-3 isn't free for commercial use), feasibility.
 7. Watch `ml/shadow/regret_log.jsonl`. At h49–72 Chronos only ties the profile floor (EXP-038: 7.87 vs 7.81).
-
-Pre-commit review is `/review-changes` (profile `.claude/review-profile.md`). Never rebase or amend a commit pinned in `PRECOMMIT_REV_BY_ID` (five today, incl. `d53af7a`, `47b2f16`): check 5 fails on an unreachable pin.
-
-Before any model work, read `docs/experiment-results.md` Decision state and `memory/model-class-findings.md` (EXP-036 rescales every effect size).
 
 ## Topic files
 
@@ -32,7 +30,7 @@ Before any model work, read `docs/experiment-results.md` Decision state and `mem
 | `memory/upstream-edh.md` | An EDH publish is late, short or missing; you're citing an energydatahub issue number |
 | `memory/gotcha-log.md` | Stuck: Promoted patterns + open entries. Resolved ones are in `memory/archive/gotcha-log-resolved.md`; grep it by mechanism |
 | `memory/archive/session-archive.md` | Before re-opening a settled question: dated closed-work sections |
-| `memory/data-formats.md` | EDH schema v2.2 envelope, units, timezones |
+| `memory/data-formats.md` | Parsing or changing EDH data: schema v2.2 envelope, units, timezones |
 | `memory/ml-decisions.md` | ARF-era architecture (archival, frozen 2026-05-29) |
 | `memory/archive/` | Retired text, unedited: the 2026-10-16 index, resolved gotchas |
 | `docs/archive/hypothesis-log-resolved.md` | A citation like `hypothesis-log.md [2026-09-14]` for a resolved entry |
@@ -54,15 +52,11 @@ Before any model work, read `docs/experiment-results.md` Decision state and `mem
 - **Calibration (augur#19)**: the P80 band under-covers on the upper side (Aug: 0.887 lower / 0.774 upper). EXP-015/016's premise is stale. Confound: CQR window depth changed with the 2026-09-13 anchor shift.
 - **Upstream**: EDH misses ~11% of days, and their alerting is diagnosis, not detection. See `upstream-edh.md`.
 - **Branches**: `wip/drop-epex-target` (REVIEW-class, stale number) and two April feature branches stay parked, unmerged and undeleted on purpose. Reasons in `memory/archive/memory-index-2026-10-16.md`.
-- **Framework**: agent-ready-projects, pinned by the `CLAUDE.md` stamp (drift-checked 2026-11-06 at v1.52.1). The four global skills match that tag byte for byte. <!-- verify: F=~/repos/agent-ready-projects; if [ -f "$F/scripts/stampcheck.sh" ]; then FRAMEWORK=$F bash "$F/scripts/stampcheck.sh"; else echo "CANNOT VERIFY: no stampcheck.sh in $F"; fi --> On DRIFT, run `/update-drift`, or reinstall at the tag if a `master` install caused it. `Last audit:` (v1.51.0) isn't written yet: item 1d's `/audit-context` writes it, and until then `/curate` lists the audit under Action needed. **Adopted v1.40.0 on 2026-10-29**, reversing the 2026-10-28 decline: `.claude/review-profile.md` (tracked through a `.gitignore` negation) carries the tiers, guarantees and a `pre-commitment` lens, and `/review-changes` is the pre-commit review. v1.42.0's #172 row, v1.43.0's #166 sections and v1.50.0's `Reviewer model` were adopted with it. **Declined v1.45.1's one-lens HIGH**: HIGH here is production run overnight unattended plus the pre-registration record, and the framework's own evidence doesn't support switching. Reopen only if review cost becomes the binding constraint. **Declined v1.52.0's delegated sessions** (`docs/GUIDE.md`): guidance only, and upstream says its benefit is still being trialled. Reopen if the trial reports a result.
+- **Framework**: agent-ready-projects, pinned by the `CLAUDE.md` stamp (drift-checked 2026-11-06 at v1.52.1). The four global skills match that tag byte for byte. <!-- verify: F=~/repos/agent-ready-projects; if [ -f "$F/scripts/stampcheck.sh" ]; then FRAMEWORK=$F bash "$F/scripts/stampcheck.sh"; else echo "CANNOT VERIFY: no stampcheck.sh in $F"; fi --> On DRIFT, run `/update-drift`, or reinstall at the tag if a `master` install caused it. Adoption and decline history, with reopen conditions: `memory/archive/session-archive.md`.
+- **Open issues**: `gh issue list`. #28 says it supersedes #2/#4/#22, yet they are open.
 - **Index size**: ceiling 20k chars. Past it, move a topic out; don't compress. <!-- verify: n=$(wc -m < memory/MEMORY.md); echo "index chars: $n (ceiling 20000)"; [ "$n" -lt 20000 ] || { echo "OVER 20k: move a topic out"; exit 1; } -->
 
 ## Active decisions
 
 - ADR-006: LightGBM-Quantile + CQR in production. ADR-007: promotion method (pre-commit, then existing-data test, then review batteries). ADR-008: UTC in data, browser-local at one render boundary. ADR-003: Netlify `--force`.
 - Lag-0 anchor ratified 2026-09-14: `t0` = end of tomorrow local.
-- b650-gpu is third-party (Arian's): working copies only. Pull results to `~/lab/augur`, then delete once a snapshot holds them (owner rule 2026-10-16).
-
-## Open issues (GitHub, 2026-11-06)
-
-#35 Netlify unpinned Python deps · #29 skill floor (verdict due) · #28 EXP-018a (parked) · #15 foundation models · #19 calibration · #30 first-24h dashboard · #32 ARF backup value · #33 staleness indicator · #25 event-driven EDH trigger · #14 backfill (detection shipped) · #24 #23 #18 dashboard · #22 #4 #2 feature ideas (demoted; #28 says it supersedes #2/#4/#22, yet they are open) · #20 #21 #9 #10 #8 backlog.

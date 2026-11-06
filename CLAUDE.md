@@ -19,7 +19,7 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 | **⚠️ Before quoting any effect size** | augur#29: production `p50` doesn't reliably beat a seasonal-naive floor, and against EXP-036's profile floor it sits at **−12.4%**. Every other metric here is *relative*. |
 | **ML features, training, forecast logic** | `ml/shadow/` (production) and `ml/features/`, `ml/training/` (ARF). Architecture questions → `memory/ml-decisions.md`, `docs/river-arf-retrospective.md`. Any pipeline/model change → a dated entry in `docs/model-progress-log.md`. |
 | **Dashboard or chart rendering** | `static/js/modules/` (ES6). Time axis: ADR-008. |
-| **energyDataHub data formats** | `memory/data-formats.md` (schema v2.2 envelope, units, timezones) |
+| **Parsing or changing EDH data** | `memory/data-formats.md` (schema v2.2 envelope, units, timezones) |
 | **Deployment, build pipeline, alarms** | `docs/RUNBOOK.md`: Netlify build, `--force`, every `[ALARM:]`/`[NOTE:]` marker symptom by symptom |
 | **Making or parking a decision** | ADRs → `docs/decisions/`. Provisional positions → `docs/hypothesis-log.md` (`## Open` starts with a dated trigger table; resolved entries in `docs/archive/hypothesis-log-resolved.md`). Citations → `docs/literature.md`. |
 | **Session rhythm** | Before committing structural changes: `/review-changes` (tiers, guarantees and lenses in `.claude/review-profile.md`; `/code-review` is an optional extra pass for code bugs), then `python -m pytest tests/`. If `experiments/`, `docs/experiment-backlog.md` (or its archive `docs/archive/experiment-backlog-run.md`), `docs/hypothesis-log.md` or `docs/experiment-results.md` changed, also run `scripts/audit_registry.py` and `scripts/render_results.py --check` (both exit non-zero on drift). Ending a session: `/curate`. Monthly: `/audit-context`, then `/update-drift`. |
@@ -27,6 +27,7 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 ## Hard Constraints
 
 - Never commit encryption keys or secrets — keys are base64-encoded env vars (`ENCRYPTION_KEY_B64`, `HMAC_KEY_B64`)
+- Never rebase or amend a commit pinned in `PRECOMMIT_REV_BY_ID` (`scripts/audit_registry.py`): check 5 fails on an unreachable pin
 - Never use hardcoded +2h timezone offset — use `Intl.DateTimeFormat` with `timeZone: 'Europe/Amsterdam'`
 - Never claim tests pass without running them. Never claim a file exists without reading it.
 - Always verify HMAC before decryption — data integrity is non-negotiable

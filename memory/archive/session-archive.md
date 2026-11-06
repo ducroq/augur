@@ -5,6 +5,10 @@
      Moved out of memory/MEMORY.md 2026-09-06 — it is history, not current state,
      and the index is read at every session start. Nothing here was edited. -->
 
+## Closed 2026-11-06
+
+- Framework adoption record, moved from the index: **Adopted v1.40.0 on 2026-10-29**, reversing the 2026-10-28 decline: `.claude/review-profile.md` (tracked through a `.gitignore` negation) carries the tiers, guarantees and a `pre-commitment` lens, and `/review-changes` is the pre-commit review. v1.42.0's #172 row, v1.43.0's #166 sections and v1.50.0's `Reviewer model` were adopted with it. **Declined v1.45.1's one-lens HIGH**: HIGH here is production run overnight unattended plus the pre-registration record, and the framework's own evidence doesn't support switching. Reopen only if review cost becomes the binding constraint. **Declined v1.52.0's delegated sessions** (`docs/GUIDE.md`): guidance only, and upstream says its benefit is still being trialled. Reopen if the trial reports a result.
+
 ## Closed 2026-10-29
 
 Ask: assess a pasted summary of Lipiecki & Weron 2026 (arXiv:2609.00089), ingest it, review, re-run drift, wrap up.
