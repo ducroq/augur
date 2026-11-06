@@ -2,13 +2,15 @@
 
 **Generated file — do not edit.** Rendered from `experiments/registry.jsonl` and the `summary.json` artifacts it references, by `scripts/render_results.py`. Regenerate after appending to the registry; `--check` fails if this file is stale.
 
-Registry state: **37 entries**, rendered at `1ccd2b0`. Integrity of the underlying record is verified separately by `scripts/audit_registry.py` (schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed).
+Registry state: **37 entries**, rendered at `2ef06e8`. Integrity of the underlying record is verified separately by `scripts/audit_registry.py` (schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed).
 
 Decision values: `kept` (evidence stands / in production) · `parked` (works, not adopted, revisit) · `rejected` (does not work) · `rolled_back` · `superseded`.
 
 ## Decision state — read this before proposing new work
 
 Derived from each entry's `decision` field, so it cannot drift from the record.
+
+> **augur#29 verdict, 2026-11-06:** every effect size from before 2026-09-06 is measured against a reference that doesn't beat the seasonal-naive floor. Entry: `docs/archive/hypothesis-log-resolved.md` [2026-09-06].
 
 ### Closed — refuted, do not re-run as-is
 

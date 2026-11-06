@@ -95,6 +95,9 @@ def render(entries, since=None) -> str:
 
     L.append("## Decision state — read this before proposing new work\n")
     L.append("Derived from each entry's `decision` field, so it cannot drift from the record.\n")
+    L.append("> **augur#29 verdict, 2026-11-06:** every effect size from before 2026-09-06 "
+             "is measured against a reference that doesn't beat the seasonal-naive floor. "
+             "Entry: `docs/archive/hypothesis-log-resolved.md` [2026-09-06].\n")
 
     L.append("### Closed — refuted, do not re-run as-is\n")
     L.append("Per ADR-007 a refuted position is **not** re-run with a looser Method. "
