@@ -2,6 +2,122 @@
 
 Moved out of `docs/hypothesis-log.md` on 2026-10-16, unedited. Scripts and docs cite entries by date (e.g. `[2026-09-14]`); grep this file for those dates.
 
+### [2026-09-10 → resolved 2026-11-06] ARF is not a backup: it and production die through the same door, and it dies harder
+
+**Position (provisional):** keeping ARF running as a "backup signal" (ADR-006, 2026-05-29) buys less resilience than the label implies, because the two models share their single most likely failure cause — stale upstream data — and ARF degrades *worse* than the thing it is backing up.
+
+**Evidence (2026-09-10, the EDH stall):** LightGBM is **data-anchored**. `predict_72h` builds features for one row at `t0` and gets all 72 horizons from horizon-as-feature stacking, so it never needs forward exogenous; when the parquet is stale it re-emits from the old anchor. Verified byte-identical against the previous run — `forecast`, `forecast_upper`, `forecast_lower` all `identical=True`, only `last_updated` moved. ARF is **wall-clock anchored**: `generate_forecast` loops from `datetime.now()`, and `OnlineFeatureBuilder.build` returns `None` unless it has both a 1h and 24h price lag (`online_features.py:112`). With prices ending 09-09T20:00 and the run at 09-10T03:01 the 1h lag is missing at the very first hour; nothing is pushed back into the buffer, so every subsequent hour fails the same way. Result: `forecast: {}`, 0 of 72 hours.
+
+So on the failure mode that has cost this pipeline the most vintages, production degrades to *stale* and the backup degrades to *nothing*. This was flagged independently by the energyDataHub session on the same day, which is weak corroboration but from a different vantage point.
+
+**Alternatives (falsification signals):**
+
+1. **The backup was never for this failure mode.** ARF is kept as a *modelling* fallback — a second opinion if LightGBM's quality regresses — not an availability fallback, and it is doing that job (it still feeds the Model-tab metrics). **Signal:** ADR-006 or the retrospective states an availability rationale nowhere. Then the label "backup signal" is imprecise but nothing is broken, and the fix is wording plus the wall-clock anchor being an ordinary bug.
+2. **The wall-clock anchor is trivially fixable.** **Signal:** anchoring ARF on `parquet.index.max()` like the shadow path costs less than an hour and makes it degrade to stale rather than empty. Then this is a small bug fix, not an architecture question, and it should just be done.
+3. **The right answer is to stop running it.** ARF was retired as a model 2026-04-28 and kept running for one rolling-window cycle; that cycle is long over. **Signal:** the Model-tab widgets are its only consumer and can be sourced from `eval_log.jsonl` instead. Then the honest move is retirement, not repair — and the daily job loses a step.
+
+**Method / revisit trigger:** decide between Alternative 2 and 3 before any work — they point opposite ways and the cost difference is an hour versus a deletion. Read `docs/river-arf-retrospective.md` and ADR-006 for the stated rationale first (Alternative 1 is checkable from documents alone and may close this outright).
+
+**Review by:** 2026-10-01, or whenever the ARF step next fails in a way that costs attention. Not urgent: it is non-fatal in `daily_update.sh` (`set +e` since 2026-07-03) and cannot abort the production path.
+
+**Outcome (2026-11-06): Alternative 1. The position is right about availability, but nothing was promised, so nothing is broken.** Neither ADR-006 nor `docs/river-arf-retrospective.md` states an availability rationale (`grep -i availab` finds nothing in either), which is Alternative 1's pre-committed signal. Alternative 3's signal fails as written: the Model-tab widgets are not ARF's only consumer. It also supplies the live consumer surcharge (`state.json`, 110.85 EUR/MWh on 2026-11-05 against the 95.0 default, so a stopped ARF silently shifts every consumer price), the `arf_*` arm of `evaluate_shadow.py`, and the one-line revert target. Alternative 2's cost was not tested.
+
+Live record since this entry: `[ALARM: ARF forecast 0h]` fired on 2026-09-10 and 2026-10-06, both during EDH stalls that other markers already reported. Over the 51 eval days since 2026-09-11, ARF MAE is 46.72 against LightGBM 44.18 (LightGBM lower on 34 days), mean of daily values on each model's overlap hours, no significance test.
+
+**Decision (engineer, 2026-11-06; augur#32 stays open to track the retirement):** do neither now. The anchor fix buys little, because the dashboard does not show ARF's forecast values and the empty output only coincides with stalls already alarmed. Retirement needs the surcharge derivation moved, the Model tab re-sourced, the `arf_*` arm dropped and ADR-006 superseded. Trigger for retirement: the EXP-021a Stage 3 swap decision, because a swap makes LightGBM the revert target and removes ARF's last modelling role. Wording fixed in `CLAUDE.md` and `memory/MEMORY.md`; ADR-006 stays frozen.
+
+---
+
+### [2026-08-31 → resolved 2026-11-06] The load/price horizon divergence is transient ENTSO-E outage residue, not a new steady state
+
+**Position (provisional):** The 2026-08-30 publish in which EDH's `load_forecast` spanned 24h while `energy_price_forecast` spanned 48h is **one-off outage residue and will not recur**. Basis: the energyDataHub session decrypted the committed publish (`8e5cc52`) and found EDH's request window unchanged at 48h with the envelope still declaring `end_time 2026-08-31T23:59:59+02:00` — so the collector asked for two days and ENTSO-E returned A44 day-ahead prices for 08-31 but not A65 day-ahead load. 2026-08-29 was a total ENTSO-E 503 at EDH (run `33269881393` published nothing), and the 08-30 18:58 run was the first success after it. Every normal-hour publish sampled before that — 08-20, 08-21, 08-24 16:32, 08-25, 08-26 — carried both feeds at 192 points. Filed as energydatahub#51.
+
+**Alternatives (failure-mode signals):**
+
+1. **It is a new steady state.** ENTSO-E's A65 day-ahead load publication may have moved to a 24h horizon permanently, or EDH's window may drift. **Signal:** three or more consecutive normal-hour publishes with price 192 / load 96. Then the `[ALARM: t0 held back Nh]` marker fires nightly forever, the forecast permanently loses ~24h of reach, and the response is a real decision rather than a wait — either accept the shorter horizon, or reconsider whether `load_forecast` earns its place at all (which is **EXP-018a's** question, so it must not be pre-empted by this).
+2. **It is intermittent rather than transient.** Recurs every few weeks tied to ENTSO-E incidents. **Signal:** the marker fires, clears, and fires again within a month with a full-length publish in between. Then the hold-back mechanism is doing exactly its job and nothing more is needed — but the nightly heartbeat email becomes noise on those days, and the marker should probably alarm only after N consecutive days rather than on the first.
+3. **A different feed truncates next.** The mechanism is not specific to load — any feed whose delivered span can differ from its requested span has it. **Signal:** `t0_short_feeds` names a column other than `load_forecast`/`wind_gen_forecast_mw`/`solar_gen_forecast_mw`. Then the fix generalised correctly and the finding is upstream-wide, worth telling EDH for their horizon-coverage check.
+
+**Method:** over the **next 7 daily runs** (2026-08-31 → ≈2026-09-07), from the daily commit subjects and `ml/models/shadow/shadow_state.json`:
+
+```
+# (1) Count days with t0_held_back_hours > 0.
+# (2) For each, record t0_short_feeds and whether EDH published at a normal hour.
+# (3) Cross-check against energydatahub#51's status and EDH's own publish record.
+```
+
+Position confirmed if the hold-back appears on ≤1 of the 7 days and `#51` is closed as non-reproducing. ≥3 consecutive days confirms Alternative 1. A clear-then-recur pattern confirms Alternative 2.
+
+**Cost of being wrong is asymmetric and worth stating:** if the Position holds, doing nothing is correct and the marker self-clears. If Alternative 1 holds and we assume the Position, we run a permanently degraded forecast while a nightly alarm trains us to ignore it — the classic alert-fatigue path. So the failure mode to watch for is *not noticing the marker stopped being informative*.
+
+**Revisit trigger (corrected 2026-09-04 — was "7 daily runs, ≈2026-09-07", which is the wrong instrument):** **two further NORMAL-HOUR EDH publishes**, regardless of calendar date. Alternative 1's signal is three consecutive normal-hour publishes at price 192 / load 96, and exactly one exists (`260830_190255`, 19:02). Daily *Augur* runs do not advance this test — during 08-31..09-04 there were five of them and zero usable publishes. Early-hour publishes do not count either: they are short in the benign, long-standing way (see the evidence table). Still resolve this **before** EXP-018a Stage 1, for the original reason — its verdict on `load_forecast` is cleaner if we know whether the column is reliably present — and Stage 1 has itself slipped ~5 days from the same outage. Surface in `/curate`.
+
+**Review by:** 2026-09-30.
+
+**Domain:** upstream data reliability, `update_shadow.py:latest_feasible_t0`, `ml/data/consolidate.py`, energydatahub#51, energydatahub#33, EXP-018a.
+
+**Evidence added 2026-09-04 — the Position's basis is confirmed and the Position itself is now the losing side, but the pre-committed signal is formally short.** Every `load_forecast` vintage on EDH `origin/main` was decrypted and counted by **distinct calendar days** as well as points, so a resolution change cannot be confused with a horizon change:
+
+| vintage | publish hour | load NL | days | price entsoe | days |
+|---|---|---|---|---|---|
+| 260815_161800 | 16:18 | 192 | 2 | 192 | 2 |
+| 260820_162737 | 16:27 | 192 | 2 | 192 | 2 |
+| 260822_161734 | 16:17 | 192 | 2 | — | — |
+| 260824_062847 | 06:28 | 96 | 1 | — | — |
+| 260824_163211 | 16:32 | 192 | 2 | 192 | 2 |
+| 260826_164411 | 16:44 | 192 | 2 | 96 | 1 |
+| 260828_004401 | 00:44 | 96 | 1 | — | — |
+| 260829_002024 | 00:20 | 96 | 1 | 96 | 1 |
+| **260830_190255** | **19:02** | **96** | **1** | **192** | **2** |
+| 260904_065333 | 06:53 | 96 | 1 | 96 | 1 |
+
+**The Position's basis holds** — normal is 192/2 days, for months, so this is not a same-day feed and the 18h hold-back is a real loss of reach rather than a structural cost to design around. **The Position's conclusion does not** — "one-off, will not recur" is now four consecutive short publishes with no return to 192 since 08-26.
+
+**The discriminator neither side had until now is publish hour.** Every 96/1 vintage *before* 08-28 is an early-hour run that recovered to 192 on the same day's normal-hour run (08-09 05:56→96 then 16:27→192; 08-24 06:28→96 then 16:32→192). So short-at-early-hour is the benign, long-standing pattern, and only a **normal-hour** short vintage is evidence. There is exactly one: `260830_190255` at 19:02. `260904_065333` is an early-hour manual dispatch and **does not count**.
+
+**So Alternative 1 is strongly indicated and formally short of its signal** (three or more consecutive normal-hour publishes at price 192 / load 96): the 08-31..09-04 EDH publish outage denied us the normal-hour publishes the test requires. Recorded as indicative, **not** confirmed — resolve on the next two scheduled EDH runs rather than on the calendar trigger. Corroboration from the EDH session's own archive read: `metadata.end_time` declares +2 days on every short vintage, so EDH's request window is unchanged and the envelope over-declares its coverage; DE_LU tracks NL exactly, so it is not zone-specific. Locates the cause in **upstream ENTSO-E A65 availability**. **energydatahub#51 must not be closed as transient on this evidence.**
+
+**Alternative 3 gains a concrete instance, in the other direction.** The mechanism generalises further than "another feed truncates": `load_forecast` is in EDH's `CRITICAL_FEEDS` and delivered half its horizon for four publishes **without their drift tripwire objecting**, because a shape signature captures structure and not span — 96 and 192 records have identical shape. No `CRITICAL_FEEDS` membership fixes that; a horizon/span check is a different instrument and neither repo has one. Augur's `t0` hold-back alarm was the only detector that fired. Told to EDH 2026-09-04; unowned on both sides.
+
+**Narrowed 2026-09-04, and the scope was wider than it needed to be: this is an NL-only question.** `ml/data/consolidate.py:320 parse_load_file` reads `load_data.get("NL", {})` — hard-coded, no fallback, no merge — and `grep -rn "DE_LU" ml/ static/js/ scripts/` returns **zero hits** repo-wide. So `load_forecast` in `FEATURE_COLUMNS` is NL-only, `latest_feasible_t0` holds back on NL coverage alone, and DE_LU's state is structurally invisible to Augur. The evidence table above records both zones because that is what the publishes contain, but only the NL column bears on this entry.
+
+**Pre-registered prediction (from the EDH session, stated 2026-09-04 09:59 CEST before the fact).** A direct ENTSO-E A65 probe found **NL recovered to 192/2 days while DE_LU is still 96/1**, with widening the request to +3d changing nothing and `DE_LU`-tomorrow-alone raising `NoMatchingDataError` — so tomorrow's NL data exists and tomorrow's DE_LU data does not. Their parser check (`_parse_response` in `collectors/entsoe_load.py` builds each zone's index from its own series, no cross-zone intersection) rules out a short DE_LU truncating NL, so the 08-28..08-30 96/96 was both zones genuinely short at once. Revised timeline: **through 08-26 both 192 · 08-28..08-30 both 96 · 09-04 NL 192, DE_LU 96.** Prediction for tonight's ~19:00 UTC scheduled publish: load NL **192/2**, DE_LU **96/1**, price entsoe **192/2**. Augur-side check: `t0_held_back_hours` → 0 and `t0_short_feeds` drops `load_forecast`.
+
+**RESOLVED ON THE LOAD SIDE 2026-09-04, from a published vintage rather than a probe.** EDH's second dispatch of the day, `260904_081356` (08:14 UTC / 10:14 CEST), decrypted and measured:
+
+| feed | pts | days |
+|---|---|---|
+| load NL | **192** | 2026-09-04, 2026-09-05 |
+| load DE_LU | **192** | 2026-09-04, 2026-09-05 |
+| price entsoe | 96 | 2026-09-04 |
+| price entsoe_de | 96 | 2026-09-04 |
+
+**Alternative 1 ("new steady state") is FALSIFIED, and falsified before its signal could accumulate** — the pre-committed threshold was three consecutive normal-hour publishes at price 192 / **load 96**, and `load` is now back at 192, so that sequence can never complete. It never got past one (`260830_190255`). The price leg at 96 here is *not* the divergence this entry tracks: an 08:14 UTC collection precedes the ~12:00 CET day-ahead auction, so same-day-only price is correct and expected.
+
+**The DE_LU timing confound is confirmed real, and it was the EDH session's own flagged uncertainty.** Their direct A65 probe at 09:59 CEST (07:59 UTC) found DE_LU at 96; this publish 15 minutes later has it at 192. German day-ahead load publishes later in the day than Dutch, so a morning DE_LU short reading is benign. Their pre-registered prediction of *DE_LU 96/1 tonight* is therefore expected to fail while its NL and price legs stand — recorded because it was stated in advance, which is what makes it scoreable.
+
+**Reconciled timeline (supersedes the single-vintage and probe-only readings, both of which were wrong in different directions):**
+
+| period | NL | DE_LU | reading |
+|---|---|---|---|
+| through 08-26 | 192 | 192 | healthy |
+| 08-28..08-30 | 96 | 96 | **genuine both-zone upstream A65 gap** — `260830_190255` at 19:02 was still short, far later than today's ~10:14 recovery, so this was not a timing artifact |
+| 09-04 | 192 | 192 by 10:14 | both recovered; DE_LU's morning 96 is publication timing, not a gap |
+
+So: a real multi-day A65 gap that has healed, costing three vintages of forecast reach — **resolved-upstream, not transient-misreading**. energydatahub#51 should close on that basis after tonight's normal-hour publish, not as "transient".
+
+**⚠️ How to score tonight, because the two outcomes are easy to conflate.** If NL returns 192, **Alternative 1 is falsified before its signal could accumulate** — that is *not* "signal met, alternative confirmed", and it is not "nothing happened either": the 08-28..08-30 gap was real, cost reach, and will be invisible once NL is back at 192. Record it as falsified-with-the-gap-on-record. If NL returns 96, the probe caught a transient and the accumulation toward Alternative 1 continues. The DE_LU timing confound the EDH session flagged (German TSOs possibly publishing day-ahead load later) cannot affect this scoring either way, given the NL-only finding above.
+
+**Status:** open — Augur-side fix deployed 2026-08-31; this hypothesis is about the upstream behaviour, not the fix. **Evidence added 2026-09-04 (above): Position's basis confirmed, its "one-off" conclusion superseded, Alternative 1 indicated but formally short. Narrowed the same day to NL-only, and a pre-registered probe predicts NL recovery — so the likely resolution is Alternative 1 FALSIFIED on the zone we use, decided by tonight's normal-hour publish rather than by the ≈2026-09-07 calendar trigger.**
+
+**Outcome (2026-11-06): Position revised. Not a new steady state, and not a one-publish event: a multi-day upstream A65 gap (08-28..08-30) that healed. Alternative 1 FALSIFIED with the gap on record; Alternatives 2 and 3 not observed.** Read from every committed `shadow_state.json` since 2026-08-30. `t0_held_back_hours` was above 0 on 2026-08-31, 09-01, 09-03 and 09-04 only, all 18h, all the same stuck `t0`, so one episode. It is 0 on all 56 later commit days through 2026-11-05, which meets this entry's Augur-side check and rules out Alternative 2's clear-then-recur pattern. `load_forecast` appears in `t0_short_feeds` on those four days only. Alternative 3's signal did not fire: the list only ever names `solar_gen_forecast_mw`, `wind_gen_forecast_mw` and `load_forecast`. `solar_gen_forecast_mw` is listed on nearly every day with no hold-back, because it isn't a model feature, so a non-empty `t0_short_feeds` alone is not a fault.
+
+**Scoring caveats.** The original 7-run count (hold-back on ≤1 day) was not met: it was 4. That instrument was replaced on 2026-09-04, before the outcome was known, so this entry scores on the corrected trigger. Vintages after 2026-09-04 were not re-decrypted; the evidence is Augur's own hold-back state. The other Position condition, energydatahub#51 closed, is also unmet: it was still OPEN when this entry resolved, although `memory/upstream-edh.md` said closed. It was closed the same day with this evidence.
+
+**Still unowned:** neither repo has a span check, so Augur's hold-back alarm remains the only detector for a feed delivering less than it declares.
+
+---
+
 
 ### [2026-08-30 → parked 2026-10-28] EXP-023a: the 112-day window's 3.0% gain is real and survives on vintages the sweep never scored
 
