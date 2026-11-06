@@ -4,7 +4,15 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
-## 2026-10-28 (latest) — Live cheap-hour regret: hours 25–72 were never scored, and the profile floor ranks twice as well everywhere
+## 2026-11-06 (latest) — CQR stops scoring its own widening
+
+`compute_cqr_q` scored the stored bands, which already included each day's `q`. EXP-015 recorded this on 2026-06-12, but it dropped out of the index on 2026-10-16 and its cost was never measured. After a wide spell the scores went negative, `q` clipped to 0 and the band collapsed: `last_cqr_q` went from 72 on 10-29 to 0 from 11-03.
+
+The fix scores the sorted, unwidened quantiles (`unwidened_bands`). `p50`, the forecast and the widening step don't change. On a 130-day replay, pooled band coverage goes from 0.703 to 0.788, lower side 0.852 to 0.887, upper side 0.851 to 0.901. Median width rises 17% (113 to 132 EUR/MWh) and Winkler is level (216.2 to 214.6). Since the 2026-09-13 anchor shift width rises 24% (144 to 178) with Winkler level; on November's 288 rows it rises 84% and Winkler worsens (185.7 to 198.2). This removes a defect; it doesn't improve the score. The pre-committed guardrail passes by construction, so it isn't evidence: `docs/hypothesis-log.md` [2026-11-06]. Live check after 28 post-deploy vintages.
+
+**Reading across a deploy:** coverage in `eval_log.jsonl` and band width in `calibration_history` change at the deploy date for this reason, not because the model changed. The confound also touches augur#19 and any before/after coverage comparison. On the first run `q` steps from 0 to about 27. A rollback would probably collapse `q` for up to 7 days, because the old code would score the newly wider stored bands (reasoned, not measured).
+
+## 2026-10-28 — Live cheap-hour regret: hours 25–72 were never scored, and the profile floor ranks twice as well everywhere
 
 **No model or forecast logic changed.** A new nightly step, `python -m ml.shadow.regret`, appends k3/k6 cost regret per 24-slot horizon block (h1_24, h25_48, h49_72) for the shipped `p50`, the carry and the EXP-036 profile to `ml/shadow/regret_log.jsonl`. It is its own step in `daily_update.sh`, and a failure rides the subject as `[ALARM: regret pass failed rc=N]`. It serves the product criterion pre-committed in `docs/hypothesis-log.md` [2026-10-28].
 

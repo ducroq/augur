@@ -51,7 +51,7 @@ sadalsuud — augur-daily.timer 16:30 UTC, ExecStartPre=scripts/wait_for_edh.sh
     │   gate: content contract (newer than last consumed + entsoe ≥ p75 size) and
     │   clause (c): the report arrived WHILE waiting (augur#34). Deadline 03:00 UTC,
     │   never fail-closed.
-    ├── python -m ml.update               → ARF backup signal (NON-FATAL)
+    ├── python -m ml.update               → ARF modelling fallback (NON-FATAL)
     ├── python -m ml.data.consolidate     → training parquet
     ├── python -m ml.shadow.update_shadow → LightGBM: 56-day retrain, 72h predict, CQR (production)
     ├── python -m ml.shadow.evaluate_shadow → eval row (h1–24 only): vs ARF + seasonal-naive + profile floor
@@ -80,7 +80,7 @@ Browser: 5 tabs (Prices, Weather, Grid, Market, Model); augur_forecast_shadow.js
 | `ml/models/shadow/shadow_state.json` | `calibration_history` (rolling 30-day cap, `MAX_HISTORY_DAYS`: count recent vintages here, older ones from `eval_log` dates), CQR stats, t0 hold-back |
 | `ml/shadow/secure_pickle.py` | HMAC sidecar; verify before load |
 | `ml/data/consolidate.py` → `ml/data/training_history.parquet` | EDH history → training parquet (gitignored, rebuilt nightly on sadalsuud) |
-| `ml/update.py`, `ml/models/state.json`, `ml/forecasts/` | ARF backup pipeline, its state (holds the surcharge cache), forecast archives |
+| `ml/update.py`, `ml/models/state.json`, `ml/forecasts/` | ARF fallback pipeline, its state (holds the surcharge cache), forecast archives |
 | `static/js/dashboard.js`, `static/js/modules/` | Dashboard entry (swap point: `loadAugurForecast`) and modules |
 | `decrypt_data_cached.py`, `utils/secure_data_handler.py` | Decryption with `--force` (ADR-003); AES-CBC-256 + HMAC-SHA256 |
 | `scripts/daily_update.sh` | The sadalsuud job and every commit-subject marker |

@@ -220,6 +220,101 @@ class TestComputeCqrQ:
         assert q > 0
         assert n_days == 4
 
+    def test_q_scores_unwidened_bands(self):
+        """A wide stored band must not hide misses of the underlying quantiles."""
+        rows = []
+        for d in range(4):
+            day_str = (pd.Timestamp("2026-04-25") + pd.Timedelta(days=d)).strftime("%Y-%m-%d")
+            for h in range(24):
+                rows.append({
+                    "timestamp_utc": f"{day_str}T{h:02d}:00:00+00:00",
+                    "eval_day": day_str,
+                    "p10": -100.0, "p50": 20.0, "p90": 140.0,  # widened by q=110
+                    "p10_raw": 10.0, "p50_raw": 20.0, "p90_raw": 30.0,
+                    "realized": 100.0,
+                })
+        q, _ = compute_cqr_q(rows, today="2026-04-29", calib_days=7)
+        assert q == pytest.approx(70.0)
+
+    def test_q_sorts_crossed_raw_quantiles(self):
+        rows = []
+        for d in range(4):
+            day_str = (pd.Timestamp("2026-04-25") + pd.Timedelta(days=d)).strftime("%Y-%m-%d")
+            for h in range(24):
+                rows.append({
+                    "timestamp_utc": f"{day_str}T{h:02d}:00:00+00:00",
+                    "eval_day": day_str,
+                    "p10": 10.0, "p50": 20.0, "p90": 30.0,
+                    "p10_raw": 20.0, "p50_raw": 30.0, "p90_raw": 10.0,
+                    "realized": 100.0,
+                })
+        q, _ = compute_cqr_q(rows, today="2026-04-29", calib_days=7)
+        assert q == pytest.approx(70.0)
+
+    def test_q_scores_lower_side_with_crossed_raw(self):
+        rows = []
+        for d in range(4):
+            day_str = (pd.Timestamp("2026-04-25") + pd.Timedelta(days=d)).strftime("%Y-%m-%d")
+            for h in range(24):
+                rows.append({
+                    "timestamp_utc": f"{day_str}T{h:02d}:00:00+00:00",
+                    "eval_day": day_str,
+                    "p10": -100.0, "p50": 20.0, "p90": 140.0,
+                    "p10_raw": 20.0, "p50_raw": 30.0, "p90_raw": 10.0,
+                    "realized": -50.0,
+                })
+        q, _ = compute_cqr_q(rows, today="2026-04-29", calib_days=7)
+        assert q == pytest.approx(60.0)
+
+    def test_partly_raw_rows_keep_stored_bands(self):
+        rows = []
+        for d in range(4):
+            day_str = (pd.Timestamp("2026-04-25") + pd.Timedelta(days=d)).strftime("%Y-%m-%d")
+            for h in range(24):
+                rows.append({
+                    "timestamp_utc": f"{day_str}T{h:02d}:00:00+00:00",
+                    "eval_day": day_str,
+                    "p10": 90.0, "p50": 95.0, "p90": 98.0,
+                    "p10_raw": None, "p50_raw": 20.0, "p90_raw": 30.0,
+                    "realized": 50.0,
+                })
+        q, _ = compute_cqr_q(rows, today="2026-04-29", calib_days=7)
+        assert q == pytest.approx(40.0)
+
+    def test_q_does_not_feed_back_through_stored_bands(self):
+        """Same raw quantiles and outcomes give the same q, however wide the stored band."""
+        def history(applied_q):
+            rows = []
+            for d in range(4):
+                day_str = (pd.Timestamp("2026-04-25") + pd.Timedelta(days=d)).strftime("%Y-%m-%d")
+                for h in range(24):
+                    rows.append({
+                        "timestamp_utc": f"{day_str}T{h:02d}:00:00+00:00",
+                        "eval_day": day_str,
+                        "p10": 10.0 - applied_q, "p50": 20.0, "p90": 30.0 + applied_q,
+                        "p10_raw": 10.0, "p50_raw": 20.0, "p90_raw": 30.0,
+                        "realized": 30.0 + h,
+                    })
+            return rows
+        narrow, _ = compute_cqr_q(history(0.0), today="2026-04-29", calib_days=7)
+        wide, _ = compute_cqr_q(history(50.0), today="2026-04-29", calib_days=7)
+        assert narrow == wide > 0
+
+    def test_rows_missing_raw_keep_stored_bands(self):
+        rows = []
+        for d in range(4):
+            day_str = (pd.Timestamp("2026-04-25") + pd.Timedelta(days=d)).strftime("%Y-%m-%d")
+            for h in range(24):
+                rows.append({
+                    "timestamp_utc": f"{day_str}T{h:02d}:00:00+00:00",
+                    "eval_day": day_str,
+                    "p10": 10.0, "p50": 20.0, "p90": 30.0,
+                    "p10_raw": None, "p50_raw": None, "p90_raw": None,
+                    "realized": 100.0,
+                })
+        q, _ = compute_cqr_q(rows, today="2026-04-29", calib_days=7)
+        assert q == pytest.approx(70.0)
+
     def test_n_calib_days_counts_only_window(self):
         """n_calib_days must reflect days actually in apply_cqr's [cutoff_start, cutoff_end)
         window, not the entire calibration_history (which can span much longer)."""
