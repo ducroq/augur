@@ -10,12 +10,12 @@ Last audit: 2026-11-06 (defects)
 
 Direction since 2026-10-28: judge forecasters on cheap-hour regret per horizon block against the EXP-036 profile floor (`docs/hypothesis-log.md` [2026-10-28] product criterion), and take the Chronos ladder first. LightGBM tuning (EXP-018a, EXP-023a Stage B, EXP-034) is parked. **Since 2026-10-29 the read surface is a first-class task: prune, thin, mechanize, retire.**
 
-0. **CQR feedback loop: fix merged and pushed 2026-11-06, engineer-approved.** First post-deploy vintage = first daily run after that push; confirm `last_cqr_q` left 0. Replay, pooled, vs delivered: coverage 0.703 → 0.788, width +17% (+24% since 09-13), Winkler level. It removes a defect, not a score gain; the guardrail PASS is by construction. Live check after 28 post-deploy vintages: `docs/hypothesis-log.md` [2026-11-06].
-1. **Read-surface pass, continued** (started 2026-10-29). Live chars 2026-11-06: `hypothesis-log.md` 49k, `experiment-backlog.md` 22k, `model-progress-log.md` 64k, `memory/` 79k. In order:
-   a. **Backlog: done 2026-11-06** (70k → 22k). Executed entries are in `docs/archive/experiment-backlog-run.md`; check 5 reads both files and now also keys on the pins.
-   b. **Hypothesis log `## Open`: done 2026-11-06** (7 entries, with the new [2026-11-06] CQR entry). [2026-08-31] and [2026-09-10] are in `docs/archive/hypothesis-log-resolved.md`. ARF decided 2026-11-06: no anchor fix; retire at the EXP-021a Stage 3 swap decision (augur#32 tracks it).
-   c. **`memory/gotcha-log.md`** (33k): thin the long Promoted rows to the rule plus a pointer.
-   d. **`/audit-context`: done 2026-11-06**, ahead of b and c; findings fixed the same day.
+0. **CQR feedback loop: fix merged and pushed 2026-11-06, engineer-approved.** First post-deploy vintage = first daily run after that push (the 2026-11-06 run was still in the EDH gate at 18:05 UTC); confirm `last_cqr_q` left 0. Replay, pooled, vs delivered: coverage 0.703 → 0.788, width +17% (+24% since 09-13), Winkler level. It removes a defect, not a score gain; the guardrail PASS is by construction. Live check after 28 post-deploy vintages: `docs/hypothesis-log.md` [2026-11-06].
+1. **Read-surface pass, continued** (started 2026-10-29). Done 2026-11-06: backlog (70k → 22k), hypothesis `## Open`, `/audit-context`, gotcha log (36k → 14k), progress log (65k → 21k). Live chars now: `hypothesis-log.md` 50k, `experiment-backlog.md` 22k, `model-progress-log.md` 21k, `memory/` 60k. <!-- verify: n=$(wc -m < memory/gotcha-log.md); echo "gotcha-log chars: $n (ceiling 20000)"; [ "$n" -lt 20000 ] || exit 1 --> Next (a and d wait on the items they name):
+   a. **`docs/hypothesis-log.md` [2026-09-06]** is 20k of the 50k. Close it with the augur#29 verdict (item 4), then archive it.
+   b. **`memory/upstream-edh.md`** (18k): keep the issue table and the rules; move incident narrative to `memory/archive/`.
+   c. **Mechanize the hypothesis trigger table**: its vintage counts are hand-counted and go stale. Generate them from `eval_log.jsonl` and `calibration_history`.
+   d. **Retire `memory/ml-decisions.md`** with ARF (augur#32).
 2. **EXP-028a review, overdue since 2026-10-31.** Decide it on its own frozen Method. The notes beside it name two new candidate entries (a Chronos-2-synth re-run on all 260 vintages, which is contamination-free; TabPFN = EXP-040). They also name the source for its mandatory lagged arm, the EDH publish archive in the energydatahub repo (`data/YYMMDD_HHMMSS_<feed>.json`, encrypted, from 2025-12-01).
 3. **EXP-021a Stage 3** (live shadow): Stage 2 **FEASIBLE** (EXP-039: 1.2s per forecast on sadalsuud CPU). Build `ml/shadow/update_fm.py` <!-- placeholder --> writing `static/data/augur_forecast_fm.json` <!-- placeholder --> (same schema, CQR via `conformal.py`), a NON-FATAL step after `update_shadow` in `daily_update.sh`, torch pinned in `requirements.lock`. Score it in `regret.py` too. After 14 vintages: the ADR-007 gate plus the product criterion. The swap decision also triggers ARF retirement (augur#32).
 4. **augur#29 verdict**: overdue (Review by 10-20). Uses no new vintages. `eval_log` rows cover h1–24 only.
@@ -33,7 +33,7 @@ Direction since 2026-10-28: judge forecasters on cheap-hour regret per horizon b
 | `memory/archive/session-archive.md` | Before re-opening a settled question: dated closed-work sections |
 | `memory/data-formats.md` | Parsing or changing EDH data: schema v2.2 envelope, units, timezones |
 | `memory/ml-decisions.md` | ARF-era architecture (archival, frozen 2026-05-29) |
-| `memory/archive/` | Retired text, unedited: the 2026-10-16 index, resolved gotchas |
+| `memory/archive/` | Retired text, unedited: the 2026-10-16 index, resolved gotchas, the Promoted rows before thinning (`gotcha-promoted-rows-2026-11-06.md`) |
 | `docs/archive/hypothesis-log-resolved.md` | A citation like `hypothesis-log.md [2026-09-14]` for a resolved entry |
 
 ## Current state
@@ -53,7 +53,7 @@ Direction since 2026-10-28: judge forecasters on cheap-hour regret per horizon b
 - **Calibration (augur#19)**: the P80 band under-covers (130 days to 11-05, pooled: 0.703 band, 0.852 lower, 0.851 upper). The earlier "upper side" reading (Aug: 0.887 / 0.774) no longer reproduces: full August is 0.855 / 0.819. Likely driven at least partly by the CQR feedback loop (queue item 0). EXP-015/016's premise is stale. Confound: CQR window depth changed with the 2026-09-13 anchor shift.
 - **Upstream**: EDH misses ~11% of days, and their alerting is diagnosis, not detection. See `upstream-edh.md`.
 - **Branches**: `wip/drop-epex-target` (REVIEW-class, stale number) and two April feature branches stay parked, unmerged and undeleted on purpose. Reasons in `memory/archive/memory-index-2026-10-16.md`.
-- **Framework**: agent-ready-projects, pinned by the `CLAUDE.md` stamp (drift-checked 2026-11-06 at v1.52.1). The four global skills match that tag byte for byte. <!-- verify: F=~/repos/agent-ready-projects; if [ -f "$F/scripts/stampcheck.sh" ]; then FRAMEWORK=$F bash "$F/scripts/stampcheck.sh"; else echo "CANNOT VERIFY: no stampcheck.sh in $F"; fi --> On DRIFT, run `/update-drift`, or reinstall at the tag if a `master` install caused it. Adoption and decline history, with reopen conditions: `memory/archive/session-archive.md`.
+- **Framework**: agent-ready-projects, pinned by the `CLAUDE.md` stamp (drift-checked 2026-11-06 at v1.52.2). The four global skills match that tag byte for byte. <!-- verify: F=~/repos/agent-ready-projects; if [ -f "$F/scripts/stampcheck.sh" ]; then FRAMEWORK=$F bash "$F/scripts/stampcheck.sh"; else echo "CANNOT VERIFY: no stampcheck.sh in $F"; fi --> On DRIFT, run `/update-drift`, or reinstall at the tag if a `master` install caused it. Adoption and decline history, with reopen conditions: `memory/archive/session-archive.md`.
 - **Open issues**: `gh issue list`. #28 says it supersedes #2/#4/#22, yet they are open.
 - **Index size**: ceiling 20k chars. Past it, move a topic out; don't compress. <!-- verify: n=$(wc -m < memory/MEMORY.md); echo "index chars: $n (ceiling 20000)"; [ "$n" -lt 20000 ] || { echo "OVER 20k: move a topic out"; exit 1; } -->
 

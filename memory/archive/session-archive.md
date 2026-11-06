@@ -7,6 +7,7 @@
 
 ## Closed 2026-11-06
 
+- `/update-drift` to v1.52.2 (session ask: the monthly drift check, then upgrade): one release, `review-changes` comments moved to the rationale doc, already in force through the global skill. Verified: the 34 removed lines are all comments, and the 3 bash blocks pass `bash -n` at both tags. No decline. Closed.
 - `/audit-context` (queue 1d, ahead of 1b and 1c): first audit on record, verdict defects, fixed in `88e060d`. Catches by step, the baseline for its Step 8: 1 index over 60 lines; 2 duplicate pointers; 3 hard rule only in the index; 4 two broken references plus five placeholders. Steps 5, 6 and 7 caught nothing.
 - Framework adoption record, moved from the index: **Adopted v1.40.0 on 2026-10-29**, reversing the 2026-10-28 decline: `.claude/review-profile.md` (tracked through a `.gitignore` negation) carries the tiers, guarantees and a `pre-commitment` lens, and `/review-changes` is the pre-commit review. v1.42.0's #172 row, v1.43.0's #166 sections and v1.50.0's `Reviewer model` were adopted with it. **Declined v1.45.1's one-lens HIGH**: HIGH here is production run overnight unattended plus the pre-registration record, and the framework's own evidence doesn't support switching. Reopen only if review cost becomes the binding constraint. **Declined v1.52.0's delegated sessions** (`docs/GUIDE.md`): guidance only, and upstream says its benefit is still being trialled. Reopen if the trial reports a result.
 
