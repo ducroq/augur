@@ -42,10 +42,16 @@ Review findings turned into a deterministic check (`review-changes` Step 3.1). `
 | 2026-10-29 | An amended or rebased pin still resolves from the reflog, so `git show` alone can't detect it | `scripts/audit_registry.py` check 5: each pin must pass `git merge-base --is-ancestor <pin> HEAD` | live (seeded orphan commit) | 0 |
 | 2026-10-29 | Run before committing, check 5 hashed HEAD only, so an uncommitted edit to a pinned Method passed | `scripts/audit_registry.py` check 5: the working-tree backlog is hashed too | live (seeded G2 30 → 25) | 0 |
 | 2026-10-29 | A dated addendum that supersedes a pinned Method sat in a section check 5 never hashed, so it could be edited after results landed | `scripts/audit_registry.py` `method_sections`: `## Addendum YYYY-MM-DD to EXP-NNN` is keyed `EXP-NNN/addendum-DATE` and must be pinned | live (seeded 28 → 14 days) | 0 |
+| 2026-11-06 | A pinned entry added after `PRECOMMIT_REV`, lost from the backlog, was in no key set and passed unchecked | `scripts/audit_registry.py` check 5: `PRECOMMIT_REV_BY_ID` joins the key set; `tests/test_audit_registry.py` seeds the loss | live | 0 |
 
 ---
 
 **Resolved entries live in `memory/archive/gotcha-log-resolved.md`** (moved 2026-10-16 to cut the read surface). Grep it by mechanism before filing a new entry: a recurrence of an archived gotcha is filed here with `[xN]` and a pointer to the archived one.
+
+### A rolling cap read as a count (2026-11-06)
+**Problem**: The 2026-10-16 trigger table said "30 vintages" and "EXP-023a Stage B 30 of 45". The true figure was about twice that; EXP-038 used 60 on 10-28.
+**Root cause**: `calibration_history` is trimmed to `MAX_HISTORY_DAYS = 30`, so any count over it returns 30. `CLAUDE.md` said to count there.
+**Fix**: Count recent vintages there and older ones from `eval_log` dates. A round number equal to a constant is a cap until shown otherwise.
 
 ### Effect sizes quoted from a paper went wrong twice in one session (2026-10-29)
 **Problem**: A CRPS range true for one model variant (TabPFN-3) was written as true for all three. The fix then rounded 22.5% to "23" and changed the base of a second percentage. Each was caught only by a review lens.

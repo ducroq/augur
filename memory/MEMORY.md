@@ -8,15 +8,15 @@
 
 Direction since 2026-10-28: judge forecasters on cheap-hour regret per horizon block against the EXP-036 profile floor (`docs/hypothesis-log.md` [2026-10-28] product criterion), and take the Chronos ladder first. LightGBM tuning (EXP-018a, EXP-023a Stage B, EXP-034) is parked. **Since 2026-10-29 the read surface is a first-class task: prune, thin, mechanize, retire.**
 
-1. **Read-surface pass, continued** (started 2026-10-29). Live chars that day: `hypothesis-log.md` 76k, `experiment-backlog.md` 70k, `model-progress-log.md` 64k (split at 2026-08-28; was 118k), `memory/` 80k (92k before `session-archive.md` moved). In order:
-   a. **Backlog: mechanize, then retire.** Move the executed entries (EXP-023..029, 036, 037) to `docs/archive/experiment-backlog-run.md`. Blocked on `scripts/audit_registry.py` check 5, which reads only `docs/experiment-backlog.md`: a moved Method would read as EDITED. Teach it the archive path first, seed a positive, then move.
-   b. **Hypothesis log `## Open`** (10 entries): resolve the two DUE entries ([2026-08-31] feed divergence, [2026-09-10] ARF not a backup, augur#32) and move the two parked LightGBM entries to the archive as parked.
+1. **Read-surface pass, continued** (started 2026-10-29). Live chars 2026-11-06: `hypothesis-log.md` 61k, `experiment-backlog.md` 22k, `model-progress-log.md` 64k, `memory/` 79k. In order:
+   a. **Backlog: done 2026-11-06** (70k → 22k). Executed entries are in `docs/archive/experiment-backlog-run.md`; check 5 reads both files and now also keys on the pins.
+   b. **Hypothesis log `## Open`** (8 entries, was 10; parked LightGBM entries archived 2026-11-06): resolve the two DUE entries ([2026-08-31] feed divergence, [2026-09-10] ARF not a backup, augur#32).
    c. **`memory/gotcha-log.md`** (33k): thin the long Promoted rows to the rule plus a pointer.
    d. Then `/audit-context`.
-2. **EXP-028a review, due 2026-10-31.** Decide it on its own frozen Method. The notes beside it name two new candidate entries (a Chronos-2-synth re-run on all 260 vintages, which is contamination-free; TabPFN = EXP-040). They also name the source for its mandatory lagged arm, the EDH publish archive in the energydatahub repo (`data/YYMMDD_HHMMSS_<feed>.json`, encrypted, from 2025-12-01).
+2. **EXP-028a review, overdue since 2026-10-31.** Decide it on its own frozen Method. The notes beside it name two new candidate entries (a Chronos-2-synth re-run on all 260 vintages, which is contamination-free; TabPFN = EXP-040). They also name the source for its mandatory lagged arm, the EDH publish archive in the energydatahub repo (`data/YYMMDD_HHMMSS_<feed>.json`, encrypted, from 2025-12-01).
 3. **EXP-021a Stage 3** (live shadow): Stage 2 **FEASIBLE** (EXP-039: 1.2s per forecast on sadalsuud CPU). Build `ml/shadow/update_fm.py` writing `static/data/augur_forecast_fm.json` (same schema, CQR via `conformal.py`), a NON-FATAL step after `update_shadow` in `daily_update.sh`, torch pinned in `requirements.lock`. Score it in `regret.py` too. After 14 vintages: the ADR-007 gate plus the product criterion.
 4. **augur#29 verdict**: overdue (Review by 10-20). Uses no new vintages. `eval_log` rows cover h1–24 only.
-5. **EXP-021a Stage 1, formal**: on clean vintages (t0 ≥ 2026-10-30; 14 realised ≈ 2026-11-16).
+5. **EXP-021a Stage 1, formal**: on clean vintages (t0 ≥ 2026-10-30; 7 of 14 on 2026-11-06, 14 realised ≈ 2026-11-16).
 6. **EXP-040** (TabPFN-2/3, backlog + addendum): after the EXP-028a review. Pre-run checks first: license (TabPFN-3 isn't free for commercial use), feasibility.
 7. Watch `ml/shadow/regret_log.jsonl`. At h49–72 Chronos only ties the profile floor (EXP-038: 7.87 vs 7.81).
 
@@ -40,7 +40,7 @@ Before any model work, read `docs/experiment-results.md` Decision state and `mem
 ## Current state
 
 - **Production**: LightGBM-Quantile + CQR (ADR-006) drives the dashboard via `augur_forecast_shadow.json`; ARF runs as backup signal (`augur_forecast.json`, Model tab). One-line revert: `dashboard.js:loadAugurForecast`. <!-- verify: grep -q "ml.shadow.update_shadow" scripts/daily_update.sh && grep -q "augur_forecast_shadow.json" static/js/dashboard.js && echo PASS || echo FAIL -->
-- **Daily job** on sadalsuud: `augur-daily.timer` 16:30 UTC, gated by `wait_for_edh.sh` (content contract + clause (c) freshness, augur#34). Last daily commit seen 2026-10-15, clean. <!-- verify: ssh sadalsuud "systemctl is-enabled augur-daily.timer && systemctl is-active augur-daily.timer" 2>/dev/null | grep -q "enabled" && echo PASS || { echo FAIL; exit 1; } -->
+- **Daily job** on sadalsuud: `augur-daily.timer` 16:30 UTC, gated by `wait_for_edh.sh` (content contract + clause (c) freshness, augur#34). Last daily commit seen 2026-11-05, clean. <!-- verify: ssh sadalsuud "systemctl is-enabled augur-daily.timer && systemctl is-active augur-daily.timer" 2>/dev/null | grep -q "enabled" && echo PASS || { echo FAIL; exit 1; } -->
 - **Gate lag** (augur#34) is invisible to every other guard. `scripts/check_gate_lag.sh` is the only probe. <!-- verify: if ssh -o BatchMode=yes -o ConnectTimeout=6 sadalsuud true 2>/dev/null; then ssh -o BatchMode=yes -o ConnectTimeout=6 sadalsuud 'bash -s' < scripts/check_gate_lag.sh; else echo "CANNOT VERIFY: sadalsuud unreachable"; fi -->
 - **Guards**: t0-advance alarm, content-contract gate, no clock floor. <!-- verify: grep -q "classify_t0_advance" ml/shadow/update_shadow.py && grep -q "T0_MARKER" scripts/daily_update.sh && grep -q "expected_points" scripts/wait_for_edh.sh && ! grep -qE 'MIN_PUBLISH_HOUR_UTC[=}]|[$]MIN_PUBLISH_HOUR_UTC' scripts/wait_for_edh.sh && echo "guard, marker and content-contract gate present; clock floor gone" || exit 1 -->
   Plus post-run output guards. <!-- verify: grep -q "ARF_FC_HOURS" scripts/daily_update.sh && grep -q "EVAL_LAG_DAYS" scripts/daily_update.sh && echo PASS || echo FAIL -->
@@ -50,7 +50,7 @@ Before any model work, read `docs/experiment-results.md` Decision state and `mem
 - **Model-class record**: EXP-001..039 in the registry (gaps at 017 and 034). The FM wins (EXP-021), but quote EXP-036's halving beside it. Fresh-vintage early read EXP-038: −21.5% QS vs `lean`; feasible on sadalsuud (EXP-039). <!-- verify: [ -f scripts/exp021_foundation_zeroshot.py ] && .venv/bin/python -c "import json;g=json.load(open('ml/shadow/exp021_foundation_aligned/summary.json'))['gates']['primary'];print('primary verdict',g['verdict']);raise SystemExit(0 if g['verdict'].startswith('SUPERIORITY') else 1)" -->
   <!-- verify: n=$(wc -l < experiments/registry.jsonl); last=$(tail -1 experiments/registry.jsonl | .venv/bin/python -c "import json,sys; print(json.load(sys.stdin)['id'])"); echo "$n lines, last $last"; [ "$n" = 37 ] && [ "$last" = EXP-039 ] || exit 1 -->
 - **Experiment data** (gitignored dumps) lives in `/home/jeroen/lab/augur/shadow/`, linked back to its old paths; `scripts/link_lab.sh` recreates the links (2026-10-16). It isn't byte-reproducible, so treat it as data. Since 2026-10-16 it also holds the EXP-024/026/027/028 dumps pulled from b650-gpu. <!-- verify: [ -L lab ] && [ -L ml/shadow/exp021_foundation_aligned/contexts.parquet ] && [ -f ml/shadow/exp028_chronos2/c2_predictions.parquet ] && echo "lab link + data links resolve" || { echo "links missing: run scripts/link_lab.sh"; exit 1; } -->
-- **Tests**: 389 collected. <!-- verify: n=$(.venv/bin/python -m pytest tests/ --collect-only -q 2>&1 | grep -oE "[0-9]+ tests" | grep -oE "[0-9]+"); echo "collected ${n:-none}"; [ "$n" = 389 ] || exit 1 -->
+- **Tests**: 400 collected. <!-- verify: n=$(.venv/bin/python -m pytest tests/ --collect-only -q 2>&1 | grep -oE "[0-9]+ tests" | grep -oE "[0-9]+"); echo "collected ${n:-none}"; [ "$n" = 400 ] || exit 1 -->
 - **Calibration (augur#19)**: the P80 band under-covers on the upper side (Aug: 0.887 lower / 0.774 upper). EXP-015/016's premise is stale. Confound: CQR window depth changed with the 2026-09-13 anchor shift.
 - **Upstream**: EDH misses ~11% of days, and their alerting is diagnosis, not detection. See `upstream-edh.md`.
 - **Branches**: `wip/drop-epex-target` (REVIEW-class, stale number) and two April feature branches stay parked, unmerged and undeleted on purpose. Reasons in `memory/archive/memory-index-2026-10-16.md`.
@@ -63,6 +63,6 @@ Before any model work, read `docs/experiment-results.md` Decision state and `mem
 - Lag-0 anchor ratified 2026-09-14: `t0` = end of tomorrow local.
 - b650-gpu is third-party (Arian's): working copies only. Pull results to `~/lab/augur`, then delete once a snapshot holds them (owner rule 2026-10-16).
 
-## Open issues (GitHub, 2026-10-16)
+## Open issues (GitHub, 2026-11-06)
 
-#29 skill floor (verdict due) · #28 EXP-018a · #15 foundation models · #19 calibration · #30 first-24h dashboard · #32 ARF backup value · #33 staleness indicator · #25 event-driven EDH trigger · #14 backfill (detection shipped) · #24 #23 #18 dashboard · #22 #4 #2 feature ideas (demoted; #28 says it supersedes #2/#4/#22, yet they are open) · #20 #21 #9 #10 #8 backlog.
+#35 Netlify unpinned Python deps · #29 skill floor (verdict due) · #28 EXP-018a (parked) · #15 foundation models · #19 calibration · #30 first-24h dashboard · #32 ARF backup value · #33 staleness indicator · #25 event-driven EDH trigger · #14 backfill (detection shipped) · #24 #23 #18 dashboard · #22 #4 #2 feature ideas (demoted; #28 says it supersedes #2/#4/#22, yet they are open) · #20 #21 #9 #10 #8 backlog.

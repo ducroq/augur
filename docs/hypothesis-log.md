@@ -21,26 +21,23 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 
 ## Open
 
-> **Counted 2026-10-16 — use this, not the "≈date" in any entry below; those dates are all stale.**
-> Source: the committed `ml/models/shadow/shadow_state.json` / `ml/shadow/eval_log.jsonl` at `18581cd` (daily run 2026-10-15).
-> 30 vintages with `t0 ≥ 2026-08-26` (last `eval_day` 2026-10-15); 34 eval rows carry `lightgbm_skill_vs_naive`,
-> ~33 of them with ≥12 naive-paired hours. **Every gate below is met except EXP-023a Stage B (30 of 45)**, and nothing
-> has been run against them since 2026-09-14. Run order, unchanged from the pre-commitments:
+> **Counted 2026-11-06 — use this, not the "≈date" in any entry below; those dates are all stale.**
+> 62 eval days since 2026-08-26 in `ml/shadow/eval_log.jsonl`; 7 vintages with `t0 ≥ 2026-10-30` (clean for EXP-021a Stage 1).
+> **`calibration_history` can't count past 30:** `MAX_HISTORY_DAYS` trims it, so the 2026-10-16 "30 vintages" here was the cap.
 >
-> | Entry | Trigger | Status 2026-10-16 |
+> | Entry | Trigger | Status 2026-11-06 |
 > |---|---|---|
-> | [2026-08-25] EXP-018a Stage 1 | ≥14 vintages | **PARKED 2026-10-28**, see [2026-10-28] park entry |
-> | [2026-08-29] EXP-021a Stage 1 | ≥14 vintages | **TRIGGERED**, first claim since 2026-10-28 (gate vs `lean`, per its own Method) |
-> | [2026-09-06] augur#29 verdict | ≥21 qualifying rows | **TRIGGERED** (~33) — consumes no vintages; Review by 10-20 |
-> | [2026-08-30] EXP-028a | ≥28 vintages | **TRIGGERED** (30) — Review by 10-31. Lagged-arm source found 10-29: the EDH publish archive (see the entry's notes) |
-> | [2026-08-30] EXP-023a Stage B | ≥45 vintages | **PARKED 2026-10-28**, see [2026-10-28] park entry |
-> | [2026-10-28] EXP-038 FM early read | runs 2026-10-28 | **RESOLVED** (kept; opened Stage 2 → EXP-039 FEASIBLE), moved to the archive |
+> | [2026-08-29] EXP-021a Stage 1 | 14 clean vintages | **7 of 14**, ≈2026-11-16; Review by 10-15 passed, gate vs `lean` per its own Method |
+> | [2026-09-06] augur#29 verdict | ≥21 qualifying rows | **TRIGGERED**, consumes no vintages; Review by 10-20 passed |
+> | [2026-08-30] EXP-028a | ≥28 vintages | **TRIGGERED**; Review by 10-31 passed. Lagged-arm source: the EDH publish archive (see the entry's notes) |
 > | [2026-10-28] product criterion | FM Stage 3 shadow reaches 14 vintages | pre-committed; gates the swap beside ADR-007 |
-> | [2026-08-31] feed divergence | two normal-hour publishes | **DUE** — Review by 09-30 passed |
-> | [2026-09-10] ARF not a backup | ARF failure / date | **DUE** — Review by 10-01 passed |
+> | [2026-08-31] feed divergence | two normal-hour publishes | **DUE**, Review by 09-30 passed |
+> | [2026-09-10] ARF not a backup | ARF failure / date | **DUE**, Review by 10-01 passed |
 > | [2026-05-29] publishable | engineer's call | not due (12-31) |
 >
-> Vintage holes: count them from `calibration_history` at run time; do not trust a list here. Holes since 2026-09-14 have not been enumerated.
+> EXP-018a Stage 1 and EXP-023a Stage B are parked and moved to `docs/archive/hypothesis-log-resolved.md`; the [2026-10-28] park entry below holds their revisit trigger.
+>
+> Vintage holes: count them at run time; do not trust a list here. Holes since 2026-09-14 have not been enumerated.
 
 ### [2026-10-28] Product criterion: a forecaster earns the dashboard only by ranking cheap hours at least as well as the profile floor, in every horizon group
 
@@ -184,59 +181,6 @@ This is a tightening, so it can only delay the verdict, never bring it forward �
 **Review by:** 2026-10-20.
 
 ---
-
-### [2026-08-30] EXP-023a: the 112-day window's 3.0% gain is real and survives on vintages the sweep never scored
-
-**Position (provisional):** EXP-023 found a 112-day training window beats production's 56 by 3.0% quantile score (DM p<0.0001), with better coverage on both sides and better Winkler — all four pre-committed gates passing. Position: this is a real generalisation gain, and it reproduces both on historical vintages the discovery sweep never touched and on vintages that did not exist when it was measured.
-
-**Why this needs its own pre-commit:** EXP-023's 112d rung is the **best of five** compared on one window, so its effect size is upward-biased by selection — the same objection that produced EXP-018a. Worse, the confound control (fix the vintage set so the 168d rung is available throughout) left only **95 vintages, all 2026-03-15..2026-08-21** — the high-price half of the year. A 3.0% effect measured on a best-of-five over one regime is exactly the kind of result that evaporates. Per ADR-007 the confirming test is fixed here, before the confirming data is looked at, and before `WINDOW_DAYS` changes anywhere.
-
-**The power problem, stated up front because it drives the design.** EXP-018a could demand 14 fresh vintages because its in-sample effect was 8.1%. Here it is 3.0%. Power scales roughly with the square of the effect, so matching EXP-018a's power at this effect size needs on the order of **7× the vintages** — ~98, i.e. late November. Demanding "≥3% on 14 fresh vintages" would be demanding *zero shrinkage* on an underpowered sample, which is not a test, it is a coin flip dressed as one. The design below therefore splits into a cheap quasi-holdout available now and a properly-powered fresh-vintage stage later, with the bar lowered honestly rather than the sample pretended larger.
-
-**Alternatives (failure-mode signals):**
-
-1. **Regime artifact.** 112d wins only because Mar–Aug 2026 was a rising, high-price regime where a longer window damps over-reaction. **Signal:** Stage A (Dec 2025–Mar 2026, a calmer stretch) shows no gain or a loss. Then the finding is regime-conditional, not a window-length law, and the right answer is an adaptive window rather than a new constant.
-2. **Selection mirage.** **Signal:** Stage A or B lands under 1.0% against 3.0% in-sample. Do not ship on a shrunken effect; the curve's *shape* (inverted U peaking interior) may still be worth keeping as evidence while the point estimate is not.
-3. **The optimum moves with the feature set.** EXP-023 ran on `lean`, but production is `full` and EXP-018a has not concluded. **Signal:** re-running the two rungs on `full` gives a different winner. Then window and feature set are not separable and both must be settled together.
-4. **Longer is simply better and 168 was a fluke of the confound control.** **Signal:** Stage B shows 168d ≥ 112d. Then re-open the sweep at 140/168/196 on the then-available history rather than shipping 112.
-
-**Method (pre-committed 2026-08-30, before either stage is run):**
-
-*Stage A — quasi-holdout on unscored history, runnable immediately.* EXP-023's sweep scored only `t0 ∈ [2026-03-15, 2026-08-21]`, because the 168d rung needed 168 days of pre-history. A **56-vs-112 comparison needs only 112 days**, so vintages from `2026-01-20` to `2026-03-14` are available *and were never scored by the discovery run*. Run exactly two rungs — **56 and 112, treatment fixed here so it cannot be chosen on the holdout** — on `t0 ∈ [2026-01-20, 2026-03-14]`, feature set `lean`, everything else identical to EXP-023:
-
-```
-PYTHONPATH=.:scripts .venv/bin/python scripts/exp023_window_sweep.py \
-    --start 2026-01-20 --end 2026-03-15 --windows 56,112 \
-    --jobs 14 --out ml/shadow/exp023a_stage_a
-```
-
-This is a **quasi**-holdout, not a true one: the data existed when 112 was chosen, even though these rows were not scored. It is therefore evidence about Alternative 1 (regime) and Alternative 2 (shrinkage), and **cannot on its own justify shipping**.
-
-*Stage B — fresh-vintage confirmation.* When **≥45 vintages with `t0 ≥ 2026-08-26`** exist (≈2026-10-09; 45 rather than 14 for the power reason above, and ≥ the EXP-023 discovery end so there is no overlap), run the same two rungs on that range. Incumbent = 56d. Treatment = 112d.
-
-*Gates.* IMPLEMENT iff **all four** hold **on Stage B** (Stage A informs but does not gate):
-
-1. **Skill:** paired DM on per-observation quantile score, H1 112d better, one-sided **p < 0.10**, HAC bandwidth 71.
-2. **Effect size:** 112d QS at least **1.5%** better than 56d. Deliberately below the in-sample 3.0% — half the discovery effect is the most that can be honestly demanded of a properly-powered replication of a small effect, and pretending otherwise would make the gate unpassable by design.
-3. **Calibration:** 112d lower- and upper-side coverage each **not more than 0.02 worse** than 56d (raw quantiles, no CQR).
-4. **Sharpness:** 112d mean Winkler (α=0.20) **≤ 1.05 ×** 56d.
-
-*If it passes.* The change is one constant (`WINDOW_DAYS` in `ml/shadow/update_shadow.py` and its siblings), and the revert is the same one constant. Deploy behind the same live-shadow discipline ADR-006 was earned with: 14 evaluable post-deploy vintages in `shadow_state.json:calibration_history`, `lightgbm_mae` not worse than the pre-deploy trailing-14 mean, no new alarm classes. **Note the interaction with EXP-018a**: if that ships the lean feature set, re-derive the optimum before changing the window, per Alternative 3.
-
-**Addendum 2026-08-30 (feasibility defect found before Stage A was run; gates unchanged).** The Stage A range above is **wrong and unrunnable**, and finding out why also corrects a factual error in EXP-023's own record. `load_frame_ext` drops rows on the EXP-020 fundamentals columns, which begin 2025-12-01, so the *feature frame* starts **2025-12-02** — not the parquet's 2025-09-28. Consequences:
-
-- The earliest usable `t0` for a 112-day window is **2026-03-24**, not 2026-01-18, so the pre-committed Stage A range (2026-01-20..2026-03-14) yields **zero** vintages.
-- **EXP-023's discovery window was `2026-05-19..2026-08-21`, not "2026-03-15..2026-08-21" / "Mar–Aug 2026"** as recorded in `experiments/registry.jsonl` EXP-023 notes, `docs/model-progress-log.md`, CLAUDE.md and `memory/MEMORY.md`. The real window is **three months, May–August**, narrower and later than recorded — which makes Alternative 1 (regime artifact) *more* live, not less, since May–Aug 2026 is squarely the rising-price stretch.
-
-**Corrected Stage A range: `t0 ∈ [2026-03-24, 2026-05-18]`** — the vintages that a 112d window can reach and that the discovery sweep never scored, ~56 of them. Everything else about Stage A is unchanged: two rungs only (56 and 112, treatment still fixed in advance), `lean`, quasi-holdout status, informs but does not gate. **Stage B and all four gates are untouched.** Recorded here rather than edited into the text above, per ADR-007: this is a defect in the data the Method reads, found *before* any Stage A number was seen, not a Method loosened after a peek.
-
-**Revisit trigger:** Stage A immediately (corrected range). Stage B at ≥45 vintages with `t0 ≥ 2026-08-26`, ≈2026-10-09, and **after** EXP-018a Stage 1 has claimed the fresh window. Surface in `/curate`.
-
-**Review by:** 2026-11-15.
-
-**Domain:** EXP-023a, window length, ADR-006, augur#19, `scripts/exp023_window_sweep.py`.
-
-**Status:** open — pre-committed 2026-08-30, before either stage was run.
 
 ### [2026-08-30] EXP-028a: Chronos-2's covariate gain survives on uncontaminated fresh vintages, and the coverage cost is a real trade rather than a fixable artifact
 
@@ -413,49 +357,6 @@ So: a real multi-day A65 gap that has healed, costing three vintages of forecast
 **⚠️ How to score tonight, because the two outcomes are easy to conflate.** If NL returns 192, **Alternative 1 is falsified before its signal could accumulate** — that is *not* "signal met, alternative confirmed", and it is not "nothing happened either": the 08-28..08-30 gap was real, cost reach, and will be invisible once NL is back at 192. Record it as falsified-with-the-gap-on-record. If NL returns 96, the probe caught a transient and the accumulation toward Alternative 1 continues. The DE_LU timing confound the EDH session flagged (German TSOs possibly publishing day-ahead load later) cannot affect this scoring either way, given the NL-only finding above.
 
 **Status:** open — Augur-side fix deployed 2026-08-31; this hypothesis is about the upstream behaviour, not the fix. **Evidence added 2026-09-04 (above): Position's basis confirmed, its "one-off" conclusion superseded, Alternative 1 indicated but formally short. Narrowed the same day to NL-only, and a pre-registered probe predicts NL recovery — so the likely resolution is Alternative 1 FALSIFIED on the zone we use, decided by tonight's normal-hour publish rather than by the ≈2026-09-07 calendar trigger.**
-
-### [2026-08-25] EXP-018a: removing the six rolling-stat features (and the three exogenous) beats the 24-feature production set out of sample
-
-**Position (provisional):** The EXP-018 Stage-0 sweep (entry below) found the production feature set carries features that actively hurt: dropping the six rolling stats buys −6.0% MAE / −7.8% quantile score, and the 15-feature **lean** set (rolling + exogenous removed) buys −6.5% / −8.1% with better lower-side coverage. Position: this is a real generalisation gain, not a selection artifact, and it will reproduce on vintages that did not exist when the finding was made. Mechanism claim: absolute-level features (`price_rolling_mean_168h` above all) make tree splits that are calibrated to the training window's price level, which is exactly what breaks when the level drifts — the same failure that produced August's upper-side coverage breach.
-
-**Why this needs its own pre-commit:** Stage 0 was pre-committed as *descriptive*. The lean variant is the best of eight compared on one 263-vintage window, so its effect size is upward-biased by selection. Per ADR-007 ("don't loosen Method when the answer arrives; open a new entry"), the confirming test is fixed here, before the confirming data is looked at — and before any change to `FEATURE_COLUMNS`.
-
-**Alternatives (failure-mode signals):**
-
-1. **Regime-dependent, not universally harmful.** Rolling stats cost us in the volatile 2026 regime but earned their place in calm months — Stage 0 shows a +5.8% *loss* from dropping them in Dec 2025 and a wash in Jan. **Signal:** the fresh-vintage window is calm and shows no gain. Then the answer is regime-conditional features (or a longer training window), not deletion, and this entry is refuted rather than the feature set vindicated.
-2. ~~**The real lever is stationarity, not removal.** Lean wins because absolute-level features drift, not because the information is worthless. **Signal:** a stationary reformulation (`price_lag_1h − price_rolling_mean_168h` spreads, price/rolling-mean ratios) beats *both* lean and incumbent in the same harness. Then park the deletion and open EXP-019 for the reformulation.~~ **Refuted same day (EXP-019, `scripts/exp019_stationary_ablation.py`, same 263 vintages):** anchor-relative spreads *tie* plain deletion (lean vs stat_lean_noanchor: QS p=0.405, |error| p=0.160), and re-adding `price_rolling_mean_168h` as the single explicit level column costs significantly (MAE −5.7% → −2.5% vs incumbent, QS p=0.0001). Since raw price lags are also absolute levels and are harmless, drift is at most half the mechanism — redundant smoothed-level columns diluting the split search fits better. Treatment for Stage 1 stays the plain 15-feature lean set.
-3. **Selection-bias mirage.** **Signal:** fresh-vintage QS gain is under 2% (against −8.1% in-sample). Do not ship on a shrunken effect; extend the holdout instead.
-4. **Exogenous removal is the wrong half.** Lean drops rolling *and* exogenous; the offline harness is if anything biased *toward* keeping exogenous (`consolidate.py` overwrites parquet rows with later vintages, so backtest exogenous is fresher than live). **Signal:** `drop_rolling` alone ≥ lean on fresh vintages. Then ship the rolling deletion only and keep wind/solar/load.
-
-**Method (pre-committed 2026-08-25):**
-
-*Stage 1 — fresh-vintage confirmation, offline, zero production risk.* When ≥14 vintages with `t0 ≥ 2026-08-25` exist in `ml/data/training_history.parquet` (≈2026-09-09, allowing for the 72h realisation lag), run:
-
-```
-PYTHONPATH=. OMP_NUM_THREADS=1 .venv/bin/python scripts/exp018_stage0_ablation.py \
-    --start 2026-08-25 --end <first-unrealised-day> --jobs 14 \
-    --variants full,drop_rolling,drop_rolling_and_exog \
-    --out ml/shadow/exp018_stage1
-```
-
-Incumbent = `full`. Treatment = whichever of `drop_rolling` / `drop_rolling_and_exog` has the lower in-sample QS (i.e. `drop_rolling_and_exog`, fixed here so the choice is not made on the holdout). IMPLEMENT iff **all four** hold on the fresh vintages:
-
-1. **Skill:** paired DM on per-observation quantile score, H1 treatment better, one-sided **p < 0.10**, HAC bandwidth 71.
-2. **Effect size survives:** treatment QS at least **3% better** than incumbent (guards Alternative 3; in-sample was 8.1%).
-3. **Calibration:** treatment lower-side and upper-side coverage each **not more than 0.02 worse** than incumbent (raw quantiles, no CQR — same "not worse than incumbent" framing as EXP-014).
-4. **Sharpness:** treatment mean Winkler (α=0.20) **≤ 1.05 ×** incumbent.
-
-*Stage 2 — live confirmation after deploy.* Swap `FEATURE_COLUMNS` in `ml/shadow/features_pandas.py`, deploy, then after **14 evaluable post-deploy vintages** in `shadow_state.json:calibration_history` (NOT `eval_log.jsonl` — it mixes 24/48/72h vintages): (1) mean `lightgbm_mae` from `eval_log.jsonl` ≤ the pre-deploy trailing-14-vintage mean; (2) band coverage not worse than the pre-deploy trailing-14 baseline (0.660 for Aug 2026 — a low bar, deliberately: this entry is about skill, augur#19 is the calibration arc); (3) no new alarm classes in the daily commit subjects. PASS → registry `kept`, update ADR-006's feature list + CLAUDE.md. FAIL → revert (one-line: restore the six/nine columns), registry `rolled_back`.
-
-**Addendum 2026-08-28 (data defect, gates unchanged):** the vintage stream broke 2026-08-23..27 — EDH skipped its publish entirely on 08-23 and 08-27, and its overnight catch-up released Augur's gate early on 08-24, so `t0` repeated on 08-23/08-27 and jumped over 08-25, so **`eval_log.jsonl` has a permanent hole at 2026-08-25** (third, after 06-08/06-10). This does not touch Stage 1, which replays its own t0 grid off `training_history.parquet` rather than off shadow vintages. It does touch **Stage 2 check (1)**, whose trailing-14 mean comes from `eval_log.jsonl`: read 14 *present* rows, do not treat the hole as a zero or let it silently shorten the window, and apply the same rule to the pre-deploy baseline so both sides are measured the same way. Per ADR-007 this records a defect in the data the Method reads; the four Stage-1 gates and the three Stage-2 checks are unchanged. A `t0`-advance guard now alarms on the same failure same-day — see `docs/model-progress-log.md` 2026-08-28.
-
-**Revisit trigger:** ≥14 vintages with `t0 ≥ 2026-08-25` in the parquet — ≈2026-09-09. Surface in `/curate`.
-
-**Review by:** 2026-09-16.
-
-**Domain:** EXP-018a, feature engineering, LightGBM production architecture (ADR-006), augur#19.
-
-**Status:** open — pre-committed 2026-08-25, awaiting fresh vintages; **13 of 14 as of 2026-09-14**, so it takes first claim on the next clean run. ⚠️ Branch `exp018-feature-reduction` is **planned, not created** — verified 2026-09-14, it exists neither locally nor on origin. Stage 1 is offline and touches no production path, so it needs no branch until Stage 2 swaps `FEATURE_COLUMNS`.
 
 ### [2026-05-29] The Augur method + the M4 arc are publishable if we invest ~2-3 weeks of empirical follow-up
 
