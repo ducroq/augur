@@ -28,8 +28,7 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 > | Entry | Trigger | Status 2026-11-06 |
 > |---|---|---|
 > | [2026-08-29] EXP-021a Stage 1 | 14 clean vintages | **7 of 14**, ≈2026-11-16; Review by 10-15 passed, gate vs `lean` per its own Method |
-> | [2026-09-06] augur#29 verdict | ≥21 qualifying rows | **TRIGGERED**, consumes no vintages; Review by 10-20 passed |
-> | [2026-08-30] EXP-028a | ≥28 vintages | **TRIGGERED**; Review by 10-31 passed. Lagged-arm source: the EDH publish archive (see the entry's notes) |
+> | [2026-08-30] EXP-028a | ≥28 vintages | **Deferred 2026-11-06** past the EXP-021a Stage 1 read, since it is moot if that fails; Review by 11-30. Lagged-arm source: the EDH publish archive (see the entry's notes) |
 > | [2026-11-06] CQR on unwidened scores | 28 post-deploy vintages | fix merged 2026-11-06; live check running |
 > | [2026-10-28] product criterion | FM Stage 3 shadow reaches 14 vintages | pre-committed; gates the swap beside ADR-007 |
 > | [2026-05-29] publishable | engineer's call | not due (12-31) |
@@ -77,7 +76,7 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 1. **Regret is too noisy at n = 14 to rank anything.** **Signal:** the per-block regret standard error exceeds the candidate-floor difference in two or more groups. Then extend the shadow to 28 vintages before deciding; do not loosen the bar.
 2. **The floor wins at h1_24 only, where both are already good.** **Signal:** the candidate fails h1_24 by under 0.5 EUR/MWh and wins the other two by more than 2. That is a real failure under this Method; a hybrid (floor for h1_24) is a new entry, not a reading of this one.
 
-**Review by:** when the first Stage 3 shadow reaches 14 vintages.
+**Review by:** when the first Stage 3 shadow reaches 14 vintages. Production fails this criterion today (regret k6 about 10–11 against the floor's 5.6–5.8); the engineer decided on 2026-11-06 to keep it until then rather than swap early.
 
 **Related evidence (added 2026-10-29, outside the Method, which is unchanged):** Lipiecki & Weron (2026, arXiv:2609.00089) reach the same split on battery arbitrage. TabPFN has the best CRPS in every market, yet DDNN-JSU earns the most under the risk-averse strategies. Their caveat applies here too: trading profit, like k6 regret, is **not a proper scoring rule**. That supports this entry's shape, regret as an *added* swap condition beside ADR-007's proper-score gate, never a replacement for it. Their gaps between top models are mostly ~1%, and they warn against reading the order of close models, which matches Alternative 1's noise concern.
 
@@ -86,107 +85,6 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 **Position:** both entries tune the incumbent (feature set, window length) while every standing finding says the bottleneck is the model class (`memory/model-class-findings.md`: feature engineering closed at 56 days; the FM's context advantage is not recoverable inside LightGBM). Their Methods stand as written and are not edited; they are parked, not refuted. EXP-018a's only downstream role was choosing EXP-021a's incumbent arm, and EXP-021a's own Method already says that, with 018a unconcluded, *"the primary gate stays against `lean`, the harder bar"*.
 
 **Revisit trigger:** EXP-021a fails Stage 1 or Stage 2 (then LightGBM stays in production and tuning it matters again), or the engineer asks.
-
-### [2026-09-06] The production model has no demonstrated skill over a seasonal-naive baseline, and the eval harness could not have told us
-
-**Position (provisional):** LightGBM-Quantile's point forecast does not beat "same clock hour, last day available at t0" — not at any horizon, and not on average over the record. The 20-odd experiments since EXP-018 have been optimising deltas against a reference that itself loses to one line of pandas. Until a skill-vs-naive floor is in the log, no model comparison here is interpretable.
-
-**Why this went unseen for four months:** `eval_log.jsonl` scores LightGBM against ARF, `docs/experiment-results.md` scores variants against production, and `metrics.py`'s Diebold-Mariano compares two candidates. Every instrument in the project is *relative*. Both models being worse than naive is invisible to all of them — it reads as a healthy log with a clear winner. ADR-007 pre-commits how we decide *what to change*; it never pinned what "good" is measured against.
-
-**Evidence (measured 2026-09-06, before this entry was written):**
-
-- Horizon-matched, model `p50` vs naive on identical timestamps from `calibration_history` (24 eval days, `t0 ∈ [2026-07-30, 2026-08-24]` — the full extent of the paired data):
-
-  | horizon | n | LGBM p50 MAE | naive MAE | winner |
-  |---|---|---|---|---|
-  | 1–24h | 576 | 26.92 | **23.34** | naive |
-  | 25–48h | 576 | 33.87 | **28.94** | naive |
-  | 49–72h | 552 | 36.92 | **32.71** | naive |
-  | all | 1704 | 32.51 | **28.27** | naive |
-
-- Longer but mixed-horizon (96 eval days, 2026-05-08..08-24, `eval_log` MAE vs daily naive-24h): LGBM 27.11 vs naive 26.66, **model ahead on 42 of 96 days (44%)**.
-- Band coverage over the last 30 eval days averages **0.653** (14d: 0.627) against an 0.80 target — chronic, and predating the 2026-08-30..09-04 outage that produced 09-04's 0.083.
-
-**Alternatives (failure-mode signals):**
-
-1. **The comparison window is the August level shift, not the model.** Jul–Aug 2026 was the highest-price, highest-variance stretch in the parquet, and a trailing-56-day learner is worst exactly there while a naive carry is at its best. **Signal:** skill turns positive over a calmer stretch once `n_naive_hours` accumulates across a regime change. Then the finding is regime-conditional and the fix is an adaptive window (which is EXP-023a's territory), not a model-class change.
-
-   **→ ANSWERED, partly, same day (EXP-035).** Re-scoring the 260 stored offline vintages (2025-12-05..2026-08-21) against the same floor: LightGBM `full` is **+5.1% over naive across the full window** (DM p=0.033) — so the alternative is half-right, the flat "no skill ever" reading was too strong. But the skill is **regime-dependent exactly as the alternative predicts, and that is the damaging half**: `lgbm_full` is *below* naive in 2 of 9 months, and in **August 2026 all eight LightGBM ablation variants are below naive** (best `drop_rolling` −0.104, `full` −0.157). Chronos-bolt-base is above naive in **9 of 9 months** (+0.196 in August) and +25.0% overall, DM p<1e-6. So the regime confound is real *and* it is a property of this model class, not of the measurement. This narrows the entry rather than resolving it — the live-record verdict is still Step 2's job.
-2. **The baseline is accidentally cheating.** **Signal:** the baseline sources an hour later than `24 * ceil(h/24)` back, or the parquet carries revised rather than as-published prices. Two failure surfaces, and only one is pinned:
-   - *Arithmetic* — `TestNaiveSourceTimestamp::test_source_is_never_after_t0` covers it, but only by handing the true `t0` in as an argument, so it validates the formula and nothing else.
-   - *Anchor resolution* — the realistic way this cheats, and **the way it actually did**. Code review on 2026-09-06 (before any `naive_*` row was written) found the first implementation inferring `t0` as `min(timestamp) - 1h` over `calibration_history`, which holds **realised rows only**: a vintage whose leading hours were withheld by `backfill_realized` would infer an anchor too late and source prices from after the true `t0` — a leak biasing skill *downward*, toward this entry's own conclusion. Fixed by recording `t0_utc` at prediction time (`update_shadow.py` step 7) and refusing to score rather than infer when it is absent and the leading hours are gone. Pinned by `TestT0Resolution` (6 tests).
-   - *Still unpinned:* ENTSO-E price revisions. If the parquet carries revised rather than as-published values, the baseline is scored on numbers nobody had at `t0`, and it would be flattered. Not currently checkable — `consolidate.py` keeps last-write-wins per timestamp with no revision trail.
-3. **MAE is the wrong lens for the product.** Augur exists for load shifting, where what matters is ranking the cheap hours within a day, not the level. **Signal:** a rank-correlation or cheapest-k-hours-hit-rate metric shows the model ahead of naive even where MAE is behind. That would make this entry's verdict narrow rather than wrong — and it would mean the dashboard should be scored on that instead.
-
-   **→ SIGNAL DID NOT FIRE; REFUTED, AND IN THE OPPOSITE DIRECTION (EXP-037, 2026-09-11).** Scored as **cost regret in EUR/MWh** — what you actually pay if you run a load for the k hours the forecaster calls cheapest, against perfect foresight — on the same 260 stored vintages, method pre-committed before any number existed. LightGBM `full` regret **7.99** vs the carry's **5.01**: **worse by 2.98 EUR/MWh**, worse in 2 of 3 horizon groups (+0.84 at 1–24h, −3.85 at 25–48h, −5.94 at 49–72h), worse in **6 of 9 months**, mean Spearman 0.718 vs 0.787. The materiality bar was never reached because the sign was wrong. **The product lens is the harsher one, not the kinder one**, which makes this entry simpler and stronger rather than narrower: the incumbent is not vindicated by any lens tried so far. Alternative 1 above is refuted by the same run's *sign* — it predicted the carry winning short and the model winning long; the pattern is exactly reversed.
-
-   **Mechanism (post-hoc):** amplitude collapse. LightGBM's within-block forecast spread falls from 26.6 EUR/MWh at 1–24h to **14.9** at 49–72h, against a realised spread of **42.7** and a carry holding **41.1**. Beyond a day it forecasts about a third of the true diurnal amplitude. A flattened forecast has a *better* MAE — hedging toward the conditional median is precisely what minimising absolute error buys — and a nearly arbitrary ranking. **The training objective is buying MAE by destroying the product value.** Chronos-bolt-base holds 35.7 and beats the carry by **+2.55 EUR/MWh** (DM p<1e-6) in all three groups and all nine months, Spearman 0.883.
-
-   Not an artefact of the shipped column: the raw tau=0.50 output scores 7.95, materially identical. Does **not** discharge Step 2 — same stored-vintage status as EXP-035.
-4. **It is real and it is the model class.** **Signal:** EXP-021's Chronos-Bolt arm, re-scored against the same naive floor, clears it while LightGBM does not. EXP-021 measured −20.3% QS *against the incumbent*; that number means something entirely different if the incumbent is sub-naive.
-
-   **→ SIGNAL FIRED (EXP-035, 2026-09-06).** Chronos-bolt-base 22.72 MAE vs naive 30.31 (+25.0%, DM p<1e-6), clearing the floor at every horizon group (+0.259 / +0.245 / +0.249) and in every month. LightGBM `full` 28.76 (+5.1%). The gap between model classes is therefore **larger** than EXP-021 stated, not smaller: the incumbent it beat by 20.3% is itself only marginally above a free baseline. Note the direction of this correction — it does not rescue the incumbent, it demotes it.
-
-**Method (pre-committed 2026-09-06, before any of the above is re-run):**
-
-*Step 1 — instrument, shipped with this entry.* `evaluate_shadow.py` gains six fields per row: `n_naive_hours`, `naive_mae`, `lightgbm_mae_on_naive_hours`, `lightgbm_skill_vs_naive` (`1 - lgbm/naive` on the paired hours, positive = model better), and `naive_min_horizon_h` / `naive_max_horizon_h`. The baseline may only read `24 * ceil(h/24)` hours back — which, for a 72h vintage, is always the single window `[t0-23h, t0]`. LGBM is restricted to the same hours so a gappy baseline cannot manufacture skill. Any unusable input leaves the fields **null, never 0.0** — "not computed" must not read as "no edge". `update_shadow.py` additionally records `t0_utc` per prediction so the anchor is never re-derived. 25 tests in `tests/test_evaluate_shadow.py`.
-
-The horizon-span fields exist because a vintage becomes eligible at 24 of 72 realised hours and *which* 24 varies, while naive MAE is strongly horizon-dependent (23.3 / 28.9 / 32.7 by the table above). **Step 2's mean is therefore taken over rows sharing a comparable span; rows whose span differs materially are reported separately rather than averaged in.**
-
-*Step 2 — the verdict, on fresh vintages only.* Do not re-litigate this on the 24 days above; they are how the hypothesis was formed. **EXP-035 does not discharge this step either** — it re-scores the same offline vintages EXP-018/021 already used, so it is corroboration from independent data but not the pre-committed live test, and its LightGBM arms are the walk-forward harness's rebuilds rather than the deployed model. After **≥21 vintages carrying non-null `lightgbm_skill_vs_naive`**, read the mean skill:
-
-- mean skill **< 0** → confirmed. The model class is the problem, EXP-021a inherits first claim, and `docs/experiment-results.md` gets a Decision-state line saying every pre-2026-09-06 effect size is measured against a sub-naive reference.
-- mean skill **∈ [0, 0.05]** → the model is a rounding error above a free baseline. Same practical conclusion, but keep the incumbent while EXP-021a runs.
-- mean skill **> 0.05** → the August window was the confound (Alternative 1). Re-read this entry against the regime, and treat the 24-day evidence as regime-conditional.
-
-~~Whichever bucket lands, **run Alternative 3's rank metric before acting**~~ — **discharged 2026-09-11 by EXP-037, before the verdict, as instructed.** The model does *not* rank hours well while missing levels: it ranks them worse than the carry does. So the dashboard's problem is not presentation, and this instruction no longer gates acting on whichever bucket Step 2 lands in. What EXP-037 adds instead is a *mechanism* the verdict should be read against — the amplitude collapse above — and a second product-denominated metric on which the model-class gap is large.
-
-*Step 3 — what is NOT pre-committed here.* Dropping the 1–24h horizon. That is a product change (the day-ahead auction publishes those hours ~4h before the run starts, and `api-client.js:226` already fetches them from Energy Zero), not a model finding, and it needs its own entry once it is known whether EDH's file already carries tomorrow's prices — unverifiable on the dev box, which has no keys. Filed as an open question, not a decision.
-
-**Clarified 2026-09-11 (author's intent, previously unrecorded).** The 1–24h block is forecast **deliberately**, and not because nobody noticed the auction had cleared. It is a **known-answer self-test**: at run time the day-ahead prices for those hours are already published, so the pipeline can be scored against ground truth *immediately*, without waiting a day for realisation. That is the only zero-latency check this system has. Recording it because both this entry and `CLAUDE.md` previously filed it as an open product question, and it was argued the wrong way in session on 2026-09-11 — "stop forecasting hours you already know" is a reasonable-sounding move that would remove the instrument.
-
-⚠️ **But the test region is not representative, and EXP-037 measured how badly.** The 1–24h block is the one place the incumbent still holds diurnal shape: within-block forecast spread **26.6** EUR/MWh there against **14.3 / 14.9** at 25–48h and 49–72h, versus a realised spread of ~42.5 throughout. On cost regret it *beats* the carry at 1–24h (+0.84 EUR/MWh) and loses heavily beyond it (−3.85, −5.94). So a self-test on this block **passes while the hours the product depends on degrade** — it is flattering by roughly a factor of two in amplitude and by a sign flip in regret. Use it as an integrity check ("did the pipeline produce sane output tonight?"), never as a health proxy for the 25–72h forecast. If it is to serve as the health check, it should be **stratified per horizon group**; the EXP-037 summary carries the per-block baselines to calibrate that against.
-
-The separate product question — whether the *dashboard* should display published prices for those hours rather than the forecast — is untouched by this and remains open. Displaying published prices and forecasting them internally are independent choices.
-
-**Revisit trigger:** ≥21 eval rows with non-null `lightgbm_skill_vs_naive` — the field starts populating on the next sadalsuud run, so ≈2026-09-27 at one row/day. **Does not consume fresh vintages** and does not block EXP-018a Stage 1 or EXP-021a; it re-frames how both are read. Surface in `/curate`.
-
-**Update [2026-09-06, same day]:** EXP-035 re-scored every stored arm against this floor with no GPU and no fresh vintages (ADR-007 layer 2). Headline: **the floor separates the model classes cleanly** — Chronos +25.0% and never below naive in any month; every LightGBM variant below naive in August 2026. Secondary, and useful to EXP-018a: `drop_rolling` is the strongest LightGBM arm against the floor (+0.107, double `full`'s +0.051), which points the same way EXP-018a's pre-committed direction does, while `drop_calendar` is the only arm below naive over the whole window (−0.017) — the calendar block is the one feature group clearly carrying its weight. None of this changes what is deployed, and none of it discharges EXP-018a or EXP-021a, both of which remain gated on 14 fresh vintages (6 counted 2026-09-06).
-
-**Amendment [2026-09-11] — the floor itself was weak, and a scalar floor is the wrong shape (EXP-036).**
-
-EXP-036 ran its pre-committed arms. **Every** multi-day profile beats the single-day carry this entry's floor is built on, monotonically in K, and the best arm — `N5_dt`, the mean of the same clock hour over the last 5 *matching day types* — beats it by **15.8%** (MAE 24.35 vs 28.92, DM p<1e-5). Its Alternative 1 (averaging destroys more than it denoises) is refuted; its Alternative 2 (day-type is the whole effect) did not fire, because plain `N5` already beats the carry by 9.8% and day-type matching adds ~6pp on top of that.
-
-What that does to this entry's subject: LightGBM `full`'s **+5.1% over the carry becomes −12.4% below the honest floor**, and its months below go from **2 of 9 to 7 of 9**. `drop_rolling`, the best LightGBM arm, is also below (−5.5%). Chronos-bolt-base survives every arm (+10.7% vs `N5_dt`, never below in any month).
-
-**Alternative 3 of EXP-036 fired, and it lands on this entry's Method.** The profile's gain over the carry is strongly horizon-dependent — `N5_dt` gains **+7.1%** at 1–24h and **+19.8%** at 49–72h, a 12.6pp spread against a 5pp signal. EXP-036 pre-committed that this means *"a single scalar floor is the wrong shape and augur#29's threshold must be restated per horizon group rather than as one mean."*
-
-**That instruction and this entry's own boundary are in tension, and the tension resolves against changing anything now.** Step 2 pre-commits buckets on a mean skill against the carry, on ≥21 fresh vintages. Re-specifying the threshold *while the data is arriving*, on evidence from stored vintages, is precisely the post-hoc criterion swap ADR-007 forbids and the 2026-09-04 lesson in `docs/model-progress-log.md` is about. So:
-
-- The **≥21 verdict fires as written** — mean skill, against the single-day carry, in the three buckets above. Unchanged.
-- It is **reported alongside** the per-horizon-group split and the profile-floor skill, both of which `evaluate_shadow.py` now logs (`naive_profile_mae`, EXP-036 gate G2 — additive, never replacing `naive_mae`, so pre-2026-09-11 rows stay comparable).
-- Any **successor** criterion is per-group. A scalar one is now known to be the wrong shape, and that knowledge applies forward.
-
-**And a correction that is not about this entry.** EXP-036's Alternative 4 also fired: the profile floor closes **57%** of Chronos-bolt-base's margin (+24.8% over the carry → +10.7% over `N5_dt`), against a >1/3 signal. A material part of what EXP-021/022 attributed to a pretrained distributional prior is ordinary profile smoothing that a seven-line baseline also has. The foundation model still clears every arm in every month — the model-class conclusion is unchanged in *direction* — but its headline margin over an honest floor is roughly **half** what it is over the carry. Anyone quoting −20.3% or +25.0% should quote this beside it. That is the third correction to the EXP-021 mechanism story, as EXP-022 warned there might be.
-
-**Amendment [2026-09-11] — the trigger counts rows; the verdict reads spans; a row can be counted in and read out.**
-
-Step 1 says the baseline may only read `24 * ceil(h/24)` hours back, and restricts LGBM to the same hours so a gappy baseline cannot manufacture skill. What it does not say is what happens when the pairing is *thin*. It can be a single hour: the 2026-09-09 row paired **one** hour, at horizon 25, and scored **+0.762** — the most flattering number in the log, from one draw of a variable whose daily MAE ranges over tens of EUR/MWh, and at that moment one of only **three** scored rows in existence. Cause was upstream, not the evaluator: the 09-08 `t0 jumped 2d` and the 09-10 stale-parquet run left almost no source day to pair against.
-
-The reading rule above already handles this at verdict time — rows of materially different span are reported separately, not averaged in, and a 25–25h row is a different span from a 1–24h one. But the **trigger** is a bare count of non-null rows, and a bare count admits rows the reading rule will then discard. The two numbers must describe the same population or the verdict fires on a sample it cannot read.
-
-So, with no change to the thresholds, the buckets, or what counts as evidence:
-
-- **≥21 rows** now means ≥21 rows carrying non-null `lightgbm_skill_vs_naive` **and** `n_naive_hours ≥ 12` (`MIN_NAIVE_HOURS`, `scripts/daily_update.sh`). Half a day, on a metric whose unit of observation was always meant to be a day.
-- Thin rows are still **written and still readable** — excluded from the count, not from the record. One is logged; **three or more of the last ten reach the commit subject** as `[NOTE: naive thin N]`, the same threshold the unscored alarm uses. A log line alone would not have been enough: nothing reads `logs/daily_update.log` unless the unit dies, so the case that matters — every row thin from here on, `eligible` pinned, the verdict quietly never becoming admissible — would have surfaced nowhere.
-- The same floor applies to the nightly 7-row sub-naive window, and fixing it exposed a latent bug in that window worth recording: it scanned a fixed `rows[-10:]`, so excluded rows consumed slots. With four thin rows among the last ten, `[NOTE: sub-naive L/N]` could never fire again — going quiet in exactly the vintage damage that produces thin rows. The window now walks back until it has 7 qualifying rows, which is what `docs/RUNBOOK.md` always claimed it did ("after an EDH outage it can span weeks"). The unscored **fault** detector stays recency-bound at the last 10, because "rows are landing now carrying no score" is a claim about now.
-- The count is now **mechanical**: every run prints `Seasonal-naive verdict trigger: N/21 qualifying rows`. It was previously counted by eye from a log in which a 1-hour row is indistinguishable from a 24-hour one.
-
-This is a tightening, so it can only delay the verdict, never bring it forward — which is the right direction for a rule changed while the data is arriving. Count at amendment: **2 qualifying rows of 21** (09-06, 09-07; 09-09 excluded), so the ≈2026-09-27 date now assumes an unbroken run of full vintages from here and is optimistic. 22 tests in `tests/test_naive_floor_guard.py`.
-
-**Review by:** 2026-10-20.
-
----
 
 ### [2026-08-30] EXP-028a: Chronos-2's covariate gain survives on uncontaminated fresh vintages, and the coverage cost is a real trade rather than a fixable artifact
 
@@ -227,7 +125,7 @@ bolt_base                reference  (frozen weights, contamination-free anchor)
 
 **Revisit trigger:** ≥28 vintages with `t0 ≥ 2026-08-26`, ≈2026-09-23, after EXP-018a Stage 1. Surface in `/curate`.
 
-**Review by:** 2026-10-31.
+**Review by:** 2026-11-30, after the EXP-021a Stage 1 read (moved from 2026-10-31 by the engineer on 2026-11-06; Method unchanged).
 
 **Domain:** EXP-028a, foundation models (augur#15), exogenous features (augur#3, augur#22), augur#19, ADR-006, ADR-007.
 
