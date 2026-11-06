@@ -30,12 +30,31 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 > | [2026-08-29] EXP-021a Stage 1 | 14 clean vintages | **7 of 14**, ≈2026-11-16; Review by 10-15 passed, gate vs `lean` per its own Method |
 > | [2026-09-06] augur#29 verdict | ≥21 qualifying rows | **TRIGGERED**, consumes no vintages; Review by 10-20 passed |
 > | [2026-08-30] EXP-028a | ≥28 vintages | **TRIGGERED**; Review by 10-31 passed. Lagged-arm source: the EDH publish archive (see the entry's notes) |
-> | [2026-10-28] product criterion | FM Stage 3 shadow reaches 14 vintages | pre-committed; gates the swap beside ADR-007 |
+> | [2026-11-06] CQR on unwidened scores | 28 post-deploy vintages | pre-committed; replay first, then live |
+| [2026-10-28] product criterion | FM Stage 3 shadow reaches 14 vintages | pre-committed; gates the swap beside ADR-007 |
 > > > | [2026-05-29] publishable | engineer's call | not due (12-31) |
 >
 > EXP-018a Stage 1 and EXP-023a Stage B are parked and moved to `docs/archive/hypothesis-log-resolved.md`; the [2026-10-28] park entry below holds their revisit trigger.
 >
 > Vintage holes: count them at run time; do not trust a list here. Holes since 2026-09-14 have not been enumerated.
+
+### [2026-11-06] Calibrating CQR on unwidened scores restores P80 coverage without costing either side
+
+**Position (provisional):** `compute_cqr_q` should score the unwidened sorted quantiles, not the stored widened bands. That removes the feedback loop recorded by EXP-015 and stops `q` collapsing to 0.
+
+**What is already known, so this is only part-blind:** on 130 replayed days, overall coverage is 0.701 delivered and 0.788 replayed, mean `q` 13.1 and 23.7 (`memory/gotcha-log.md`). Per-side coverage, median width and Winkler had not been computed when this was written.
+
+**Method (pre-committed 2026-11-06, before those numbers):** ADR-007's skill gate does not apply, because `p50` does not change. Guardrail, from ADR-007: on the same replay, lower-side and upper-side coverage must each be no more than 0.02 below delivered. Pass means implement. Winkler and median width are descriptive only, per ADR-007, and are reported in the verdict.
+
+**Live check:** after 28 post-deploy vintages, scored over all 72 horizons from `calibration_history`. The Position holds iff band coverage is within 0.75–0.85 and `q` is below 1 on at most 2 of those days.
+
+**Alternatives (failure-mode signals):**
+1. **The loop was accidentally useful.** **Signal:** the guardrail fails on either side. Then do not implement; open a new entry.
+2. **The loop is not the main problem.** **Signal:** live coverage stays below 0.75 with `q` stable. Then the gap is the 7-day window lagging regime shifts, which is EXP-016's first-shift-day finding.
+
+**Review by:** 2026-12-15.
+
+---
 
 ### [2026-10-28] Product criterion: a forecaster earns the dashboard only by ranking cheap hours at least as well as the profile floor, in every horizon group
 
