@@ -1,0 +1,349 @@
+# Experiment Backlog: run entries
+
+Pre-commitments that have been executed, retired here from `docs/experiment-backlog.md` on 2026-11-06. Results are in `experiments/registry.jsonl` and `docs/experiment-results.md`. Read this file to check what an experiment committed to, not to find out what happened.
+
+Every section below is byte-identical to its pre-commit revision, and `scripts/audit_registry.py` check 5 still proves it: the baseline comes from the backlog at the pinned revision and the current text from here. **Nothing in a section may change.** The rules are in `docs/experiment-backlog.md`.
+
+Moved with them, verbatim, is the backlog preamble these entries were written under. **It is a record, not current status.** Its "below" means this file, and its dates and statuses are as of writing, so EXP-036 still reads "not run". Its framing describes the 2026-08-29 batch; EXP-036 and EXP-037 came later. Its table also lists EXP-034 and EXP-040, which are still open and live in the backlog.
+
+**Written 2026-08-29**, immediately after EXP-021 (foundation model beats the incumbent by 20.3% QS) and EXP-022 (~12 of those points are pretrained prior, ~8 are context volume; the calibration half is *entirely* prior). Every entry below descends from those two results.
+
+**Standing calendar these must not collide with** (dates revised 2026-09-04 — **count vintages, do not read dates**; the 2026-08-30..09-04 EDH publish outage cost five vintages and moved every threshold-based trigger by ≥5 days): EXP-018a Stage 1 fires **≈2026-09-14 at the earliest** and has priority on the fresh-vintage window (`t0 ≥ 2026-08-25`); EXP-021a Stage 1 runs after it; EXP-028a ≈09-28; the t0-guard review is ≈2026-09-11 and is *unaffected*, since its criteria concern `calibration_history` gaps having a matching alarm and the outage days are legitimate data for that. These are floors, not estimates — EDH published on 31 of 35 days over 2026-07-25..08-28, so a further miss moves them again. See the warning block at the top of `docs/hypothesis-log.md` `## Open` for the vintage-count one-liner. **Everything in this backlog runs on the existing 260-vintage historical window and consumes none of those fresh vintages.**
+
+**Suggested order** — by decision value per unit cost, and by what blocks what:
+
+| # | Entry | Cost | Runs on | Status |
+|---|---|---|---|---|
+| 1 | EXP-025 transplanted calibration prior | minutes | CPU | **RUN 2026-08-29 — `rejected`**, but forced a correction to the EXP-021/022 calibration claim |
+| 2 | EXP-023 window-length sweep | ~3h | jwasys | **RUN 2026-08-29 — `parked`**, 112d beats 56d by 3.0% QS, all four gates pass |
+| 3 | EXP-024 lag richness | ~1h | jwasys | **RUN 2026-08-30 — `rejected`**; matched control shows count *and* kind both matter |
+| 4 | EXP-029 FM-residual exogenous pre-screen | minutes | CPU | **RUN 2026-08-29 — `rejected` as a gate**; it would have vetoed EXP-028's true positive |
+| 5 | EXP-028 Chronos-2 with covariates | GPU min | jwasys | **RUN 2026-08-29 — `parked`**, +8.3% QS, Augur's first positive exogenous result |
+| 6 | EXP-026 model-size ladder | GPU min + bench | jwasys | **RUN 2026-08-29 — `kept`**; latency half completed by proxy 2026-08-30 (EXP-030): base 0.52s, ~115× headroom |
+| 7 | EXP-027 fine-tuning dissociation | GPU hours | jwasys | **RUN 2026-08-30 — `rejected`**; both halves degrade, zero-shot is the deployment mode |
+| 8 | EXP-034 fragility-conditioned bands | minutes | CPU | **Added 2026-08-31, not run.** Queued *after* EXP-018a Stage 1 — see its own sequencing note |
+| 9 | EXP-036 profile baseline as the skill floor | minutes | CPU | **Added 2026-09-10, not run.** Independent of the fresh-vintage queue; see its own sequencing note |
+| 10 | EXP-040 TabPFN-2/3, a tabular foundation model with covariates | GPU min–h (unverified) | b650-gpu | **Added 2026-10-29, not run.** License and feasibility checks first; see its own sequencing note |
+
+**Entry 9 was added 2026-09-10** and belongs to neither batch — it descends from the 2026-09-06 naive-floor finding (augur#29) and its Method was fixed on 2026-09-10 before any profile baseline was computed.
+
+**Entry 8 was added 2026-08-31 and is not part of the 2026-08-29 batch** — it descends from the EXP-015/016 calibration arc rather than from EXP-021/022, and its Method was fixed on 2026-08-31 before any data was seen. The seven-entry framing below refers to the original batch.
+
+**Run status: ALL SEVEN EXECUTED (2026-08-29 overnight + 2026-08-30).** Originally five of seven executed on `b650-gpu`, with environment parity verified bit-identically against situla before any result was trusted. Results are in `experiments/registry.jsonl` (EXP-023/025/026/028/029) and `docs/model-progress-log.md`. **EXP-024 and EXP-027 have since been run (2026-08-30), both `rejected`.** Every Method below is preserved exactly as written on 2026-08-29, before any data was seen; none was edited after a result landed. The entries below are kept verbatim as written on 2026-08-29 *before* any data was seen; where a Method's cost estimate proved wrong (EXP-023 predicted ~150 usable vintages, actual 95) that is recorded in the registry rather than corrected here, because editing a pre-commit after the fact is exactly what the promotion rule forbids.
+
+**On feeding features to the foundation model** (added 2026-08-29): EXP-021's Chronos-**Bolt** is architecturally univariate — `predict(inputs, prediction_length, limit_prediction_length)`, a 1-D series in — so *no amount of retraining* gives it covariates. **`amazon/chronos-2` (Apache-2.0, already installed) takes `past_covariates` and `future_covariates` at inference time with no retraining**, and Augur's exogenous are the favourable known-future case. EXP-028 is that test; EXP-029 is the near-free screen that should gate it. Note EXP-028 carries a contamination constraint EXP-021 did not: Chronos-2's weights were modified **2026-06-05, inside the evaluation window**, so it can only be scored on `t0 > 2026-06-05`.
+
+---
+
+## EXP-025 — The calibration prior is separable from the point forecast, and can be transplanted onto the incumbent
+
+**Priority: 1.** Cheapest entry here and the most directly actionable against augur#19.
+
+**Question.** EXP-022 showed Chronos's band advantage is *pure pretrained prior*: coverage is flat at 0.811 / 0.804 / 0.813 / 0.823 across 56d / 28d / 14d / 7d contexts, i.e. it does not depend on information at all. If the spread prior is genuinely independent of the point forecast, it should be transplantable — Chronos's *spread* wrapped around the incumbent's *median*. That is the concrete form of the fallback EXP-021a Stage 2 already contemplates ("infeasible on latency → the FM becomes an offline band source rather than the production forecaster").
+
+**Position (provisional).** Applying Chronos's quantile spread around the incumbent's median lifts band coverage from **0.611 to ≥0.76** while costing **<3% quantile score** relative to the full FM — i.e. most of the calibration win survives separation from the point forecast.
+
+**Mechanism.** The incumbent's p10/p90 are estimated from ~1344 rows with pinball loss, split across 3 horizon groups, so each tail quantile is fit on the sparsest part of a small sample — which is why EXP-022 found the pinball gain largest at p10 (26.3%) and smallest at the median (16.3%). Spread is the part a small sample estimates worst and a pretrained prior supplies best. Point forecasting is the part the incumbent is *least* bad at.
+
+**Alternatives (falsification signals).**
+
+1. **Spread is calibrated only to its own median.** The FM's band is conditioned on the FM's point forecast, so transplanting it onto a different median mis-covers asymmetrically. **Signal:** transplanted lower- and upper-side coverage differ by >0.08 from each other, or band coverage lands below 0.70. Then the two halves are not separable and it is all-or-nothing — which strengthens the case for deploying the FM whole.
+2. **A weighted median blend beats both.** EXP-021 found a 50/50 blend (MAE 23.69) worse than the FM alone (23.24), but 50/50 was never optimised and the errors do decorrelate (r=0.753). **Signal:** some w ∈ (0,1) beats the FM alone on QS. Then ensembling is back on the table and should be its own entry.
+3. **CQR already gets there.** Production wraps a conformal layer around the incumbent that this comparison omits. **Signal:** the incumbent + production CQR reaches coverage comparable to the transplant. Then the pretrained prior adds nothing over the layer we already run, and the calibration half of EXP-021 was an artifact of comparing a pre-conformal band to a post-conformal one. **This arm also discharges EXP-021a's Alternative 4 and must be run even if the others are skipped.**
+
+**Method (pre-committed 2026-08-29).** Pure post-processing of prediction parquets that already exist — no refit, no GPU, no new data. All arms on the same 260 paired vintages, same functions, HAC 71.
+
+```
+arm A  incumbent median + FM spread      (p50_lean, p50_lean ± (FM spread))
+arm B  FM median + incumbent spread      control; expected to be poor
+arm C  weighted median blend w ∈ {0, .25, .5, .75, 1} × {own spread, FM spread}
+arm D  incumbent + production CQR        the honest comparator (Alternative 3)
+```
+
+Spread is applied as the FM's *asymmetric* half-widths (`p50−p10`, `p90−p50`) so the transplant preserves skew rather than assuming symmetry. Report per-side coverage, band coverage, median width, Winkler, and paired DM on QS against both `lean` and the full FM.
+
+**Gates.** (1) band coverage ≥0.76; (2) per-side coverage within 0.08 of each other (guards Alternative 1); (3) QS no more than 3% worse than the full FM; (4) Winkler ≤ the incumbent's. Passing all four makes arm A a live candidate for augur#19 **independent of whether the FM is ever deployed as the forecaster.**
+
+**What it would change.** A pass gives augur#19 a fix that needs no production torch dependency — the FM runs offline, its spread is cached, and the nightly path stays LightGBM. That is a far smaller operational surface than EXP-021a Stage 3, and it is available much sooner.
+
+---
+
+## EXP-023 — The incumbent's 56-day window is too short, and part of the FM's context advantage is available for free
+
+**Priority: 2.** The lever EXP-020 named and nobody has yet pulled.
+
+**Question.** EXP-020 closed features and left two levers: window length and model class. EXP-021/022 resolved model class and showed context length is worth ~8 percentage points *to the FM* (−12.5% QS at a 7-day context, −20.3% at 56-day). The incumbent's 56-day window is simultaneously its training set and its context, and **it has never been tuned** — it is an artifact of when the pipeline was built.
+
+**Position (provisional).** LightGBM's quantile score improves monotonically with window length out to at least **112 days**, and the optimum is **≥5% better** than 56 days. The gain concentrates in the tail quantiles (p10/p90) rather than the median.
+
+**Mechanism.** Nine models (3 horizon groups × 3 quantiles) are fit on ~1344 rows. Quantile estimation is far more sample-hungry than mean estimation — the p10 head is effectively fit on the sparse lower tail of a small sample. EXP-022's per-quantile decomposition (gain 26.3% at p10 vs 16.3% at p50) says precisely this is where the incumbent is starved. More window = more tail observations, at no architectural cost.
+
+**Alternatives (falsification signals).**
+
+1. **56 days is already near-optimal.** The curve is an inverted U peaking at or near 56. **Signal:** no rung beats 56d by ≥3%. Then the window was well chosen, the FM's context advantage does not transfer to a tabular model, and this lever closes for good — which is itself worth knowing, because it would leave model class as the *only* remaining lever.
+2. **Monotone all the way to the data limit.** No optimum inside the ~9 months available. **Signal:** the longest rung is the best rung. Then the window is purely a data-availability artifact; ship the longest feasible and re-test as history accumulates. Note this would also mean the parquet's length is now a binding constraint on model quality — a new and actionable fact.
+3. **Window and feature set are not separable.** **Signal:** the optimum differs between `lean` and `full`. Then EXP-018a's conclusion is window-conditional and its Stage 2 needs re-deriving at the new window.
+4. **Gains are tail-only.** **Signal:** p10/p90 pinball improves ≥5% while p50 improves <2%. That *confirms* the mechanism and redirects this at augur#19 rather than at point skill — and makes it complementary to EXP-025 rather than redundant.
+
+**Method (pre-committed 2026-08-29).** The EXP-018 harness with `WINDOW_DAYS` promoted from a module constant to a `--window-days` flag (a small patch; the constant is currently read by `run_vintage` in both `exp018_stage0_ablation.py` and `exp020_fundamentals_ablation.py`, so patch it in one place and import).
+
+Rungs: **28 / 56 / 84 / 112 / 168 days**, feature set `lean`, same parquet.
+
+**Critical confound, controlled by construction:** a longer window needs more history *before* the first vintage, so the rungs would otherwise be scored on different vintage sets. Fix the vintage set to those where the **168-day** window is fully available, and run every rung on that identical set. This costs the earliest ~112 days of vintages (leaving ~150 of 260) and is not optional — comparing a 168d rung on 150 vintages against a 56d rung on 260 would confound window length with evaluation period.
+
+**Gates.** Paired DM on per-observation QS vs the 56-day rung, H1 longer-is-better, one-sided p<0.10, HAC 71; treatment QS ≥3% better; per-side coverage not more than 0.02 worse; Winkler ≤1.05×. Report the full curve and the per-quantile pinball decomposition regardless of gate outcome — the shape of the curve is the deliverable even if no rung passes.
+
+**Cost.** CPU on situla, ~35 min per rung at 10 workers, ~3h total. No GPU. Consumes no fresh vintages.
+
+---
+
+## EXP-024 — The bottleneck is *derived* features, not feature count: more raw lags should help where rolling stats hurt
+
+**Priority: 3.** Sharpens EXP-018's conclusion into something more precise and more useful.
+
+**Question.** There is a real tension in the record. EXP-018 found that *removing* features improves skill (lean 15 beats full 24 by 7-8% QS, replicated on three windows). EXP-022 found that the FM's edge is partly **information the incumbent never receives** — it predicts all 72 horizons from a single ~14-number feature row while the FM reads 1343 raw points. Both cannot be naively true: either more input helps or it hurts.
+
+**Position (provisional).** The resolution is that **kind matters, not count**. Adding raw price lags out to 168h (from the current 8) recovers **≥4 of the ~8 percentage points** EXP-022 attributed to context volume, *without* changing model class — while adding the same number of *derived* columns would not.
+
+**Mechanism.** EXP-019 already established the distinction and this entry only extends it: raw price lags are absolute levels and are **harmless**, whereas smoothed level columns (`price_rolling_mean_168h`) **cost significantly**, read as redundant smoothed-level columns diluting the split search. EXP-020 then generalised the harm to exogenous level columns (TTF gas, +3.2% QS). Nothing in that record predicts harm from *raw, non-redundant* lags — they are the one input type that has never been shown to hurt. If split-search dilution is about redundancy rather than dimensionality, raw lags are safe and informative.
+
+**Alternatives (falsification signals).**
+
+1. **Dilution is about dimensionality per se.** **Signal:** the richer lag set degrades QS like the rolling stats did (p>0.5 in the wrong direction). Then "fewer features" is about count after all, the bottleneck is not closable inside LightGBM, and model class is confirmed as the *only* remaining lever — a clean and valuable negative.
+2. **Gains saturate at 24h.** **Signal:** lags 1..24 capture essentially all of the gain; extending to 168h adds <1%. Then diurnal structure is the whole story and weekly structure is already carried by the calendar features.
+3. **Tail-only gains.** **Signal:** p10/p90 improve while p50 does not. Same reading as EXP-023 Alternative 4; the two entries then jointly point at sample starvation in the quantile heads.
+4. **Short-horizon only.** **Signal:** gains confined to `h1_6`/`h7_24`, nothing at `h25_72`. Then lag information decays as expected and the FM's *long*-horizon edge (−22.8% at h65-72) is confirmed as prior rather than context — which would make EXP-023 and this entry both insufficient, and strengthen the FM case.
+
+**Method (pre-committed 2026-08-29).** EXP-018 harness, extended to *add* lag columns rather than only drop them (the same extension EXP-020 made for added columns; reuse `VARIANT_SPECS`). Arms:
+
+```
+lean                         current 8 lags               (base)
+lean_lag24     lean + price lags 2..24h
+lean_lag168    lean + price lags 2..24h, 48, 72, 96, 120, 144, 168h
+lean_lag168_derived   CONTROL: lean + an equal COUNT of rolling/derived columns
+```
+
+The fourth arm is the load-bearing one and must not be skipped: it separates "more input helps" from "more *raw* input helps" by matching dimensionality exactly. Without it a positive result is uninterpretable. Same 260 vintages, fixed row set across arms, no CQR, HAC 71.
+
+**Gates.** Primary `lean_lag168` vs `lean`: DM p<0.10, QS ≥3% better, per-side coverage not >0.02 worse, Winkler ≤1.05×. **Interpretive requirement:** the control arm must *not* pass. If both the raw-lag and the derived-column arms pass, the mechanism claim is wrong even though the Position's number is right, and this must be recorded as such rather than reported as a win.
+
+**Cost.** CPU on situla, ~1h. Consumes no fresh vintages.
+
+---
+
+## EXP-026 — The advantage is a cheap prior: a small Chronos keeps most of it and makes CPU deployment trivial
+
+**Priority: 4.** Resolves EXP-021's Alternative 2, which was left open because it was conditioned on the FM *losing*, and it de-risks EXP-021a's Stage 2 feasibility gate directly.
+
+**Question.** EXP-021a Stage 2 gates deployment on **median CPU latency ≤60s** on sadalsuud, which has no GPU. `chronos-bolt-base` is 205M parameters. If a much smaller model retains the advantage, the feasibility gate becomes trivial and the "a 205M-parameter model in our nightly path" objection largely dissolves.
+
+**Position (provisional).** `chronos-bolt-small` retains **≥80% of base's QS advantage** over `lean` (i.e. ≥16.2 of the 20.3 points) and completes one 1343-point / 72h forecast on sadalsuud CPU in **≤10s** median.
+
+**Mechanism.** EXP-022 showed the advantage is a prior over shape and spread, largely insensitive to context length. Priors of that kind — daily and weekly seasonality, plausible h-step spread — are low-complexity relative to 205M parameters. There is no obvious reason they need the largest checkpoint.
+
+**Alternatives (falsification signals).**
+
+1. **Skill scales strongly with size.** **Signal:** a monotone ladder with `small` retaining <60%. Then `base` is a floor rather than a ceiling, larger models (or Chronos-2) are worth testing, and CPU deployment probably fails — pushing EXP-021a toward the offline-band-source fallback, i.e. toward EXP-025.
+2. **`tiny` ≈ `base`.** **Signal:** `tiny` retains ≥90%. Then the whole advantage is a cheap prior, deployment is easy, and it becomes worth asking what the *minimum* model that captures it is — a genuinely interesting question about how much of EPF quantile forecasting is just seasonality-plus-spread.
+3. **Skill and calibration scale differently.** **Signal:** `tiny` holds coverage (~0.81) but loses materially on MAE. Then deploy the small model as a *band source* and keep LightGBM's median — which is exactly EXP-025's arm A, with a cheaper spread source.
+
+**Method (pre-committed 2026-08-29).** Two parts, both required.
+
+*(a) Skill ladder.* `chronos-bolt-tiny`, `-mini`, `-small`, `-base` on the **identical matched-information contexts** already built at `ml/shadow/exp021_foundation_aligned/` — no regeneration, so the only variable is the checkpoint. Same scoring, same gates, DM against `lean` and against `base`.
+
+*(b) Latency benchmark on sadalsuud, not on a GPU box.* For each checkpoint: 10 runs of a single 1343-point / 72h forecast, CPU only, report median and max wall-clock, plus resident memory and venv size delta. Latency measured on the machine that would actually run it, per the Stage 2 gate.
+
+**Gates.** Skill: retention ≥80% of base's advantage with DM p<0.10 vs `lean`. Feasibility: median CPU latency ≤10s, max ≤30s. A checkpoint passing both is the Stage 2 candidate and should be named in EXP-021a before its Stage 2 runs.
+
+---
+
+## EXP-027 — Fine-tuning will improve point skill and *destroy* the calibration prior
+
+**Priority: 5.** The most interesting prediction here because it is a **dissociation**, not a direction — and it is falsifiable in a way "fine-tuning helps" is not.
+
+**Question.** EXP-021's Alternative 4 said a zero-shot result within ~10% would make fine-tuning worth trying. The result was better than that, so fine-tuning is the natural next move. But EXP-022 established that the calibration advantage is a **broad pretrained prior**, context-independent and worth ~0.20 of band coverage — which is exactly the kind of thing that fine-tuning on a single narrow series destroys.
+
+**Position (provisional).** Fine-tuning `chronos-bolt-base` on NL day-ahead history improves MAE by **≥5%** over zero-shot **and simultaneously degrades raw band coverage by ≥0.05** (0.811 → ≤0.76). Point skill up, calibration down.
+
+**Mechanism.** Fine-tuning on one series for many steps overwrites a spread prior learned across a large heterogeneous corpus with one estimated from ~7900 NL points. That is the same sample-starvation that gives the incumbent 0.611 coverage — so a heavily fine-tuned FM should drift *toward the incumbent's failure mode*, not away from it. If true, this is the sharpest available evidence for what the pretrained corpus is actually buying.
+
+**Alternatives (falsification signals).**
+
+1. **Both improve.** **Signal:** MAE better and coverage holds ≥0.79. Then the prior is robust to fine-tuning, and a fine-tuned candidate should go to EXP-021a's shadow stage instead of the zero-shot one.
+2. **Both degrade.** **Signal:** MAE worse too. Then ~7900 points is simply too little to fine-tune 205M parameters and zero-shot is the right deployment mode — the cheapest possible answer, and the one the single-asset caveat predicts.
+3. **Fine-tuning re-introduces window sensitivity.** **Signal:** gains concentrated in months resembling the fine-tuning window and losses in the level-shift months (Jul/Aug 2026). Then fine-tuning has turned the FM into the incumbent — it would have *acquired* the very regime-fragility that EXP-018 spent three experiments diagnosing. This is the most informative outcome available and should be checked explicitly via the monthly panel even if the headline gates pass.
+
+**Method (pre-committed 2026-08-29).** The leakage discipline here is stricter than anywhere else in this backlog, because fine-tuning makes contamination trivially easy to create by accident.
+
+- **Temporal split, no exceptions.** Fine-tune only on data with `timestamp ≤ 2026-02-28`. Evaluate **only** on vintages with `t0 ≥ 2026-03-01`. The 260-vintage set used by EXP-021/022 **must not** be reused, since it spans the fine-tuning period; the zero-shot comparator must be re-scored on the same restricted vintage subset so both arms see an identical evaluation set.
+- **Report the training curve, not just the endpoint.** Evaluate at several checkpoints (e.g. 0/250/1000/4000 steps). The Position predicts MAE and coverage move in *opposite* directions as steps increase; a single endpoint cannot show that, and the trajectory is the actual evidence.
+- Same scoring functions, HAC 71, matched-information contexts, no CQR.
+
+**Gates.** The dissociation is the claim, so it is gated as a conjunction: MAE improvement ≥5% **and** coverage degradation ≥0.05 confirms the Position. Either one alone refutes it and selects among the alternatives above.
+
+**Blocked by.** Should follow EXP-021a Stage 1 — do not spend GPU hours on fine-tuning before the zero-shot advantage has been confirmed on fresh vintages. Not technically blocked, but sequencing it earlier would be investing in a refinement of an unconfirmed result.
+
+---
+
+## EXP-028 — A covariate-capable foundation model can use the exogenous data that LightGBM demonstrably cannot
+
+**Priority: inserted at 4** (before EXP-026). Added 2026-08-29 in response to a direct question: none of EXP-023..027 feeds exogenous data to the foundation model, and that was a real gap in the backlog.
+
+**Why this is not re-opening a refuted bet.** EXP-020 tested exogenous features and refuted them — residual load inert (p=0.648 main, p=0.899 control), plain load inert (p=0.851), TTF gas *degrading* (+3.2% QS). But it refuted them **for one model class**, and the mechanism it landed on is explicitly LightGBM-specific: *"redundant smoothed-level columns diluting the split search"*, generalised to *"this model class rejects added level columns."* A cross-attention transformer has no split search to dilute. So the mechanism that killed exogenous for LightGBM does not transfer, and the question genuinely re-opens with model class. This is the same "narrows rather than loosens" move EXP-020 itself made after the [2026-08-20] refutation, and it carries the same gates.
+
+**The sharper motivation.** EXP-021's foundation model wins by 20.3% **while being strictly information-poorer than the model it beats.** The incumbent receives wind speed, solar GHI and load forecast; Chronos-Bolt receives nothing but the price series. There is an entire information channel that the winning model currently cannot see, and EXP-022 localised its advantage to a *distributional prior* — spread and shape — which is precisely the part of the problem that exogenous data does *not* address. The two could be additive.
+
+**Position (provisional).** `amazon/chronos-2` with the exogenous columns supplied as covariates improves quantile score by **≥5%** over the same model run univariate, on the same vintages — and the gain sits in the **median** (pinball@p50 ≥5% better) rather than in the tails, because covariates carry conditional-mean information while the pretrained prior already supplies the spread.
+
+**Do we need to retrain? No — and for Bolt it is not a training question at all.**
+
+- **Chronos-Bolt (EXP-021's model) cannot accept features under any amount of training.** Its `predict` signature is `(inputs, prediction_length, limit_prediction_length)` — a 1-D series in, quantiles out. There is no covariate slot; adding one means changing architecture, not weights.
+- **Chronos-2 accepts covariates at inference time, zero retraining.** Its `predict` takes a list of dicts with `target` (required), `past_covariates` (past-only, or past values of known-future covariates) and `future_covariates` (known ahead, length = `prediction_length`; keys must be a subset of `past_covariates`).
+- **Augur's exogenous are the favourable case:** `wind_speed_80m`, `solar_ghi`, `temperature`, `load_forecast`, `wind_gen_forecast_mw`, `solar_gen_forecast_mw` and `is_holiday_nl` are all *forecasts or calendar*, i.e. genuinely **known-future** over the 72h horizon — they go in both dicts. `gas_ttf_eur_mwh` is a daily realised scalar with no forward curve, so it is **past-only**.
+- **The columns already exist.** All nine are in `ml/data/training_history_fundamentals.parquet` from EXP-020's Step-0 plumbing, which was kept precisely because it was additive and free. This entry is that decision paying off.
+
+**Alternatives (falsification signals).**
+
+1. **Exogenous is inert here too.** **Signal:** covariate arm lands within ±1% QS of the univariate arm, matching EXP-020's result for LightGBM. Then "exogenous does not help NL day-ahead at this horizon" is established across *two* model classes with different mechanisms, which is a far stronger claim than EXP-020 alone supports, and the feature lever closes permanently rather than provisionally.
+2. **Gas degrades here too.** **Signal:** dropping the past-only gas covariate recovers the loss. Then the level-column harm is not a split-search artifact after all but something more general about slow-moving level regressors — which would *contradict* EXP-019/020's stated mechanism and is worth knowing.
+3. **Chronos-2 univariate is already worse than Bolt.** The comparison assumes Chronos-2 is a fair vehicle. **Signal:** Chronos-2 run univariate underperforms Bolt on the same vintages. Then a covariate gain may only be recovering Chronos-2's own deficit; the honest baseline becomes Chronos-2-univariate, and any claim against Bolt must be made separately.
+4. **The gain is in the tails, not the median.** **Signal:** pinball@p50 improves <2% while p10/p90 improve. That refutes the stated mechanism even if the headline number passes, and suggests covariates are acting as a volatility proxy rather than a mean signal. Record as such rather than as a win.
+
+**Method (pre-committed 2026-08-29, before any Chronos-2 weight is downloaded).**
+
+**Contamination control, and it is stricter than EXP-021's.** Chronos-Bolt's weights were frozen **2025-11-21**, before the evaluation window opens, which is why EXP-021 could call contamination impossible. **`amazon/chronos-2` was last modified 2026-06-05 — inside the window.** So the Bolt guarantee does not transfer. Every Chronos-2 arm is therefore evaluated **only on vintages with `t0 > 2026-06-05`** (82 days available, 2026-06-05..2026-08-25), and the Bolt and LightGBM comparators are **re-scored on that same restricted subset** so all arms share an evaluation period. Results on the full 260-vintage window may be computed for curiosity but must not be reported as evidence, and must be labelled contaminated in the registry.
+
+Arms, all on the restricted subset, same 56-day context, same h+1..h+72, same scoring functions, HAC 71, no CQR:
+
+```
+chronos2_univariate            target only                          (base)
+chronos2_known_future          target + the 7 known-future covariates
+chronos2_all                   + gas as past_covariates only
+chronos2_gasdrop               = chronos2_all minus gas   (Alternative 2)
+bolt_base_univariate           EXP-021's model, re-scored here      (reference)
+lean_lgbm / full_lgbm          re-scored here                       (reference)
+```
+
+Covariates are supplied at their **parquet values**, which for the forecast columns are the vintage-overwritten values the EXP-018 harness already uses — carrying the same documented backtest optimism (`consolidate.py` overwrites with later vintages, ratio 1.84). That bias favours *this* entry, so a null result is strong and a positive result must be read as an upper bound. State this in the resolution regardless of outcome.
+
+**Gates.** Primary `chronos2_known_future` vs `chronos2_univariate`: (1) paired DM on QS, one-sided p<0.10; (2) QS ≥5% better; (3) per-side coverage not >0.02 worse; (4) Winkler ≤1.05×. **Mechanism requirement:** pinball@p50 must improve ≥5%, or the Position's mechanism is refuted even if the gates pass (Alternative 4).
+
+**Cost.** GPU minutes on `b650-gpu`; `chronos-forecasting` 2.3.1 is already installed and exposes `Chronos2Pipeline`. No training, no new dependency. The restricted subset (~82 vintages) is the binding constraint on power, not compute — note that a 5% effect on 82 vintages is a weaker test than EXP-021's 260, and do not over-read a marginal p-value.
+
+---
+
+## EXP-029 — Cheap pre-screen: are the foundation model's residuals correlated with the exogenous at all?
+
+**Priority: run immediately before EXP-028.** Minutes of CPU, and it can save the GPU work entirely.
+
+**Question.** EXP-028 is worth running only if the exogenous carry information the FM's residuals do not already contain. That is directly measurable on prediction files that already exist, with no new model of any kind.
+
+**Position (provisional).** The FM's residuals `(y − p50_FM)` carry **little exploitable exogenous signal**: a gradient-boosted regression of residual on the nine exogenous columns plus horizon achieves out-of-sample R² **< 0.05**, and correcting the median by its prediction improves MAE by **<2%**.
+
+**Mechanism.** EXP-020 found exogenous inert for a model that *had* price lags and calendar; EXP-022 found the FM's advantage is a distributional prior rather than a conditional-mean gain. If price history plus calendar already spans what wind/solar/load contribute at this horizon — which is EXP-020's standing conclusion — then the FM's residuals should be close to exogenous-orthogonal, and EXP-028 should be expected to return Alternative 1.
+
+Stating it this way makes the pre-screen honest: **this entry expects EXP-028 to fail**, and a surprise here is the thing that would justify the GPU work.
+
+**Alternatives (falsification signals).**
+
+1. **Real exploitable signal.** **Signal:** R² ≥0.05, or a residual correction that improves MAE ≥2%. Then EXP-028 is well motivated and should run at higher priority — and a residual-regression hybrid is itself a candidate needing no covariate-capable model at all.
+2. **Signal exists but only linearly / only in one column.** **Signal:** most of the R² traces to a single covariate. Then the finding is about that column, not about "exogenous", and should be tested as such.
+3. **Screen is too weak.** A tree on residuals could miss interactions the covariate model would find. **Signal:** near-zero R² *and* EXP-028 later shows a gain. Recorded here in advance so a negative screen is treated as *evidence against* rather than as *proof of absence* — a null here lowers EXP-028's priority, it does not cancel it.
+
+**Method (pre-committed 2026-08-29).** No new models, no GPU. Take `ml/shadow/exp021_foundation_aligned/fm_predictions.parquet`, join the nine parquet columns on `timestamp_utc`, and:
+
+1. Report Pearson and Spearman correlation of the signed residual against each covariate, pooled and by horizon group.
+2. Fit LightGBM on `(y − p50_FM)` from the nine covariates plus `horizon_h`, using a **temporal** split (fit on the first 70% of vintages, score the last 30% — never random, per the project's hard constraint), and report out-of-sample R².
+3. Apply the fitted correction to the FM median on the held-out vintages and report ΔMAE and ΔQS against the uncorrected FM.
+
+**Gates.** Advisory rather than decisive: R² ≥0.05 **or** ΔMAE ≥2% promotes EXP-028 ahead of EXP-026; below both, EXP-028 drops to lowest priority but stays open on Alternative 3.
+
+---
+
+## EXP-036 — The skill floor is too weak: an averaged daily profile beats the single-day carry, and takes the incumbent's remaining edge with it
+
+**Priority: high, and cheap.** Descends from the 2026-09-06 entry in `docs/hypothesis-log.md` and augur#29. Nothing here consumes a fresh vintage, so it does not touch the EXP-018a / EXP-021a / EXP-028a queue.
+
+**Question.** `evaluate_shadow.py`'s floor is a *single-day carry*: `24 * ceil(h/24)` hours back, which for a 72h vintage is always the one window `[t0-23h, t0]`. That is one sample per forecast hour. The obvious strengthening is a **profile**: the mean of the same clock hour over the last N days. EXP-035 measured LightGBM `full` at **+5.1%** over the single-day carry across nine months, below it in 2 of 9, and below it on *all eight ablation variants* in August 2026. The question is how much of that +5.1% is real skill and how much is the floor being one draw from a noisy distribution.
+
+**Position (provisional).** A multi-day profile baseline beats the single-day carry, and against the best profile arm LightGBM `full`'s overall skill falls to **≤ +2%** (from +5.1%) and goes negative in **≥4 of 9 months** (from 2 of 9). Chronos-bolt-base stays clearly above every profile arm.
+
+**Mechanism.** Day-ahead prices are strongly autocorrelated at lag 24h, which is why the single-day carry is hard to beat at all — but a single draw carries that day's idiosyncratic noise in full. Averaging K days cuts the baseline's variance roughly as 1/K while leaving the diurnal shape, which is the part that actually repeats. It should therefore gain most where the carry is stalest (49–72h) and least at 1–24h. That the incumbent only clears such a noisy reference by 5.1% is the reason to suspect the margin is mostly the reference's variance rather than the model's skill.
+
+**Alternatives (falsification signals).**
+
+1. **Averaging destroys more than it denoises.** Level shifts are real and fast; a mean over 5 days lags a step change by more than a single carry does. **Signal:** every multi-day arm is worse than N1 overall. Then the current floor is already the right instrument, the +5.1% stands as measured, and this closes — a genuinely useful outcome, because it retires the doubt rather than leaving it standing.
+2. **Day-type is the whole effect.** **Signal:** the day-type-matched arm beats N1 by ≥3% while plain N5 does not. Then the lever is calendar handling rather than averaging, which directly reopens EXP-035's odd result that `drop_calendar` was the *only* LightGBM arm below the floor.
+3. **The gain is horizon-dependent.** **Signal:** skill differential between the 1–24h and 49–72h groups exceeds 5 percentage points. Then a single scalar floor is the wrong shape and augur#29's threshold must be restated per horizon group rather than as one mean.
+4. **It erodes the foundation model's margin too.** **Signal:** the best profile arm closes >1/3 of Chronos-bolt-base's +25.0%. Then part of what EXP-021/022 attributed to a pretrained prior is ordinary profile smoothing, and the mechanism story needs its *third* correction. This is the arm most likely to be uncomfortable and least likely to be run if it is not written down first.
+
+**Method (pre-committed 2026-09-10, before any profile baseline has been computed).** Pure re-scoring of stored artifacts — no refit, no GPU, no fresh vintages, no production path touched. Extends `scripts/exp035_naive_floor.py` rather than replacing it, on the **same 260 paired vintages** (2025-12-05..2026-08-21), same scoring functions, same HAC bandwidth 71.
+
+Every baseline is built **only from prices at or before `t0`**, read from the same context tape EXP-035 uses, so the baseline's information set stays a subset of the candidate's *by construction*. A clock hour with no observation in the lookback is dropped from the paired comparison, never zero-filled, and all arms are scored on the intersection of hours where every arm is defined.
+
+```
+N1        same clock hour, 1 day back            the incumbent floor, for continuity
+N2/N3/N5/N7   unweighted mean, same clock hour, last 2/3/5/7 days
+N5_decay  exponentially weighted over 5 days, half-life 2 days
+N5_dt     mean over the last 5 *matching* day types (weekday / weekend / NL holiday)
+```
+
+Candidates scored against each arm: LightGBM `full`, LightGBM `drop_rolling` (EXP-035's best arm against the floor), and Chronos-bolt-base. Report MAE and quantile score overall, per horizon group (1–24 / 25–48 / 49–72), and per month, with paired Diebold-Mariano against N1 and against the winning arm.
+
+**Gates.** (1) A profile arm must beat N1 by **≥3% MAE** with DM p<0.05 to be adopted as the floor. (2) If adopted, `evaluate_shadow.py` gains it as an additional field — `naive_profile_mae` alongside the existing `naive_mae`, never replacing it, so the pre-2026-09-10 rows stay comparable. (3) The arm chosen is the *simplest* within 1% of the best, not the best: a floor that needs tuning is not a floor.
+
+**Pre-commitment boundary — this must not retroactively move augur#29.** The 2026-09-06 entry pre-commits a verdict on ≥21 fresh vintages read against the floor **as specified there**. That verdict is read against the single-day carry when it fires (≈2026-09-27), whatever EXP-036 finds. Re-reading an already-pre-committed criterion against a floor chosen later is exactly the post-hoc criterion swap ADR-007 forbids, and the 2026-09-04 lesson in `docs/model-progress-log.md` is on precisely this. A new floor applies to vintages scored *after* it lands, and both numbers get reported side by side for at least one full review cycle.
+
+**What it would change.** If the position holds, the honest statement of the incumbent's point skill is "indistinguishable from an averaged daily profile", not "+5.1% over naive" — which changes what the model tab should claim, and makes the model-class case (EXP-021a) the only live path rather than one of several. If Alternative 1 fires instead, augur#29 narrows to a regime-conditional finding and the incumbent keeps a small but real edge.
+
+**Cost.** Minutes of CPU on the existing window. No GPU, no fresh vintages, no production path touched.
+
+**Not in scope.** The rank-based metric (does it pick the cheap hours?) named as Alternative 3 of the 2026-09-06 entry is a different question — a different *metric*, where this is a stronger *baseline* under the existing metric. Both are cheap and they are independent; running them together would confound which one moved the verdict.
+
+---
+
+## EXP-037 — The verdict is a lens artefact: the model ranks the cheap hours well even where it misses the level
+
+**Priority: high, and cheap.** Discharges **Alternative 3** of the `docs/hypothesis-log.md` [2026-09-06] entry, which that entry names as "the cheapest thing on this list" and instructs be run *before acting* on whichever verdict bucket lands. Independent of EXP-036 by construction: that one is a stronger **baseline** under the existing metric, this one is a different **metric** under the existing baseline. Running them together would confound which of the two moved the verdict, so they stay separate and the order between them does not matter.
+
+**Question.** augur#29 measures MAE. Augur does not exist to state prices — it exists so a heat pump, an EV or an industrial thermal load runs during the cheap hours. That is a *ranking* problem within a day, and it is invariant to exactly the error the incumbent is known to make. A forecast biased 20 EUR/MWh low for a whole day has a terrible MAE and a perfect ranking. So: does the model pick the cheap hours better than the carry, even where its MAE is worse?
+
+**Position (provisional).** LightGBM `full` has lower cost regret than the single-day carry in **all three** horizon groups, and the margin is widest at 49–72h. Its advantage on rank is **larger than its +5.1% MAE advantage**, because rank discards the level error that dominates its MAE — but the advantage is **economically small**, under 2 EUR/MWh against a ~100 EUR/MWh mean. Chronos-bolt-base beats both.
+
+**Mechanism.** Two of the incumbent's documented weaknesses are level errors, not shape errors: the trailing-56-day window under-reaches an upward level shift (the August 2026 regime, `augur#19`), and the band deficit has moved to the upper side. Ranking within a 24h block is invariant to any per-block constant, so both vanish under this lens. Meanwhile EXP-035's oddest secondary result points the same way: `drop_calendar` was the **only** LightGBM arm below the floor overall, i.e. the calendar block — hour-of-day and weekday, which is precisely the diurnal *shape* — is the one feature group clearly carrying its weight. A model whose only load-bearing features encode shape should rank better than it levels.
+
+**Alternatives (falsification signals).**
+
+1. **The model learned the average shape; the carry brings yesterday's actual one.** The day's cheap hours move with wind and solar, and four independent results (EXP-019/020/024/029) say this model cannot use exogenous data. Then the carry — which embeds yesterday's realised weather for free — ranks better at short horizons where yesterday still resembles today. **Signal:** the carry wins at 1–24h while the model wins at 49–72h. That would be the most informative outcome on this list: it says the ranking problem is a *weather* problem and points straight at EXP-028's covariate-capable arm.
+2. **Rank just tracks MAE and there is no separate story.** **Signal:** per-month rank skill correlates with per-month MAE skill above ρ=0.8, and August is negative on both. Then augur#29 stands unqualified, this lens adds nothing, and the question is closed rather than left open as a standing "but maybe".
+3. **It wins and nobody cares.** **Signal:** the regret advantage is real and statistically clean but below the materiality bar in G2. Then the honest statement is that neither lens justifies the incumbent, which is a *stronger* conclusion than augur#29 currently makes, not a weaker one.
+4. **The foundation model wins on rank too, by more.** **Signal:** Chronos-bolt-base's regret advantage over the carry exceeds LightGBM's by ≥2×. Then the model-class case rests on two independent metrics rather than one, and EXP-021a inherits first claim on rank grounds as well as level grounds.
+
+**Method (pre-committed 2026-09-11, before any rank or regret number has been computed).** Pure re-scoring of stored artifacts — no refit, no GPU, no fresh vintages, no production path touched. Same **260 paired vintages** (2025-12-05..2026-08-21), same context tape, same arms as EXP-035, so the two are directly comparable line for line.
+
+*Decision windows.* Each vintage is cut into three 24-slot blocks by horizon: 1–24, 25–48, 49–72. A block is one load-shifting decision. Blocks are never pooled across horizon groups before scoring, because the carry's quality is strongly horizon-dependent and pooling would average three different problems.
+
+*The decision rule.* Within a block, each forecaster ranks the 24 hours by its own point forecast (`p50`) and selects the cheapest **k**, for k ∈ {3, 6} — an EV top-up and an overnight heat-pump run. Ties are broken by earlier timestamp, identically for every arm.
+
+*Primary metric — cost regret, in EUR/MWh.* The mean **realised** price over the k hours the forecaster chose, minus the mean realised price over the k truly cheapest hours in that block. Zero is perfect foresight; it can never be negative; it is denominated in the unit the user actually pays. This is the metric, not an accuracy proxy for it.
+
+*Secondary metrics.* Hit rate `|chosen ∩ true cheapest k| / k`, and Spearman ρ between predicted and realised prices over the block's 24 slots. Reported because they are interpretable, but they do not decide anything: missing the third-cheapest hour by 0.1 EUR/MWh is a hit-rate miss and not a loss.
+
+*Baseline.* The same single-day carry EXP-035 uses (`24*ceil(h/24)` back, read from the context tape), so its information set stays a subset of the candidate's by construction. Within a 1–24h block this makes the baseline exactly "run the load when it was cheapest yesterday", which is the real-world heuristic worth beating.
+
+*Significance.* Paired Diebold-Mariano on per-(vintage, block) regret differences, **HAC bandwidth 3**, not the 71 used elsewhere: the observation here is a block, not an hour, and blocks from anchors more than three days apart share no realised hours. Stated here so it cannot be chosen after seeing the series.
+
+*Hygiene.* A block is scored only where all arms and the baseline are defined on all 24 slots; partial blocks are dropped, never padded. Arms are scored on the identical surviving block set.
+
+**Gates.**
+
+- **G1 — the Alternative-3 signal.** LightGBM `full` has strictly lower mean regret than the carry at k=6 in **all three** horizon groups, with pooled DM p<0.10. Fires → augur#29's verdict is **narrow, not wrong**: the model's value is in ranking, the Model tab and the dashboard should be scored on regret rather than MAE, and that becomes a product change with its own entry.
+- **G2 — materiality.** The pooled k=6 regret advantage must exceed **1.0 EUR/MWh** to be called material (≈1% of a ~100 EUR/MWh mean). A win below that bar is reported as real-but-immaterial and explicitly does **not** discharge G1's product change.
+- **G3 — refutation.** LightGBM's regret is ≥ the carry's in **≥2 of 3** horizon groups → Alternative 3 is refuted, augur#29 stands unqualified on both lenses, and this question is closed rather than left standing as a doubt.
+- **G4.** Whatever LightGBM does, Chronos-bolt-base is scored on the identical blocks and reported beside it.
+
+**Pre-commitment boundary — this must not retroactively move augur#29.** These 260 vintages include the 24 days the hypothesis was formed on. Like EXP-035, this is therefore **corroboration on stored data, not the pre-committed live test**: it cannot discharge the ≥21-fresh-vintage verdict, and it cannot be used to re-read that verdict against a metric chosen later. If G1 fires, the live confirmation on a rank metric needs its own fresh-vintage entry.
+
+**What it would change.** If the position holds and G2 clears, the Model tab is measuring the wrong thing and `evaluate_shadow.py` should log regret alongside MAE. If Alternative 1 fires, the ranking problem is a weather problem and EXP-028 is revived on rank grounds. If G3 fires, augur#29 gets simpler and harder: the incumbent is not rescued by any lens.
+
+**Cost.** Minutes of CPU on the existing window. No GPU, no fresh vintages, no production path touched.
