@@ -138,7 +138,13 @@ is new.
 
 ## Reviewer model
 
-None set: every lens runs on the session's model.
+**Default depth, decided by the engineer 2026-11-07:** the deterministic checks plus **one adversarial pass on Codex**, read-only:
+
+```bash
+codex exec -s read-only -C "$PWD" -o <scratchpad>/codex_review.md - < <scratchpad>/prompt.txt
+```
+
+The full battery runs only when the diff touches a guarantee surface (above), and its lens set and a token ceiling are stated before any lens starts. This narrows the skill's magnitude gate for this repo on purpose. The reason: on 2026-11-07 a five-lens Opus battery cost about 528k tokens on a 566-line change, while one Codex pass on the fixes cost 56k and found a real defect (`memory/gotcha-log.md`). The carve-outs and Step 1.5 still apply in full.
 
 ## Project procedure kept with the profile
 

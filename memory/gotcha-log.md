@@ -19,7 +19,7 @@ Residuals of entries archived 2026-11-06, as recorded then and not re-checked: d
 ### A full review battery cost ~528k tokens on a 566-line change (2026-11-07)
 **Problem**: `/review-changes` ran five Opus lenses without stating a ceiling; the engineer flagged the cost. One Codex pass on the fixes cost 56k and still found a real defect.
 **Root cause**: The skill's budget step was skipped, and the profile names no cheaper reviewer.
-**Fix**: State the lens set and a token ceiling before spawning. Prefer fewer lenses or an outside model (`codex exec -s read-only`) when the change is mostly new code. A profile rule needs the engineer's wording.
+**Fix**: The engineer set a cheaper default on 2026-11-07, now in `.claude/review-profile.md` "Reviewer model": checks plus one read-only Codex pass, and the full battery only on guarantee surfaces, with a ceiling stated first.
 
 ## Promoted
 
