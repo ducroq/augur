@@ -30,7 +30,7 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 > | [2026-08-29] EXP-021a Stage 1 | 14 clean vintages | **7 of 14**, ≈2026-11-16; Review by 10-15 passed, gate vs `lean` per its own Method |
 > | [2026-08-30] EXP-028a | ≥28 vintages | **Deferred 2026-11-06** past the EXP-021a Stage 1 read, since it is moot if that fails; Review by 11-30. Lagged-arm source: the EDH publish archive (see the entry's notes) |
 > | [2026-11-06] CQR on unwidened scores | 28 post-deploy vintages | fix merged 2026-11-06; live check running |
-> | [2026-10-28] product criterion | FM Stage 3 shadow reaches 14 vintages | pre-committed; gates the swap beside ADR-007 |
+> | [2026-10-28] product criterion | FM Stage 3 shadow reaches 14 vintages | pre-committed; the floor drives the dashboard since 2026-11-07 (ADR-009), so this is the bar to replace it |
 > | [2026-11-07] Stage 3 promotion criterion | 14 fully realised FM vintages with live CQR | pre-committed and signed off 2026-11-07 |
 > | [2026-05-29] publishable | engineer's call | not due (12-31) |
 >
@@ -62,6 +62,8 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 **Review by:** 2026-12-15.
 
 **Domain:** EXP-021a, ADR-006, ADR-007, augur#15.
+
+**Note added 2026-11-07, after ADR-009; the Method above is unchanged.** The dashboard now shows the day-type profile rule, and LightGBM is a shadow. The skill gate still pairs FM with LightGBM as written. The Swap clause's product criterion is against the floor, which is now the incumbent, so a passing swap replaces the rule. Whether the LightGBM skill gate still earns its place is the engineer's call. Changing it is a new entry, written before the 14 vintages are read.
 
 ### [2026-11-06] Calibrating CQR on unwidened scores restores P80 coverage without costing either side
 
@@ -105,6 +107,9 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 **Review by:** when the first Stage 3 shadow reaches 14 vintages. Production fails this criterion today (regret k6 about 10–11 against the floor's 5.6–5.8); the engineer decided on 2026-11-06 to keep it until then rather than swap early.
 
 **Related evidence (added 2026-10-29, outside the Method, which is unchanged):** Lipiecki & Weron (2026, arXiv:2609.00089) reach the same split on battery arbitrage. TabPFN has the best CRPS in every market, yet DDNN-JSU earns the most under the risk-averse strategies. Their caveat applies here too: trading profit, like k6 regret, is **not a proper scoring rule**. That supports this entry's shape, regret as an *added* swap condition beside ADR-007's proper-score gate, never a replacement for it. Their gaps between top models are mostly ~1%, and they warn against reading the order of close models, which matches Alternative 1's noise concern.
+
+
+**Note added 2026-11-07; the Method above is unchanged.** The engineer reversed the 2026-11-06 "keep production until then": since ADR-009 the floor itself drives the dashboard. This criterion now reads as the bar for any challenger to replace it.
 
 ### [2026-10-28] Park EXP-018a Stage 1 and EXP-023a Stage B: LightGBM tuning cannot move the decision that is open
 

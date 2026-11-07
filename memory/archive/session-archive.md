@@ -5,6 +5,12 @@
      Moved out of memory/MEMORY.md 2026-09-06 — it is history, not current state,
      and the index is read at every session start. Nothing here was edited. -->
 
+## Closed 2026-11-07 (second session)
+
+- Ask: "continue" (queue item 0: ship the day-type rule to the dashboard), then: wrap up, clean, update docs, hypotheses, todos and issues, curate, commit, push and deploy; prune the read surface.
+- Closed: ADR-009 built (`update_profile.py`, own-error bands, NL holiday calendar with weekend fallback, dashboard flip, caption, job wiring and two ALARM markers), reviewed (one Codex pass, 4 lenses, 2 warnings fixed), 432 tests, committed, pushed and deployed. Hypothesis notes added to [2026-10-28] and [2026-11-07]. Pruned: progress log 24.5k → 7k, gotcha log 17.4k → 14k (verbatim archives).
+- Open: first-night check of the deploy, then close augur#37 (queue 0); the engineer's call on the FM skill gate vs LightGBM (queue 2).
+
 ## Closed 2026-11-07
 
 - Ask: "continue" (queue items 0–1), then: assess whether Augur's output is useful, plan showing the day-type rule, curate and wrap.

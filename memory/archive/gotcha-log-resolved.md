@@ -499,3 +499,30 @@ Moved out of `memory/gotcha-log.md` on 2026-10-16, unedited. The Promoted table 
 **Fix**: Defensive `const root = obj.data ?? obj` shim at three consumer sites (`data-processor.js:117`, `tab-charts.js:64-67/78-79`, plus `dashboard.js:264` lastUpdate chain extended with `?.data?.entsoe ?? ?.entsoe`). Commit `4a557c8`. Review battery: code-reviewer PASS, security-auditor PASS (no new XSS path; HMAC at build time + Plotly `%{x}` escaping contain the re-activated code path), user-interaction-reviewer REVIEW (5 silent-failure UX findings filed as augur#24). User reported back: hard-refresh restored entsoe/epex/wind; only Elspot looked "missing" but turned out to be Elspot's existing today-only coverage from EDH `collectors/elspot.py:129-133` plus a bit-identical-to-ENTSO-E quirk from the Feb 2026 pynordpool migration — pre-existing EDH issues, not today's regression.
 **Pattern** *(SUPERSEDED 2026-06-10 — see entry below)*: ~~Python consumers migrate transparently via `_migrate_X_to_Y` in `utils/schema_registry.py`, but dashboard JS does NOT.~~ The 2026-06-10 v2.2 recurrence proved Python does NOT auto-migrate either; the assertion in this commit message was wrong. The corrected pattern: BOTH JS and Python consumers can break on schema bumps — neither side invokes EDH's `migrate_to_current` automatically. Three places to audit on any EDH schema-touching commit: `static/js/modules/data-processor.js` (wholesale/forecast loop), `static/js/modules/tab-charts.js` (per-tab processors), `ml/data/consolidate.py` parsers (`parse_price_file`, `parse_wind_file`, `_parse_single_source`). Symptom is silent — chart renders fewer traces or none on the JS side; parser returns empty Series + logs an "ENTSO-E data missing"-style warning on the Python side.
 **Status**: [RESOLVED for JS] — `4a557c8` deployed; user verified. Python side recurrence resolved 2026-06-10 via commit `e11487b`. UX hardening backlog at augur#24 (5 findings RPN 120-288, no FAIL).
+
+<!-- archived 2026-11-07, verbatim -->
+
+### A rollback trap ran in the directory the script had moved to (2026-11-07)
+**Problem**: On sadalsuud, the venv rebuild's `trap rollback ERR` fired after a `cd` into the rehearsal copy. Its relative `rm -rf .venv; mv OLD .venv` ran there and found nothing. Nothing was lost, by luck.
+**Root cause**: The rollback used relative paths and an ERR trap that outlived the `cd`.
+**Fix**: In a rollback, `cd` to an absolute path first, or use absolute paths throughout. Clear the trap before leaving the directory it protects. Also: a venv can't be renamed into place, because `activate` hardcodes `VIRTUAL_ENV`; move the old one aside and build at the final path.
+
+### A rule reused from the eval harness read a covariate that is only known after the fact (2026-11-07) [RESOLVED]
+**Problem**: The profile rule types days with the parquet's `is_holiday_nl`, which ends at `t0`. Live, a holiday inside the 72h window would have been typed as a weekday, while `regret.py`, scoring later, types it correctly.
+**Root cause**: An estimator built for retrospective scoring is safe there by construction, because every date is in the past. Running it forward needs every input to exist for future dates too.
+**Fix**: `update_profile.nl_holidays`, a built-in calendar pinned by a test to the parquet's flagged dates. Before promoting any eval arm to a live forecast, list its inputs and check each one's coverage past `t0`.
+
+### A rolling cap read as a count (2026-11-06)
+**Problem**: The 2026-10-16 trigger table said "30 vintages" and "EXP-023a Stage B 30 of 45". The true figure was about twice that; EXP-038 used 60 on 10-28.
+**Root cause**: `calibration_history` is trimmed to `MAX_HISTORY_DAYS = 30`, so any count over it returns 30. `CLAUDE.md` said to count there.
+**Fix**: Count recent vintages there and older ones from `eval_log` dates. A round number equal to a constant is a cap until shown otherwise.
+
+### Effect sizes quoted from a paper went wrong twice in one session (2026-10-29)
+**Problem**: A CRPS range true for one model variant (TabPFN-3) was written as true for all three. The fix then rounded 22.5% to "23" and changed the base of a second percentage. Each was caught only by a review lens.
+**Root cause**: Percentages were computed in my head from tables read once, and re-typed per doc (four files quote them).
+**Fix**: Before quoting a paper's relative numbers, parse its tables and compute every quoted figure with one script, kept in the scratchpad. Re-run it over every file that quotes them after any edit. See the deep-dive's numbers in `docs/foundation-models-epf-literature-review.md`.
+
+### A paired harness re-run on fewer arms kept the full run's row set (2026-10-28)
+**Problem**: EXP-038's FM contexts read COMPROMISED at 17.5% missing, while the incumbents it was paired with trained on far fewer dropped rows.
+**Root cause**: `exp021_foundation_zeroshot.py` contexts mode built its row set from a hardcoded `CTL_VARIANTS` (four variants, including `lean_residual` and its 12%-missing solar column); the incumbent re-run used `--variants full,lean`. Same window, different rows.
+**Fix**: `--ctl-variants`, defaulting to the old list; EXP-038 passes `full,lean` (6.67%, matching 4,108 targets on both sides). If you re-run a paired harness with a subset of arms, re-derive every shared input from the arms actually run, and check the pair counts match before scoring.

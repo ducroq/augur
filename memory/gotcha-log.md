@@ -11,15 +11,11 @@ Promoted rows hold the rule and a pointer; the incident detail they carried unti
 
 Residuals of entries archived 2026-11-06, as recorded then and not re-checked: dev/prod Python skew (situla 3.14, sadalsuud 3.12); the 2026-06-10 lightgbm install damage has no known root cause; dashboard silent-empty-state hardening is on augur#24.
 
-### A rollback trap ran in the directory the script had moved to (2026-11-07)
-**Problem**: On sadalsuud, the venv rebuild's `trap rollback ERR` fired after a `cd` into the rehearsal copy. Its relative `rm -rf .venv; mv OLD .venv` ran there and found nothing. Nothing was lost, by luck.
-**Root cause**: The rollback used relative paths and an ERR trap that outlived the `cd`.
-**Fix**: In a rollback, `cd` to an absolute path first, or use absolute paths throughout. Clear the trap before leaving the directory it protects. Also: a venv can't be renamed into place, because `activate` hardcodes `VIRTUAL_ENV`; move the old one aside and build at the final path.
-
 ### A full review battery cost ~528k tokens on a 566-line change (2026-11-07)
 **Problem**: `/review-changes` ran five Opus lenses without stating a ceiling; the engineer flagged the cost. One Codex pass on the fixes cost 56k and still found a real defect.
 **Root cause**: The skill's budget step was skipped, and the profile names no cheaper reviewer.
 **Fix**: The engineer set a cheaper default on 2026-11-07, now in `.claude/review-profile.md` "Reviewer model": checks plus one read-only Codex pass, and the full battery only on guarantee surfaces, with a ceiling stated first.
+**Confirmed 2026-11-07 (ADR-009 change, 1,030 lines, 4 guarantee surfaces):** all four lenses in one Codex pass, ceiling stated first, cost 56k Codex tokens and no Claude tokens, and it found 2 real warnings (a silent partial forecast; DST wording).
 
 ## Promoted
 
@@ -29,7 +25,7 @@ Residuals of entries archived 2026-11-06, as recorded then and not re-checked: d
 | 2026-03-28 | Double push of exchange prices | 1 — 2026-03-28 | Fixed in `ml/update.py` — only push ML predictions |
 | 2026-06-06 | Silent-failure factory: collector orchestration needs a workflow-level quality gate, not only per-collector checks | 1 — 2026-06-06 | energydatahub repo: `.github/workflows/collect-data.yml`, `Assert data quality (no silent failures)` step |
 | 2026-06-07 | EDH schema bumps need a consumer audit on BOTH sides; neither migrates automatically. Audit (a) `static/js/modules/data-processor.js` + `tab-charts.js`, (b) `ml/data/consolidate.py` parsers, (c) any other `json.load`/`fetch` of EDH files. | 2 — 2026-06-07, amended 2026-06-10 | This table; incidents in `memory/archive/gotcha-log-resolved.md`; checked 2026-11-06. |
-| 2026-06-12 | rc=0 is not output quality. Assert on the output artifact, at the step that owns it. An assertion is done only when something reads it, so ship it with its reader. | **5** — 2026-05-08, 2026-06-06, 2026-06-12, 2026-08-28, 2026-08-31 (twice in one day). **The promotion did not take.** | `scripts/daily_update.sh` post-run guards; reader: `scripts/heartbeat_check.sh` commit-subject grep |
+| 2026-06-12 | rc=0 is not output quality. Assert on the output artifact, at the step that owns it. An assertion is done only when something reads it, so ship it with its reader. | **6** — 2026-05-08, 2026-06-06, 2026-06-12, 2026-08-28, 2026-08-31 (twice in one day), 2026-11-07 (`update_profile` wrote 24 of 72 hours at rc=0; caught in review, guard added). **The promotion did not take.** | `scripts/daily_update.sh` post-run guards; reader: `scripts/heartbeat_check.sh` commit-subject grep |
 | 2026-07-03 | A demoted/backup component must NEVER abort or gate the production path. When demoting, audit every `set -e`, "must succeed" and import-probe site. | 2 — both 2026-07-03 (ARF under `set -e`; `DEP_PROBE` gating on `import river`) | `scripts/daily_update.sh`: ARF under `set +e` with rc in the commit subject; dep-probe is lightgbm/pandas only |
 | 2026-08-28 | A freshness gate must test freshness, not a proxy. State the property positively (this publish is the one upstream made for today), then ask whether the test implies it. "Dated today" and "newer than what I have" both failed; monotonicity is not freshness. | **2** — 2026-08-28; 2026-09-05..13 (two episodes, after the promotion was removed) | `scripts/wait_for_edh.sh`: content contract + clause (c); checked 2026-11-06 (the clock floor this row used to name is gone) |
 | 2026-08-28 | A data-derived cursor needs an assertion on its rate AND its place: a check on the delta cannot see a constant offset (augur#34). | 1 — 2026-08-28. **The promotion took** (caught the 2026-09-04 outage recovery); limit found 2026-09-14 | `ml/shadow/update_shadow.py:classify_t0_advance` + `scripts/daily_update.sh` t0 marker; place is only probed by hand: `scripts/check_gate_lag.sh` compares report timestamps, not `t0` |
@@ -46,7 +42,6 @@ Residuals of entries archived 2026-11-06, as recorded then and not re-checked: d
 | 2026-09-04 | **A data gate covers some of {presence, structure, span, values, recency}: name which, and ask what the list itself omits.** A registry of "important" inputs implies none of the rest. EDH's quality report carries no time range and the payloads are encrypted, so the gate can't assert span. It reads only `entsoe` and `load_forecast`; `wind_speed_80m` and `solar_ghi` are live features it never examines. | **3** — 2026-09-04; 2026-09-11 (augur#31); 2026-09-14 (augur#34, recency) | No span check on either side, none coming, and nothing upstream blocks one. EDH PR #64 did **not** add `wind_forecast` to `CRITICAL_FEEDS`; that sits unmerged on `critical-feeds-wind-forecast`. A derived size expectation must be per source and use a high percentile (p75 shipped); median and per-day dedup were refuted (`docs/archive/hypothesis-log-resolved.md`, "The EDH gate's derived size expectation"). Issue numbers: `memory/upstream-edh.md`. |
 | 2026-09-10 | **A probe whose "cannot tell" reads like its negative result will be inert and look healthy.** If a check may fail open, verify it end to end on the host that runs it, and prefer a dependency that cannot be absent. | **2** — 2026-09-10; 2026-10-29 (`audit_registry.py` check 5, see Mechanized) | `scripts/wait_for_edh.sh:upstream_publish_failed` (stdlib, no `gh`); `tests/test_wait_for_edh.py::test_the_probe_needs_no_external_binary` |
 
-
 ## Mechanized
 
 Review findings turned into a deterministic check (`review-changes` Step 3.1). `live` means a seeded positive made the check fail. Occurrences count sightings after it went live. Format: agent-ready-projects `templates/gotcha-log.md`.
@@ -54,6 +49,7 @@ Review findings turned into a deterministic check (`review-changes` Step 3.1). `
 | Date | Finding shape | Check | Status | Occurrences |
 |------|---------------|-------|--------|-------------|
 | 2026-11-06 | A scripted row edit left a table with broken `> ` prefixes, invisible in the diff | Blockquote-continuity rule in `~/repos/agent-ready-projects/scripts/md-structure-check.sh` <!-- placeholder --> | proposed | 1 |
+| 2026-11-07 | A dashboard forecast step exits 0 with only some of its 72 hours filled, and the commit subject stays clean | `PROFILE_HOURS` guard in `scripts/daily_update.sh` (`[ALARM: profile forecast Nh of 72]`); seeded 24h file made it fire | live | 0 |
 | 2026-10-29 | An unreachable pre-commit pin skipped check 5 for **every** entry with a WARN and still exited 0 | `scripts/audit_registry.py` check 5: `CalledProcessError` is a FAIL naming the unread revision | live (seeded `deadbee`) | 0 |
 | 2026-10-29 | An amended or rebased pin still resolves from the reflog, so `git show` alone can't detect it | `scripts/audit_registry.py` check 5: each pin must pass `git merge-base --is-ancestor <pin> HEAD` | live (seeded orphan commit) | 0 |
 | 2026-10-29 | Run before committing, check 5 hashed HEAD only, so an uncommitted edit to a pinned Method passed | `scripts/audit_registry.py` check 5: the working-tree backlog is hashed too | live (seeded G2 30 → 25) | 0 |
@@ -73,17 +69,3 @@ Review findings turned into a deterministic check (`review-changes` Step 3.1). `
 **Fix**: `unwidened_bands` in `compute_cqr_q`, merged 2026-11-06 after engineer review. Stored rows hold `*_raw` from 2026-05-29, so no backfill is needed. Verdict in `docs/hypothesis-log.md` [2026-11-06].
 **Pattern**: when an index is rewritten lean, check standing defects survive as open items, not only as caveats inside experiment records.
 
-### A rolling cap read as a count (2026-11-06)
-**Problem**: The 2026-10-16 trigger table said "30 vintages" and "EXP-023a Stage B 30 of 45". The true figure was about twice that; EXP-038 used 60 on 10-28.
-**Root cause**: `calibration_history` is trimmed to `MAX_HISTORY_DAYS = 30`, so any count over it returns 30. `CLAUDE.md` said to count there.
-**Fix**: Count recent vintages there and older ones from `eval_log` dates. A round number equal to a constant is a cap until shown otherwise.
-
-### Effect sizes quoted from a paper went wrong twice in one session (2026-10-29)
-**Problem**: A CRPS range true for one model variant (TabPFN-3) was written as true for all three. The fix then rounded 22.5% to "23" and changed the base of a second percentage. Each was caught only by a review lens.
-**Root cause**: Percentages were computed in my head from tables read once, and re-typed per doc (four files quote them).
-**Fix**: Before quoting a paper's relative numbers, parse its tables and compute every quoted figure with one script, kept in the scratchpad. Re-run it over every file that quotes them after any edit. See the deep-dive's numbers in `docs/foundation-models-epf-literature-review.md`.
-
-### A paired harness re-run on fewer arms kept the full run's row set (2026-10-28)
-**Problem**: EXP-038's FM contexts read COMPROMISED at 17.5% missing, while the incumbents it was paired with trained on far fewer dropped rows.
-**Root cause**: `exp021_foundation_zeroshot.py` contexts mode built its row set from a hardcoded `CTL_VARIANTS` (four variants, including `lean_residual` and its 12%-missing solar column); the incumbent re-run used `--variants full,lean`. Same window, different rows.
-**Fix**: `--ctl-variants`, defaulting to the old list; EXP-038 passes `full,lean` (6.67%, matching 4,108 targets on both sides). If you re-run a paired harness with a subset of arms, re-derive every shared input from the arms actually run, and check the pair counts match before scoring.
