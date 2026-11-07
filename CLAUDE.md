@@ -56,6 +56,7 @@ sadalsuud — augur-daily.timer 16:30 UTC, ExecStartPre=scripts/wait_for_edh.sh
     ├── python -m ml.shadow.update_shadow → LightGBM: 56-day retrain, 72h predict, CQR (production)
     ├── python -m ml.shadow.evaluate_shadow → eval row (h1–24 only): vs ARF + seasonal-naive + profile floor
     ├── python -m ml.shadow.regret          → cheap-hour regret per 24h block, all 72h (product criterion)
+    ├── python -m ml.shadow.update_fm       → Chronos-Bolt shadow on production's t0 (EXP-021a Stage 3, NON-FATAL), own regret log
     └── git push augur                    → Netlify rebuild
         Every alarm rides in the COMMIT SUBJECT: [ALARM: …] = fault, [NOTE: …] = result.
         Alerting: OnFailure= (unit dies) + augur-heartbeat.timer 06:00 UTC (no commit >30h,
@@ -76,6 +77,7 @@ Browser: 5 tabs (Prices, Weather, Grid, Market, Model); augur_forecast_shadow.js
 | `ml/shadow/update_shadow.py` | Nightly LightGBM retrain + predict + CQR + consumer fields; t0 selection and hold-back alarm state |
 | `ml/shadow/lightgbm_quantile.py`, `features_pandas.py`, `conformal.py`, `metrics.py` | Forecaster, 24-feature builder, CQR, metric library (pinball, DM with HAC, Winkler…) |
 | `ml/shadow/regret.py` → `ml/shadow/regret_log.jsonl` | Nightly k3/k6 cost regret per horizon block for p50, carry and profile; `incomplete` rows mark blocks that can never fill |
+| `ml/shadow/update_fm.py` → `ml/models/shadow/fm_state.json`, `static/data/augur_forecast_fm.json` | Chronos-Bolt live shadow; dashboard reads neither. Regret in `ml/shadow/fm_regret_log.jsonl` |
 | `ml/shadow/evaluate_shadow.py` → `ml/shadow/eval_log.jsonl` | Daily eval rows. `naive_*` fields from 2026-09-06; `naive_profile_*` (EXP-036 floor) from 2026-09-11. Absent = age, not failure |
 | `ml/models/shadow/shadow_state.json` | `calibration_history` (rolling 30-day cap, `MAX_HISTORY_DAYS`: count recent vintages here, older ones from `eval_log` dates), CQR stats, t0 hold-back |
 | `ml/shadow/secure_pickle.py` | HMAC sidecar; verify before load |

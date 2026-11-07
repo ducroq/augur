@@ -59,7 +59,7 @@ fi
 echo "==> Verifying key imports"
 python - <<'PY'
 import importlib
-mods = ["cryptography", "river", "pandas", "numpy", "sklearn", "pyarrow", "lightgbm"]
+mods = ["cryptography", "river", "pandas", "numpy", "sklearn", "pyarrow", "lightgbm", "torch", "chronos"]
 for m in mods:
     mod = importlib.import_module(m)
     print(f"    {m:12s} {getattr(mod, '__version__', '?')}")

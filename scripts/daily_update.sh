@@ -9,15 +9,16 @@
 #   2. Run ARF model update (kept as backup signal — see EXP-014 promotion)
 #   3. Re-consolidate parquet from energyDataHub                — non-blocking
 #   4. Run shadow update (LightGBM-Quantile, EXP-014 production model)
-#   5. Run shadow evaluation (writes eval_log.jsonl)
-#   6. Commit + push everything
+#   5. Run shadow evaluation (writes eval_log.jsonl) and the regret pass
+#   6. Run the Chronos-Bolt live shadow (EXP-021a Stage 3) — non-fatal
+#   7. Commit + push everything
 #
 # EXP-014 promotion (2026-05-29): LightGBM is now the production model
 # driving the dashboard via static/data/augur_forecast_shadow.json. ARF
 # (step 2) is kept running as a backup signal for one rolling-window
 # cycle. The Model tab still reads ARF metrics (model-viz.js).
 #
-# Steps 4-5 still run with `set +e` so a shadow failure does NOT abort the
+# Steps 4-6 still run with `set +e` so a shadow failure does NOT abort the
 # ARF backup commit. A persistent shadow failure now degrades the dashboard
 # forecast — the in-script pre-flight ALARM (SHADOW_PRE_AGE_H >36h) surfaces
 # it in the next day's commit message; watching for missing daily commits on
@@ -198,6 +199,24 @@ if [ $SHADOW_CONSOLIDATE_RC -eq 0 ] && [ $DEP_PROBE_OK -eq 1 ]; then
         REGRET_RC=$?
         if [ $REGRET_RC -ne 0 ]; then
             echo "WARN: regret pass failed (rc=$REGRET_RC) — continuing"
+        fi
+        # EXP-021a Stage 3: the FM shadow. Last in this block and under a
+        # timeout, because it runs before the commit: a normal run takes
+        # seconds, and a hang costs the dashboard at most these minutes. A
+        # failure is an ALARM because each missed
+        # night is a vintage the 14-vintage read never gets back. Offline: the
+        # weights are pinned in the local HF cache and the job has no reason to
+        # reach the network. Regret is skipped on a failed night only; the
+        # next run scores whatever is pending.
+        echo "Running FM shadow (Chronos-Bolt, EXP-021a Stage 3)..."
+        HF_HUB_OFFLINE=1 timeout -k 30 900 python -m ml.shadow.update_fm
+        FM_UPDATE_RC=$?
+        if [ $FM_UPDATE_RC -eq 0 ]; then
+            timeout -k 30 300 python -m ml.shadow.regret --state $AUGUR_DIR/ml/models/shadow/fm_state.json \
+                --regret-log $AUGUR_DIR/ml/shadow/fm_regret_log.jsonl --model-arm fm
+            FM_REGRET_RC=$?
+        else
+            echo "WARN: FM shadow failed (rc=$FM_UPDATE_RC) — continuing"
         fi
     else
         echo "WARN: shadow update failed (rc=$SHADOW_UPDATE_RC) — dashboard forecast will be stale"
@@ -497,6 +516,13 @@ git add ml/models/river_model.pkl ml/models/state.json static/data/augur_forecas
 [ -f ml/shadow/eval_log.jsonl ] && git add ml/shadow/eval_log.jsonl
 [ -f ml/shadow/regret_log.jsonl ] && git add ml/shadow/regret_log.jsonl
 
+# FM shadow artifacts (EXP-021a Stage 3). The forecast needs its .gitignore
+# negation: `git add` on an ignored path fails, and under set -e that would
+# lose the production commit.
+[ -f static/data/augur_forecast_fm.json ] && git add static/data/augur_forecast_fm.json
+[ -f ml/models/shadow/fm_state.json ] && git add ml/models/shadow/fm_state.json
+[ -f ml/shadow/fm_regret_log.jsonl ] && git add ml/shadow/fm_regret_log.jsonl
+
 # Compose status string from per-step return codes — replaces the
 # hardcoded "ARF + LGBM-shadow" message that hid the May 1-7 silent
 # failures. "skip" indicates the step was gated off by an earlier failure.
@@ -510,6 +536,11 @@ ARF_STATUS="ARF OK"
 [ "${ARF_UPDATE_RC:-0}" -ne 0 ] && ARF_STATUS="ARF FAIL rc=${ARF_UPDATE_RC}"
 REGRET_MARKER=""
 [ "${REGRET_RC:-0}" -ne 0 ] && REGRET_MARKER=" [ALARM: regret pass failed rc=${REGRET_RC}]"
+# `exit N`, not `rc=N`: heartbeat_check.sh reads any rc=N as a production step
+# that produced nothing, and an FM failure leaves production untouched.
+FM_MARKER=""
+[ "${FM_UPDATE_RC:-0}" -ne 0 ] && FM_MARKER=" [ALARM: FM shadow failed exit ${FM_UPDATE_RC}]"
+[ "${FM_REGRET_RC:-0}" -ne 0 ] && FM_MARKER="${FM_MARKER} [ALARM: FM regret failed exit ${FM_REGRET_RC}]"
 SMOKE_MARKER=""
 [ "${SMOKE_OK:-1}" = "0" ] && SMOKE_MARKER=" [ALARM: smoke tests failed]"
 
@@ -526,7 +557,7 @@ if [ -f "$EDH_VERDICT_FILE" ]; then
 fi
 
 git diff --cached --quiet && echo "No changes to commit" || {
-    git commit -m "Daily update $(date -u '+%Y-%m-%d') — ${ARF_STATUS} | ${SHADOW_STATUS}${STALE_MARKER}${DEP_MARKER}${SMOKE_MARKER}${REGRET_MARKER}${ARF_EMPTY_MARKER}${EVAL_STALE_MARKER}${NAIVE_MARKER}${T0_MARKER}${EDH_MARKER}"
+    git commit -m "Daily update $(date -u '+%Y-%m-%d') — ${ARF_STATUS} | ${SHADOW_STATUS}${STALE_MARKER}${DEP_MARKER}${SMOKE_MARKER}${REGRET_MARKER}${FM_MARKER}${ARF_EMPTY_MARKER}${EVAL_STALE_MARKER}${NAIVE_MARKER}${T0_MARKER}${EDH_MARKER}"
     git push
 }
 

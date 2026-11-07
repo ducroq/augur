@@ -340,6 +340,26 @@ class TestFailedSendAcrossEpisodes:
             "a failed first send must not inherit the previous episode's "
             "send clock and suppress itself")
 
+    def test_fm_failure_is_not_reported_as_production_down(self, tmp_path):
+        """The FM marker keeps its exit code out of the rc= pattern, and a
+        changed code stays one episode."""
+        env = Env(tmp_path)
+        env.commit("Daily update 2026-11-08 — ARF OK | shadow rc=0/eval rc=0 "
+                   "[ALARM: FM shadow failed exit 1]")
+        env.run()
+        assert len(env.sent) == 1
+        assert env.shape() == "soft:fm-shadow"
+        body = [l for l in env.record.read_text().splitlines()
+                if l.startswith("BODY")][-1]
+        assert "PRODUCTION LightGBM" not in body
+        assert "every step reported rc=0" in body.replace("\\n", " ")
+
+        env.backdate(1)
+        env.commit("Daily update 2026-11-09 — ARF OK | shadow rc=0/eval rc=0 "
+                   "[ALARM: FM shadow failed exit 124]")
+        env.run()
+        assert len(env.sent) == 1
+
     def test_a_delivered_send_still_suppresses_the_next_morning(self, tmp_path):
         """The fix must not turn every episode into a daily re-send."""
         env = Env(tmp_path)
