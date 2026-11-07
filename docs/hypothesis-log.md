@@ -31,11 +31,37 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 > | [2026-08-30] EXP-028a | ≥28 vintages | **Deferred 2026-11-06** past the EXP-021a Stage 1 read, since it is moot if that fails; Review by 11-30. Lagged-arm source: the EDH publish archive (see the entry's notes) |
 > | [2026-11-06] CQR on unwidened scores | 28 post-deploy vintages | fix merged 2026-11-06; live check running |
 > | [2026-10-28] product criterion | FM Stage 3 shadow reaches 14 vintages | pre-committed; gates the swap beside ADR-007 |
+> | [2026-11-07] Stage 3 promotion criterion | 14 fully realised FM vintages with live CQR | pre-committed and signed off 2026-11-07 |
 > | [2026-05-29] publishable | engineer's call | not due (12-31) |
 >
 > EXP-018a Stage 1 and EXP-023a Stage B are parked and moved to `docs/archive/hypothesis-log-resolved.md`; the [2026-10-28] park entry below holds their revisit trigger.
 >
 > Vintage holes: count them at run time; do not trust a list here. Holes since 2026-09-14 have not been enumerated.
+
+### [2026-11-07] Stage 3 promotion criterion: Chronos-Bolt beats production LightGBM on live vintages
+
+**Status:** pre-committed 2026-11-07 with the engineer's sign-off, before the shadow deployed and before any FM vintage existed. Two choices were the engineer's: count only vintages whose CQR was live, and only fully realised ones.
+
+**Position (provisional):** on live vintages, Chronos-Bolt's `p50` has lower absolute error than production LightGBM's without worsening band coverage. This is the ADR-007 criterion that EXP-021a's Stage 3 said would be re-derived against the incumbent of the day. It's relative to LightGBM only: the floor is judged by the [2026-10-28] product criterion, which stands beside it.
+
+**Alternatives (failure-mode signals):**
+
+1. **The offline win doesn't survive live data.** Signal: the skill gate fails.
+2. **Raw Bolt bands look good only until production's CQR defect is gone.** The fix of 2026-11-06 raised production's coverage. Signal: the guardrail blocks.
+3. **The criterion measures a state that never ships.** A swapped-in FM would always run with warm CQR, so its cold-start vintages (q = 0 against a warmed-up incumbent) are excluded from the population, not merely reported. Signal that this exclusion matters: FM coverage on the excluded vintages differs from the counted ones by more than 0.02 on either side. That is reported, never gated.
+
+**Method (pre-committed 2026-11-07):**
+
+- **Population.** The first 14 FM vintages in date order whose rows carry `cqr_n_calib_days ≥ 3` (the FM's own CQR was live) and where all 72 hours are realised in both arms, read from `fm_state.json` and `shadow_state.json:calibration_history`, paired on (`eval_day`, `timestamp_utc`). Production's history can hold duplicate keys after a repeated `t0`: in each arm, keep the last row per key, and a vintage counts only with exactly 72 unique paired timestamps. Observations enter the DM ordered by `t0`, then horizon. No vintage is excluded for its result. No interim read of either gate, and the window isn't extended.
+- **Skill gate.** Paired DM on `|y − p50|`, FM against production `p50`, per observation, Newey-West HAC bandwidth 71, one-sided α = 0.10. Passes iff the mean difference is negative and p < 0.10.
+- **Calibration guardrail.** Lower- and upper-side coverage of the shipped bands (`p10`, `p90` after CQR, both arms) on the same population. Blocks if FM is more than 0.02 worse than production on either side.
+- **Swap.** Requires Stage 1 passed as written, the skill gate passed, no guardrail block, and the [2026-10-28] product criterion passed. Stage 3's judgement on operational surface stays the engineer's.
+
+**Revisit trigger:** 14 such vintages exist (≈17 nights after deploy, counting the warm-up). Compute the read before the first of them leaves the 30-day history.
+
+**Review by:** 2026-12-15.
+
+**Domain:** EXP-021a, ADR-006, ADR-007, augur#15.
 
 ### [2026-11-06] Calibrating CQR on unwidened scores restores P80 coverage without costing either side
 
@@ -169,6 +195,12 @@ Incumbent = whichever base EXP-018a Stage 1 leaves standing (`lean` if it passes
 *Stage 2 — operational feasibility, gated on Stage 1 and decided on measurement, not preference.* Only if Stage 1 passes. Measure, on sadalsuud's actual hardware: (a) CPU-only wall-clock for one 1344-point context x 72h forecast, 10 runs, report median and max; (b) venv size delta and whether `torch` installs cleanly alongside the existing pins; (c) a 14-day replay of per-vintage MAE distributions for Alternative 3's tail check. Feasible iff median CPU latency ≤60s **and** the p95 per-vintage MAE ratio (FM ÷ incumbent) ≤1.5. Infeasible on latency alone → the FM becomes an offline band source for augur#19 rather than the production forecaster, which is a smaller but still real win.
 
 *Stage 3 — shadow, then swap.* Only if Stages 1 and 2 pass. The FM runs as a **shadow** alongside production LightGBM for **14 evaluable vintages**, written to a separate output file, dashboard untouched — the same shape as the original LightGBM shadow that produced ADR-006, and for the same reason: EXP-014's promotion was earned by a live shadow, not a backtest, and this one will be too. Promotion criterion at that point is ADR-007's, re-derived against whatever the incumbent then is; ADR-006 is amended only after a live swap, never before.
+
+**Addendum 2026-11-07 (Stage 3 build: a deviation from the Method, whose text stands):**
+- **Order: deviation.** The Method runs Stage 3 "only if Stages 1 and 2 pass". By the engineer's call of 2026-11-06 the shadow starts before Stage 1 reads, so it starts collecting vintages while Stage 1 waits for its 14. What still holds is narrower than the Method: no swap unless Stage 1 passes as written. A failed Stage 1 stops the shadow.
+- **Overlap.** The first shadow vintages fall inside Stage 1's window. Same frozen model, same hours, so they aren't independent evidence.
+- **Context: deviation.** `update_fm.py` keeps the offset and length EXP-038/039 measured (ends at t0 − 1h, prediction length 73), but on price rows only. EXP-038 also dropped rows with exogenous NaNs, which the FM doesn't read, so this isn't EXP-021's exact matched row set and it can hold a few more prices than the incumbent's (median 18 per context across EXP-038's 60 vintages, maximum 18, and for some vintages all 18 fall in the last week).
+- **Read.** `fm_state.json` keeps 30 days, and FM regret lands in `ml/shadow/fm_regret_log.jsonl`, separate from production's log. The promotion criterion, which excludes cold-start vintages, is the [2026-11-07] entry.
 
 **What is explicitly not decided by this entry:** whether Augur's production forecaster *should* be a 205M-parameter pretrained model rather than a 1344-row nightly refit is a question about operational surface, reproducibility and the project's ability to debug its own forecasts — not only about quantile score. Stage 3 is where that judgement gets made, with a live shadow in hand. Recording it here so a strong Stage 1 does not read as having settled it.
 

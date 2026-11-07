@@ -89,7 +89,7 @@ MEDIUM. A hand edit to them is a carve-out below.
 .venv/bin/python scripts/render_results.py --check
 ```
 
-Baseline 2026-11-06: 406 passed. The audit passes with 12 standing WARNs, all empty
+Baseline 2026-11-07: 424 passed. The audit passes with 12 standing WARNs, all empty
 `commits[]` (EXP-008, 011, 012, 013, 014, 018, 019, 020, 035, 036, 037, 039). A 13th WARN
 is new.
 

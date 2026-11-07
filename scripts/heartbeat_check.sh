@@ -113,6 +113,8 @@ marker_kinds() {
         s/.*EDH +gate +timeout.*/edh-gate-timeout/
         s/.*ARF +forecast.*/arf-forecast-short/
         s/.*ARF FAIL.*/arf-fail/
+        s/.*FM +shadow +failed.*/fm-shadow/
+        s/.*FM +regret +failed.*/fm-regret/
         s/^ *rc=skip *$/rc-skip/
         s/^ *rc=[0-9]+ *$/rc-nonzero/
     ' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$' | sort -u | paste -sd',' -

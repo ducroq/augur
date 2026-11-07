@@ -4,7 +4,17 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
-## 2026-11-06 (latest) — CQR stops scoring its own widening
+## 2026-11-07 (latest) — Chronos-Bolt live shadow built (EXP-021a Stage 3)
+
+**The dashboard reads nothing new.** A new last step in the shadow block, `python -m ml.shadow.update_fm`, forecasts on production's `t0` and writes `static/data/augur_forecast_fm.json`, `ml/models/shadow/fm_state.json` and, through `regret.py --model-arm fm`, `ml/shadow/fm_regret_log.jsonl`. The forecast JSON is committed, so Hugo serves it publicly like its siblings. The step is non-fatal, runs under `timeout -k 30 900`, and reports `[ALARM: FM shadow failed exit N]`.
+
+**Choices worth keeping.** The context ends at t0 − 1h because production's features are shifted one row, the offset EXP-038/039 measured. Weights are pinned to revision `5d9f166` and loaded offline. FM regret has its own log because a block is logged once, so a shared row would hold a null for good after one failed night. `augur_forecast_fm.json` needed a `.gitignore` negation: `git add` on an ignored path fails, and under `set -e` that would have lost the production commit.
+
+**Rehearsal (situla, 2026-11-07, Python 3.12, clean bootstrap from `requirements.lock`, sadalsuud's parquet and state).** One real forecast took 6.4s including imports and model load, peak 1.4 GB, offline, with lightgbm and torch in one process. Same schema, `t0` and 72 timestamps as production; context 1319 present, 24 missing. No existing pin changed (33 added, venv 1.7G, no CUDA packages). torch stays out of `requirements.txt` because Netlify may install that file (augur#35). This doesn't yet cover sadalsuud's own venv.
+
+**Reading it.** The first vintages run at q = 0, so FM band width isn't comparable with production's until CQR warms up. See the 2026-11-07 addendum in `docs/hypothesis-log.md` [2026-08-29] and the promotion criterion at [2026-11-07].
+
+## 2026-11-06 — CQR stops scoring its own widening
 
 `compute_cqr_q` scored the stored bands, which already included each day's `q`. EXP-015 recorded this on 2026-06-12, but it dropped out of the index on 2026-10-16 and its cost was never measured. After a wide spell the scores went negative, `q` clipped to 0 and the band collapsed: `last_cqr_q` went from 72 on 10-29 to 0 from 11-03.
 

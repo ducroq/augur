@@ -8,30 +8,72 @@
 # (2.3.3) on 2026-07-03; all 195 tests pass on py3.12. river is held at
 # 0.25.0 because ml/models/river_model.pkl is pickled under it — bumping
 # river requires a warmup regen (see memory/gotcha-log.md 2026-07-03).
+#
+# EXP-021a Stage 3 (2026-11-07) added the Chronos-Bolt shadow: chronos-forecasting,
+# torch and their dependency closure, with no existing pin changed. torch comes
+# from the CPU index, because the PyPI wheel drags in the CUDA stack. A plain
+# freeze from a --dev venv also picks up pytest and its deps: leave those out.
+# A regenerated lock must keep the --extra-index-url line below. These pins are
+# lock-only on purpose: Netlify may install the root requirements.txt (augur#35),
+# and the dashboard build must not depend on torch.
+--extra-index-url https://download.pytorch.org/whl/cpu
+accelerate==1.15.0
 altair==6.2.2
+annotated-doc==0.0.5
+anyio==4.16.0
 attrs==26.1.0
 cffi==2.0.0
+chronos-forecasting==2.3.1
+click==8.5.1
 cryptography==49.0.0
+einops==0.8.2
+filelock==4.2.4
+fsspec==2026.9.0
+h11==0.16.0
+hf-xet==1.8.0
+httpcore2==2.16.0
+httpx2==2.16.0
+huggingface_hub==2.4.0
+idna==3.20
 Jinja2==3.1.6
 joblib==1.5.3
-jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
+jsonschema==4.26.0
 lightgbm==4.6.0
+markdown-it-py==4.2.0
 MarkupSafe==3.0.3
+mdurl==0.1.2
+mpmath==1.3.0
 narwhals==2.23.0
+networkx==3.7
 numpy==2.5.0
 packaging==26.2
 pandas==2.3.3
+psutil==7.2.2
 pyarrow==24.0.0
 pycparser==3.0
+Pygments==2.21.0
 python-dateutil==2.9.0.post0
 pytz==2026.2
+PyYAML==6.0.3
 referencing==0.37.0
+regex==2026.11.7
+rich==15.0.0
 river==0.25.0
 rpds-py==2026.6.3
+safetensors==0.8.0
 scikit-learn==1.9.0
 scipy==1.18.0
+setuptools==78.1.0
+shellingham==1.5.4
 six==1.17.0
+sympy==1.14.0
 threadpoolctl==3.6.0
+tokenizers==0.23.3
+torch==2.15.0+cpu
+tqdm==4.70.1
+transformers==5.22.2
+truststore==0.10.5
+typer==0.28.0
 typing_extensions==4.16.0
 tzdata==2026.2

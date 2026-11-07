@@ -21,6 +21,7 @@ config/local/
 static/data/*.json
 !static/data/augur_forecast.json
 !static/data/augur_forecast_shadow.json
+!static/data/augur_forecast_fm.json
 data/*.json
 
 # Hugo build files

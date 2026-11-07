@@ -49,6 +49,8 @@ Review findings turned into a deterministic check (`review-changes` Step 3.1). `
 | 2026-10-29 | Run before committing, check 5 hashed HEAD only, so an uncommitted edit to a pinned Method passed | `scripts/audit_registry.py` check 5: the working-tree backlog is hashed too | live (seeded G2 30 → 25) | 0 |
 | 2026-10-29 | A dated addendum that supersedes a pinned Method sat in a section check 5 never hashed, so it could be edited after results landed | `scripts/audit_registry.py` `method_sections`: `## Addendum YYYY-MM-DD to EXP-NNN` is keyed `EXP-NNN/addendum-DATE` and must be pinned | live (seeded 28 → 14 days) | 0 |
 | 2026-11-06 | A pinned entry added after `PRECOMMIT_REV`, lost from the backlog, was in no key set and passed unchecked | `scripts/audit_registry.py` check 5: `PRECOMMIT_REV_BY_ID` joins the key set; `tests/test_audit_registry.py` seeds the loss | live | 0 |
+| 2026-11-07 | Heavy Python deps added to `requirements.txt` could reach the Netlify build (augur#35) | `tests/test_update_fm.py`: `test_torch_stays_out_of_what_netlify_may_install` | proposed | 1 |
+| 2026-11-07 | A shadow step's `rc=N` marker read as production down in the heartbeat mail | `tests/test_heartbeat_check.py`: `test_fm_failure_is_not_reported_as_production_down` | proposed | 1 |
 
 ---
 

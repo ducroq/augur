@@ -29,6 +29,12 @@ never complete -- usually a withheld or non-ENTSO-E hour. It is logged once as
 ``incomplete: true`` with its slot count, so the loss is visible and countable
 rather than a silently missing row, and it is not re-scored nightly.
 
+A shadow arm gets its own state and log: `--state ml/models/shadow/fm_state.json
+--regret-log ml/shadow/fm_regret_log.jsonl --model-arm fm` writes ``fm_*`` fields
+beside the same two baselines. Rows stay per-arm because a block is logged once; a shared row would
+keep a null for good if the shadow missed the night its block completed. Pair
+the arms on (date, block) when reading.
+
 Runs as its own step in `scripts/daily_update.sh`; a non-zero exit becomes an
 ``[ALARM: regret pass failed]`` marker in the commit subject.
 """
@@ -66,7 +72,8 @@ DEFAULT_REGRET_LOG = _REPO_ROOT / "ml" / "shadow" / "regret_log.jsonl"
 KS = (3, 6)
 BLOCKS = (("h1_24", 1, 24), ("h25_48", 25, 48), ("h49_72", 49, 72))
 SLOTS = 24
-ARMS = ("lightgbm", "naive", "profile")
+MODEL_ARM = "lightgbm"
+BASELINE_ARMS = ("naive", "profile")
 FINAL_AFTER_H = 48
 
 
@@ -99,6 +106,7 @@ def score_vintage(
     calibration_history: list[dict],
     price_history: pd.Series | None,
     holiday_dates: set | None,
+    model_arm: str = MODEL_ARM,
 ) -> list[dict]:
     """One row per complete block of one vintage. Empty if the anchor is unknown.
 
@@ -137,7 +145,7 @@ def score_vintage(
                             "incomplete": True, "n_slots": int(len(g))})
             continue
         realized = g["realized"].to_numpy(dtype=float)
-        preds: dict[str, np.ndarray | None] = {"lightgbm": g["p50"].to_numpy(dtype=float)}
+        preds: dict[str, np.ndarray | None] = {model_arm: g["p50"].to_numpy(dtype=float)}
         if prices is not None:
             carry = [prices.get(naive_source_timestamp(ts, t0)) for ts in g["timestamp_utc"]]
             preds["naive"] = None if any(v is None for v in carry) else np.array(carry, float)
@@ -153,9 +161,9 @@ def score_vintage(
             "n_slots": SLOTS,
             "mean_price": _r(realized.mean(), 3),
             "realised_amplitude": _r(realized.std(ddof=1), 3),
-            "lightgbm_amplitude": _r(preds["lightgbm"].std(ddof=1), 3),
+            f"{model_arm}_amplitude": _r(preds[model_arm].std(ddof=1), 3),
         }
-        for arm in ARMS:
+        for arm in (model_arm, *BASELINE_ARMS):
             p = preds.get(arm)
             s = score_block(p, realized) if p is not None else {}
             for key in ("regret_k3", "regret_k6", "hit_k6", "spearman"):
@@ -186,6 +194,7 @@ def run_regret(
     state_path: Path = DEFAULT_SHADOW_DIR / SHADOW_STATE_FILENAME,
     parquet_path: Path = DEFAULT_PARQUET,
     log_path: Path = DEFAULT_REGRET_LOG,
+    model_arm: str = MODEL_ARM,
 ) -> list[dict]:
     """Append every newly complete (date, block). Returns the rows appended."""
     history = load_shadow_state(state_path)["calibration_history"]
@@ -208,7 +217,7 @@ def run_regret(
         if torn:
             f.write("\n")
         for day in pending:
-            for row in score_vintage(day, history, price_history, holiday_dates):
+            for row in score_vintage(day, history, price_history, holiday_dates, model_arm):
                 if (row["date"], row["block"]) in logged:
                     continue
                 f.write(json.dumps(row) + "\n")
@@ -223,8 +232,9 @@ def main() -> None:
     ap.add_argument("--state", default=str(DEFAULT_SHADOW_DIR / SHADOW_STATE_FILENAME))
     ap.add_argument("--parquet", default=str(DEFAULT_PARQUET))
     ap.add_argument("--regret-log", default=str(DEFAULT_REGRET_LOG))
+    ap.add_argument("--model-arm", default=MODEL_ARM)
     args = ap.parse_args()
-    run_regret(Path(args.state), Path(args.parquet), Path(args.regret_log))
+    run_regret(Path(args.state), Path(args.parquet), Path(args.regret_log), args.model_arm)
 
 
 if __name__ == "__main__":
