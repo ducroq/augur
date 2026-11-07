@@ -5,6 +5,12 @@
      Moved out of memory/MEMORY.md 2026-09-06 — it is history, not current state,
      and the index is read at every session start. Nothing here was edited. -->
 
+## Closed 2026-11-07
+
+- Ask: "continue" (queue items 0–1), then: assess whether Augur's output is useful, plan showing the day-type rule, curate and wrap.
+- Closed: CQR fix confirmed live (q 26.54). EXP-021a Stage 3 FM shadow built, reviewed (5-lens battery plus one Codex pass), criterion signed off, sadalsuud venv rebuilt, merged and deployed (66317dd). augur#36 filed (production duplicate rows). Dashboard day-type swap queued as item 0 (augur#37). `upstream-edh.md` thinned.
+- Open: the dashboard swap (bands and label choices pending); the FM shadow's first vintage, to check in the 2026-11-08 commit.
+
 ## Closed 2026-11-06
 
 - `/update-drift` to v1.52.2 (session ask: the monthly drift check, then upgrade): one release, `review-changes` comments moved to the rationale doc, already in force through the global skill. Verified: the 34 removed lines are all comments, and the 3 bash blocks pass `bash -n` at both tags. No decline. Closed.

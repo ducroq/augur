@@ -11,6 +11,16 @@ Promoted rows hold the rule and a pointer; the incident detail they carried unti
 
 Residuals of entries archived 2026-11-06, as recorded then and not re-checked: dev/prod Python skew (situla 3.14, sadalsuud 3.12); the 2026-06-10 lightgbm install damage has no known root cause; dashboard silent-empty-state hardening is on augur#24.
 
+### A rollback trap ran in the directory the script had moved to (2026-11-07)
+**Problem**: On sadalsuud, the venv rebuild's `trap rollback ERR` fired after a `cd` into the rehearsal copy. Its relative `rm -rf .venv; mv OLD .venv` ran there and found nothing. Nothing was lost, by luck.
+**Root cause**: The rollback used relative paths and an ERR trap that outlived the `cd`.
+**Fix**: In a rollback, `cd` to an absolute path first, or use absolute paths throughout. Clear the trap before leaving the directory it protects. Also: a venv can't be renamed into place, because `activate` hardcodes `VIRTUAL_ENV`; move the old one aside and build at the final path.
+
+### A full review battery cost ~528k tokens on a 566-line change (2026-11-07)
+**Problem**: `/review-changes` ran five Opus lenses without stating a ceiling; the engineer flagged the cost. One Codex pass on the fixes cost 56k and still found a real defect.
+**Root cause**: The skill's budget step was skipped, and the profile names no cheaper reviewer.
+**Fix**: State the lens set and a token ceiling before spawning. Prefer fewer lenses or an outside model (`codex exec -s read-only`) when the change is mostly new code. A profile rule needs the engineer's wording.
+
 ## Promoted
 
 | Date | Gotcha | Occurrences | Promoted to |
