@@ -252,6 +252,8 @@ export function processEnergyDataForChart(energyData, energyZeroData, cutoffTime
     }
 
     // Add Augur ML forecast with confidence band if available
+    // ADR-009: the file names its own forecaster; LightGBM's has no name.
+    const fcName = augurForecast?.metadata?.display_name;
     if (augurForecast && augurForecast.forecast) {
         const tsFilter = (ts) => new Date(ts) >= cutoffTime;
         const sortByTs = (a, b) => new Date(a.ts) - new Date(b.ts);
@@ -292,7 +294,7 @@ export function processEnergyDataForChart(energyData, energyZeroData, cutoffTime
                     fill: 'toself',
                     fillcolor: 'rgba(167, 139, 250, 0.15)',
                     line: { color: 'transparent' },
-                    name: '80% confidence',
+                    name: fcName ? '80% range' : '80% confidence',
                     showlegend: true,
                     hoverinfo: 'skip',
                 });
@@ -304,9 +306,9 @@ export function processEnergyDataForChart(energyData, energyZeroData, cutoffTime
                 y: forecastData.map(d => d.price),
                 type: 'scatter',
                 mode: 'lines',
-                name: 'Augur ML Forecast',
+                name: fcName ? `Forecast: ${fcName.toLowerCase()}` : 'Augur ML Forecast',
                 line: { width: 3, color: '#a78bfa', dash: 'dash' },
-                hovertemplate: '<b>Augur ML</b><br>%{x}<br>Price: €%{y:.2f}/MWh<extra></extra>',
+                hovertemplate: `<b>${fcName ? 'Forecast' : 'Augur ML'}</b><br>%{x}<br>Price: €%{y:.2f}/MWh<extra></extra>`,
             });
             allTimestamps.push(...forecastData.map(d => d.ts));
         }
@@ -353,7 +355,7 @@ export function processEnergyDataForChart(energyData, energyZeroData, cutoffTime
                     fill: 'toself',
                     fillcolor: 'rgba(249, 115, 22, 0.12)',
                     line: { color: 'transparent' },
-                    name: '80% consumer confidence',
+                    name: fcName ? '80% consumer range' : '80% consumer confidence',
                     showlegend: true,
                     hoverinfo: 'skip',
                 });
@@ -365,9 +367,9 @@ export function processEnergyDataForChart(energyData, energyZeroData, cutoffTime
                 y: consumerData.map(d => d.price),
                 type: 'scatter',
                 mode: 'lines',
-                name: 'Augur Consumer Forecast',
+                name: fcName ? 'Consumer forecast' : 'Augur Consumer Forecast',
                 line: { width: 3, color: '#f97316', dash: 'dot' },
-                hovertemplate: '<b>Augur Consumer</b><br>%{x}<br>Price: €%{y:.2f}/MWh (incl. VAT)<extra></extra>',
+                hovertemplate: `<b>${fcName ? 'Consumer forecast' : 'Augur Consumer'}</b><br>%{x}<br>Price: €%{y:.2f}/MWh (incl. VAT)<extra></extra>`,
             });
             allTimestamps.push(...consumerData.map(d => d.ts));
         }

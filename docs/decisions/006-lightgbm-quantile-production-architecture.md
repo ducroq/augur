@@ -1,6 +1,6 @@
 # ADR-006: LightGBM-Quantile production forecasting architecture
 
-**Status**: Accepted
+**Status**: Accepted; forecaster choice superseded by ADR-009 (2026-11-07), pipeline kept as a shadow
 **Date**: 2026-05-29
 **Context**: After ARF's retirement (ADR-004 superseded) and a five-iteration metric-redesign arc culminating in EXP-014, formalising the production price-prediction architecture.
 

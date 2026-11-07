@@ -8,12 +8,15 @@
 #   1. Pull energyDataHub + Augur
 #   2. Run ARF model update (kept as backup signal — see EXP-014 promotion)
 #   3. Re-consolidate parquet from energyDataHub                — non-blocking
-#   4. Run shadow update (LightGBM-Quantile, EXP-014 production model)
+#   4. Run shadow update (LightGBM-Quantile, a shadow since ADR-009), then the
+#      day-type profile forecast that drives the dashboard (ADR-009)
 #   5. Run shadow evaluation (writes eval_log.jsonl) and the regret pass
 #   6. Run the Chronos-Bolt live shadow (EXP-021a Stage 3) — non-fatal
 #   7. Commit + push everything
 #
-# EXP-014 promotion (2026-05-29): LightGBM is now the production model
+# ADR-009 (2026-11-07): the dashboard reads static/data/augur_forecast_profile.json,
+# the day-type profile rule; LightGBM keeps running as a shadow.
+# EXP-014 promotion (2026-05-29): LightGBM became the production model
 # driving the dashboard via static/data/augur_forecast_shadow.json. ARF
 # (step 2) is kept running as a backup signal for one rolling-window
 # cycle. The Model tab still reads ARF metrics (model-viz.js).
@@ -181,6 +184,15 @@ if [ $SHADOW_CONSOLIDATE_RC -eq 0 ] && [ $DEP_PROBE_OK -eq 1 ]; then
     SHADOW_UPDATE_RC=$?
 
     if [ $SHADOW_UPDATE_RC -eq 0 ]; then
+        # ADR-009: the dashboard's forecaster, the day-type profile rule on
+        # production's t0 (so it needs update_shadow's last_t0 first). A
+        # failure is an ALARM: the dashboard keeps yesterday's forecast.
+        echo "Running profile forecast (ADR-009, dashboard)..."
+        python -m ml.shadow.update_profile
+        PROFILE_RC=$?
+        if [ $PROFILE_RC -ne 0 ]; then
+            echo "WARN: profile forecast failed (rc=$PROFILE_RC) — dashboard forecast will be stale"
+        fi
         echo "Running shadow evaluation..."
         python -m ml.shadow.evaluate_shadow --shadow-dir $AUGUR_DIR/ml/models/shadow \
             --arf-forecasts-dir $AUGUR_DIR/ml/forecasts \
@@ -513,6 +525,7 @@ git add ml/models/river_model.pkl ml/models/state.json static/data/augur_forecas
 # Shadow artifacts (best-effort: only add if they exist)
 [ -f ml/models/shadow/shadow_state.json ] && git add ml/models/shadow/shadow_state.json
 [ -f static/data/augur_forecast_shadow.json ] && git add static/data/augur_forecast_shadow.json
+[ -f static/data/augur_forecast_profile.json ] && git add static/data/augur_forecast_profile.json
 [ -f ml/shadow/eval_log.jsonl ] && git add ml/shadow/eval_log.jsonl
 [ -f ml/shadow/regret_log.jsonl ] && git add ml/shadow/regret_log.jsonl
 
@@ -538,6 +551,21 @@ REGRET_MARKER=""
 [ "${REGRET_RC:-0}" -ne 0 ] && REGRET_MARKER=" [ALARM: regret pass failed rc=${REGRET_RC}]"
 # `exit N`, not `rc=N`: heartbeat_check.sh reads any rc=N as a production step
 # that produced nothing, and an FM failure leaves production untouched.
+PROFILE_MARKER=""
+[ "${PROFILE_RC:-0}" -ne 0 ] && PROFILE_MARKER=" [ALARM: profile forecast failed rc=${PROFILE_RC}]"
+# rc=0 with holes: update_profile writes as long as it fills 24 of 72 hours, so
+# a short dashboard forecast needs its own ALARM (review 2026-11-07).
+if [ "${PROFILE_RC:-1}" -eq 0 ]; then
+    PROFILE_HOURS=$(python3 -c "
+import json
+try:
+    with open('$AUGUR_DIR/static/data/augur_forecast_profile.json') as f:
+        print(int(json.load(f)['metadata']['n_hours']))
+except Exception:
+    print(-1)
+" 2>/dev/null || echo -1)
+    [ "${PROFILE_HOURS:--1}" -lt 72 ] && PROFILE_MARKER=" [ALARM: profile forecast ${PROFILE_HOURS}h of 72]"
+fi
 FM_MARKER=""
 [ "${FM_UPDATE_RC:-0}" -ne 0 ] && FM_MARKER=" [ALARM: FM shadow failed exit ${FM_UPDATE_RC}]"
 [ "${FM_REGRET_RC:-0}" -ne 0 ] && FM_MARKER="${FM_MARKER} [ALARM: FM regret failed exit ${FM_REGRET_RC}]"
@@ -557,7 +585,7 @@ if [ -f "$EDH_VERDICT_FILE" ]; then
 fi
 
 git diff --cached --quiet && echo "No changes to commit" || {
-    git commit -m "Daily update $(date -u '+%Y-%m-%d') — ${ARF_STATUS} | ${SHADOW_STATUS}${STALE_MARKER}${DEP_MARKER}${SMOKE_MARKER}${REGRET_MARKER}${FM_MARKER}${ARF_EMPTY_MARKER}${EVAL_STALE_MARKER}${NAIVE_MARKER}${T0_MARKER}${EDH_MARKER}"
+    git commit -m "Daily update $(date -u '+%Y-%m-%d') — ${ARF_STATUS} | ${SHADOW_STATUS}${STALE_MARKER}${DEP_MARKER}${SMOKE_MARKER}${REGRET_MARKER}${PROFILE_MARKER}${FM_MARKER}${ARF_EMPTY_MARKER}${EVAL_STALE_MARKER}${NAIVE_MARKER}${T0_MARKER}${EDH_MARKER}"
     git push
 }
 

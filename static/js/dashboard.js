@@ -90,7 +90,12 @@ class EnergyDashboard {
     }
 
     /**
-     * Load Augur ML forecast (may not exist yet).
+     * Load the Augur price forecast (may not exist yet).
+     *
+     * ADR-009 (2026-11-07): the dashboard shows the day-type profile rule
+     * (augur_forecast_profile.json); LightGBM keeps running as a shadow.
+     * To revert, change the path below to '/data/augur_forecast_shadow.json':
+     * its file has no metadata.display_name, so the old labels come back.
      *
      * EXP-014 promotion (2026-05-29): production model swapped from
      * ARF (augur_forecast.json) to LightGBM-Quantile shadow
@@ -101,9 +106,15 @@ class EnergyDashboard {
      */
     async loadAugurForecast() {
         try {
-            const resp = await fetch('/data/augur_forecast_shadow.json');
+            const resp = await fetch('/data/augur_forecast_profile.json');
             if (resp.ok) {
                 this.augurForecast = await resp.json();
+                const note = document.getElementById('forecastNote');
+                const name = this.augurForecast?.metadata?.display_name;
+                if (note && name) {
+                    note.textContent = `Forecast beyond the published prices: ${name.toLowerCase()} (same hour, same kind of day). The band holds 80% of its misses over the last 4 weeks.`;
+                    note.hidden = false;
+                }
             }
         } catch {
             // Forecast not available yet — that's fine

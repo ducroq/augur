@@ -43,6 +43,12 @@ body {
     margin-top: 4px;
 }
 
+.chart-note {
+    margin: 10px 4px 0;
+    font-size: 0.85rem;
+    color: #9ca3af;
+}
+
 .chart-container {
     background: #111111;
     border: 1px solid #333333;

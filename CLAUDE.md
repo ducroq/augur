@@ -2,7 +2,7 @@
 
 Energy price forecasting platform for the Netherlands. Combines data from 18+ APIs (via energyDataHub), ML-based week-ahead price predictions, and an interactive dashboard for smart consumption (heat pumps, EV charging, industrial thermal).
 
-- **Stack**: Python 3.12 (ML pipeline), Hugo + Plotly.js (dashboard). **LightGBM-Quantile multi-horizon + CQR in production** (ADR-006, promoted EXP-014 2026-05-29); River ARF kept running as a modelling fallback, not an availability backup; it also supplies the consumer surcharge.
+- **Stack**: Python 3.12 (ML pipeline), Hugo + Plotly.js (dashboard). **The dashboard shows the day-type profile rule** (ADR-009, 2026-11-07); LightGBM-Quantile + CQR (ADR-006) keeps running as a shadow; River ARF kept running as a modelling fallback, not an availability backup; it also supplies the consumer surcharge.
 - **Status**: Production. Dashboard live at https://energy.jeroenveen.nl; ML pipeline runs daily on sadalsuud.
 - **Repo**: github.com/ducroq/augur
 - **agent-ready-projects**: v1.52.2
@@ -53,7 +53,8 @@ sadalsuud — augur-daily.timer 16:30 UTC, ExecStartPre=scripts/wait_for_edh.sh
     │   never fail-closed.
     ├── python -m ml.update               → ARF modelling fallback (NON-FATAL)
     ├── python -m ml.data.consolidate     → training parquet
-    ├── python -m ml.shadow.update_shadow → LightGBM: 56-day retrain, 72h predict, CQR (production)
+    ├── python -m ml.shadow.update_shadow → LightGBM: 56-day retrain, 72h predict, CQR (shadow; sets t0)
+    ├── python -m ml.shadow.update_profile → day-type profile rule on that t0 → dashboard (ADR-009)
     ├── python -m ml.shadow.evaluate_shadow → eval row (h1–24 only): vs ARF + seasonal-naive + profile floor
     ├── python -m ml.shadow.regret          → cheap-hour regret per 24h block, all 72h (product criterion)
     ├── python -m ml.shadow.update_fm       → Chronos-Bolt shadow on production's t0 (EXP-021a Stage 3, NON-FATAL), own regret log
@@ -64,11 +65,12 @@ sadalsuud — augur-daily.timer 16:30 UTC, ExecStartPre=scripts/wait_for_edh.sh
     ▼
 Netlify build: decrypt_data_cached.py --force → hugo --minify → CDN
     ▼
-Browser: 5 tabs (Prices, Weather, Grid, Market, Model); augur_forecast_shadow.json
+Browser: 5 tabs (Prices, Weather, Grid, Market, Model); augur_forecast_profile.json
 (prices) + augur_forecast.json (Model tab); live Energy Zero every 10 min.
 ```
 
-**Model**: 9 LGBMRegressor (3 horizon groups × p10/p50/p90), 24 features, split-conformal bands targeting P80. `t0` comes from `latest_feasible_t0` (the last complete feature row), anchored lag-0 since 2026-09-13. Consumer price = wholesale × VAT + ARF's cached surcharge (`update_shadow.py:read_arf_surcharge`). Revert to ARF: change the path in `dashboard.js:loadAugurForecast`.
+**Dashboard forecast** (ADR-009): mean of the same hour over the last 5 matching day types, bands = P10/P90 of its own last-28-day errors per block. Revert to LightGBM: change the path in `dashboard.js:loadAugurForecast`.
+**LightGBM (shadow)**: 9 LGBMRegressor (3 horizon groups × p10/p50/p90), 24 features, split-conformal bands targeting P80. `t0` comes from `latest_feasible_t0` (the last complete feature row), anchored lag-0 since 2026-09-13. Consumer price = wholesale × VAT + ARF's cached surcharge (`update_shadow.py:read_arf_surcharge`).
 
 ## Key Paths
 
@@ -77,6 +79,7 @@ Browser: 5 tabs (Prices, Weather, Grid, Market, Model); augur_forecast_shadow.js
 | `ml/shadow/update_shadow.py` | Nightly LightGBM retrain + predict + CQR + consumer fields; t0 selection and hold-back alarm state |
 | `ml/shadow/lightgbm_quantile.py`, `features_pandas.py`, `conformal.py`, `metrics.py` | Forecaster, 24-feature builder, CQR, metric library (pinball, DM with HAC, Winkler…) |
 | `ml/shadow/regret.py` → `ml/shadow/regret_log.jsonl` | Nightly k3/k6 cost regret per horizon block for p50, carry and profile; `incomplete` rows mark blocks that can never fill |
+| `ml/shadow/update_profile.py` → `static/data/augur_forecast_profile.json` | The dashboard's forecast (ADR-009): EXP-036's profile rule on production's `t0`, own-error bands, built-in NL holiday calendar |
 | `ml/shadow/update_fm.py` → `ml/models/shadow/fm_state.json`, `static/data/augur_forecast_fm.json` | Chronos-Bolt live shadow; dashboard reads neither. Regret in `ml/shadow/fm_regret_log.jsonl` |
 | `ml/shadow/evaluate_shadow.py` → `ml/shadow/eval_log.jsonl` | Daily eval rows. `naive_*` fields from 2026-09-06; `naive_profile_*` (EXP-036 floor) from 2026-09-11. Absent = age, not failure |
 | `ml/models/shadow/shadow_state.json` | `calibration_history` (rolling 30-day cap, `MAX_HISTORY_DAYS`: count recent vintages here, older ones from `eval_log` dates), CQR stats, t0 hold-back |
@@ -93,7 +96,7 @@ Browser: 5 tabs (Prices, Weather, Grid, Market, Model); augur_forecast_shadow.js
 | `scripts/exp0NN_*.py` | One runner per experiment; each docstring states its pre-commitment and host |
 | `ml/shadow/expNNN_*/summary.json` | Committed experiment records. Gitignored dumps next to them are **links into `/home/jeroen/lab/augur/shadow/`**. They aren't byte-reproducible, so treat them as data |
 | `scripts/link_lab.sh` | Recreates the lab links after `git clean -xfd` or in a new worktree. To adopt a new experiment's dumps, move them into the lab tree at the same relative path, then rerun |
-| `docs/decisions/` | ADR-001..008 (no 005 on main; ADR-001 superseded by 008; ADR-004 by 006) |
+| `docs/decisions/` | ADR-001..009 (no 005 on main; ADR-001 superseded by 008; ADR-004 by 006; ADR-006's forecaster by 009) |
 | `tests/` | pytest suite (count is probed in `memory/MEMORY.md`) |
 
 ## Compute
