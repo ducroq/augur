@@ -27,7 +27,7 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 ## Hard Constraints
 
 - Never commit encryption keys or secrets — keys are base64-encoded env vars (`ENCRYPTION_KEY_B64`, `HMAC_KEY_B64`)
-- Never rebase or amend a commit pinned in `PRECOMMIT_REV_BY_ID` (`scripts/audit_registry.py`): check 5 fails on an unreachable pin
+- Never rebase or amend a commit pinned in `PRECOMMIT_REV_BY_ID` or `HYPOTHESIS_PINS` (`scripts/audit_registry.py`): checks 5 and 6 fail on an unreachable pin. Integrate the nightly commit by merge, not rebase, while a pin is unpushed
 - Never use hardcoded +2h timezone offset — use `Intl.DateTimeFormat` with `timeZone: 'Europe/Amsterdam'`
 - Never claim tests pass without running them. Never claim a file exists without reading it.
 - Always verify HMAC before decryption — data integrity is non-negotiable
@@ -92,7 +92,7 @@ Browser: 5 tabs (Prices, Weather, Grid, Market, Model); augur_forecast_profile.j
 | `scripts/wait_for_edh.sh` | Readiness gate. **Read its header before changing any clause** |
 | `scripts/check_gate_lag.sh` | The only detector for gate lag (augur#34); run over ssh with `bash -s` |
 | `scripts/heartbeat_check.sh`, `alert_failure.sh`, `notify_email.py`, `scripts/systemd/` | Alerting and the canonical units (install/rollback in its README) |
-| `experiments/registry.jsonl`, `scripts/audit_registry.py`, `scripts/render_results.py` | Experiment record (EXP-001..039; EXP-040 is pre-committed in the backlog), its auditor, the generated digest |
+| `experiments/registry.jsonl`, `scripts/audit_registry.py`, `scripts/render_results.py` | Experiment record (EXP-001..039; EXP-040 and EXP-041 are pre-committed in the backlog), its auditor (check 6 also pins hypothesis-log Methods), the generated digest |
 | `scripts/exp0NN_*.py` | One runner per experiment; each docstring states its pre-commitment and host |
 | `ml/shadow/expNNN_*/summary.json` | Committed experiment records. Gitignored dumps next to them are **links into `/home/jeroen/lab/augur/shadow/`**. They aren't byte-reproducible, so treat them as data |
 | `scripts/link_lab.sh` | Recreates the lab links after `git clean -xfd` or in a new worktree. To adopt a new experiment's dumps, move them into the lab tree at the same relative path, then rerun |

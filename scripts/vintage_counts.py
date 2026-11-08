@@ -17,9 +17,12 @@ Definitions (each from its entry's Method):
   EXP-038's window, which ends at `t0` 2026-10-28). Target 14.
 - [2026-11-06] CQR live check: fully realised, `t0` >= 2026-11-06 22:00 UTC, the
   first run after the fix (4854b4e). Target 28.
-- [2026-11-07] FM Stage 3, also the [2026-10-28] product criterion's trigger:
-  FM vintages with every row `cqr_n_calib_days` >= 3, fully realised in both
-  arms with the same 72 paired timestamps. Target 14.
+- EXP-041 (the FM gate since 2026-11-08; also the [2026-10-28] product
+  criterion's trigger): `scripts/exp041_fm_vs_profile.py:population`, imported
+  so the definition lives in one place. FM vintages with live CQR, fully
+  realised, with a shipped profile forecast on the same t0. Target 14.
+- [2026-11-07] pairing with production, still printed: the population that
+  entry defined, now used only for EXP-041's reported LightGBM comparison.
 
 `calibration_history` keeps the 30 newest vintage days (`MAX_HISTORY_DAYS`).
 The "room" column is how many more vintage days the history can add before the
@@ -74,6 +77,16 @@ def count_fm_paired(fm_history: list[dict], prod_history: list[dict]) -> tuple[i
     return len(days), room(fm_history, days[0] if days else None)
 
 
+def count_exp041(fm_history: list[dict]) -> tuple[int, int | None, list[str]]:
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "exp041", Path(__file__).resolve().parent / "exp041_fm_vs_profile.py")
+    exp = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(exp)
+    counted, excluded = exp.population(fm_history, exp.shipped_profiles())
+    return len(counted), room(fm_history, counted[0][0] if counted else None), excluded
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--shadow-state", default="ml/models/shadow/shadow_state.json")
@@ -91,8 +104,10 @@ def main() -> None:
     rows = [
         ("[2026-08-29] EXP-021a Stage 1", *count_t0_since(prod, "2026-10-30"), 14),
         ("[2026-11-06] CQR live check", *count_t0_since(prod, "2026-11-06T22:00"), 28),
-        ("[2026-11-07] FM Stage 3 + [2026-10-28]", *count_fm_paired(fm, prod), 14),
+        ("[2026-11-07] FM paired with LightGBM (reported only)", *count_fm_paired(fm, prod), 14),
     ]
+    n41, room41, excluded41 = count_exp041(fm)
+    rows.insert(2, ("EXP-041 FM vs profile + [2026-10-28]", n41, room41, 14))
     print(f"State as of shadow run {shadow.get('last_run_utc', '?')}, last t0 {shadow.get('last_t0', '?')}")
     print(f"eval_log: {len(eval_days)} days ({eval_days[0] if eval_days else '-'} .. "
           f"{eval_days[-1] if eval_days else '-'}), h1-24 only, not vintages")
@@ -102,6 +117,8 @@ def main() -> None:
     for name, n, rm, target in rows:
         flag = " (read before the next run)" if rm == 0 else ""
         print(f"| {name} | {n} of {target} | {'-' if rm is None else rm}{flag} |")
+    if excluded41:
+        print(f"\nEXP-041 vintages excluded for no shipped profile forecast: {', '.join(excluded41)}")
 
 
 if __name__ == "__main__":

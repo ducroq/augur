@@ -169,3 +169,62 @@ class TestCheckFiveAcrossTheArchive:
         repo.commit("archive only")
         ok, fails = self.run()
         assert not ok and "EXP-103: no Method body at its pre-commit" in fails[0]
+
+
+HYP = """# Hypothesis Log
+
+## Open
+
+### [2026-11-01] Alpha holds
+
+**Position (provisional):** alpha.
+
+**Method (pre-committed 2026-11-01):** gate on X.
+
+*Stage 1 — offline.* Run it.
+
+**Live check:** after 28 vintages.
+
+**Revisit trigger:** later.
+
+### [2026-11-01] Beta, same date
+
+**Method (pre-committed 2026-11-01):** gate on Y.
+
+**Note added 2026-11-02; the Method above is unchanged.** context.
+
+### [2026-11-02] Gamma has no pre-committed Method
+
+**Method (what gets done):** a plan, not a gate.
+
+## Resolved
+"""
+
+
+class TestHypothesisMethods:
+    """Check 6's parser: where a hypothesis-log Method block starts and ends."""
+
+    def test_block_keeps_stage_paragraphs_and_live_check_but_not_later_fields(self):
+        out, dups = audit.hypothesis_methods(HYP)
+        alpha = out["2026-11-01 Alpha holds"]
+        assert "*Stage 1" in alpha and "**Live check:**" in alpha
+        assert "Revisit trigger" not in alpha
+        assert dups == []
+
+    def test_same_date_entries_do_not_collide_and_notes_stay_outside(self):
+        out, _ = audit.hypothesis_methods(HYP)
+        assert out["2026-11-01 Beta, same date"] == "**Method (pre-committed 2026-11-01):** gate on Y."
+
+    def test_only_pre_committed_methods_are_pinned(self):
+        out, _ = audit.hypothesis_methods(HYP)
+        assert not any(k.startswith("2026-11-02") for k in out)
+
+    def test_resolution_note_in_brackets_keeps_the_key(self):
+        resolved = HYP.replace("[2026-11-01] Alpha", "[2026-11-01 → resolved 2026-12-01] Alpha")
+        assert "2026-11-01 Alpha holds" in audit.hypothesis_methods(resolved)[0]
+
+    def test_appending_an_entry_does_not_change_the_last_block(self):
+        before = audit.hypothesis_methods(HYP)[0]
+        after = audit.hypothesis_methods(HYP.replace(
+            "## Resolved", "### [2026-11-03] Delta\n\n**Method (pre-committed 2026-11-03):** Z.\n\n## Resolved"))[0]
+        assert all(after[k] == v for k, v in before.items())

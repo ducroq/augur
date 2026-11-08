@@ -6,7 +6,7 @@ computed by throwaway inline analyses, so nobody could regenerate or check them
 — the same class of failure as leaving results in /tmp. This script makes the
 check repeatable instead of a one-off claim.
 
-Five checks:
+Six checks:
 
   1. SCHEMA      every required field present, `decision` from the allowed set,
                  `data_window` has its four keys, `commits` non-empty.
@@ -24,6 +24,10 @@ Five checks:
                  An executed entry may live in the backlog or in
                  `docs/archive/experiment-backlog-run.md`, never both; the
                  baseline is always read from the backlog at the pin.
+
+  6. HYPOTHESIS  every pre-committed Method in `docs/hypothesis-log.md` (or, once
+                 resolved, its archive) is byte-identical to the commit where it
+                 first appeared (`HYPOTHESIS_PINS`). The swap criteria live there.
 
 Exit code is non-zero if any check fails, so it can gate `/curate` or CI.
 
@@ -146,6 +150,93 @@ def method_sections(text):
                 body = body[: -len("---")].rstrip()
             out[key] = body
     return out
+
+
+HYPOTHESIS_LOG = "docs/hypothesis-log.md"
+HYPOTHESIS_ARCHIVE = "docs/archive/hypothesis-log-resolved.md"
+# Check 6: every pre-committed Method in the hypothesis log, keyed by its entry's
+# date plus the first 48 characters of its title (two 2026-08-29 entries exist,
+# so a date alone collides) and pinned to the commit where it first appeared. Added 2026-11-08: the
+# criteria that gate live swaps lived only here, so "never edited" was a
+# convention, not a check. Each pin was verified that day: the block at the pin
+# equals HEAD's (see the commit that added this map).
+HYPOTHESIS_PINS = {
+    "2026-08-29 EXP-021a: Chronos-Bolt's 20% zero-shot win survi": "6cb2633",
+    "2026-08-30 EXP-028a: Chronos-2's covariate gain survives on": "0f340bf",
+    "2026-10-28 Product criterion: a forecaster earns the dashbo": "a6672d8",
+    "2026-11-06 Calibrating CQR on unwidened scores restores P80": "510d60a",
+    "2026-11-07 Stage 3 promotion criterion: Chronos-Bolt beats ": "b05d352",
+}
+# Bold fields that belong to a Method block rather than ending it. [2026-11-06]
+# states its 28-vintage live check as its own field.
+METHOD_CONTINUATIONS = ("Live check",)
+
+
+def hypothesis_methods(text):
+    """Map "date title-prefix" -> its pre-committed Method block, plus duplicate keys.
+
+    The date is read from the start of the bracket, so a resolution note added
+    inside it (`[2026-09-06 → resolved …]`) leaves the key unchanged.
+
+    A block starts at `**Method (pre-committed` and runs to the next bold field
+    (`**Label`) not in METHOD_CONTINUATIONS, so italic `*Stage N*` paragraphs
+    stay inside it and later notes and addenda stay outside. Only Methods
+    marked pre-committed are pinned.
+    """
+    out, dups = {}, []
+    for part in re.split(r"\n### ", text)[1:]:
+        m = re.match(r"\[(\d{4}-\d{2}-\d{2})[^\]]*\]\s*(.*)", part)
+        if not m:
+            continue
+        lines = re.split(r"\n## ", part)[0].split("\n")
+        start = next((i for i, l in enumerate(lines)
+                      if l.startswith("**Method (pre-committed")), None)
+        if start is None:
+            continue
+        end = len(lines)
+        for i in range(start + 1, len(lines)):
+            if lines[i].startswith("**") and not lines[i][2:].startswith(METHOD_CONTINUATIONS):
+                end = i
+                break
+        key = f"{m.group(1)} {m.group(2).strip()[:48]}"
+        if key in out:
+            dups.append(key)
+        out[key] = "\n".join(lines[start:end]).rstrip()
+    return out, dups
+
+
+def check_hypothesis_methods(fails, warns):
+    """Check 6. Pinned hypothesis-log Methods are byte-identical to their pin."""
+    def at(rev, path):
+        r = subprocess.run(["git", "show", f"{rev}:{path}"], capture_output=True, text=True)
+        return r.stdout if r.returncode == 0 else ""
+
+    def both(log_text, arch_text):
+        (live, d1), (arch, d2) = hypothesis_methods(log_text), hypothesis_methods(arch_text)
+        return {**arch, **live}, sorted(set(d1) | set(d2) | (set(live) & set(arch)))
+
+    read = lambda p: open(p).read() if os.path.exists(p) else ""
+    head, dup_h = both(at("HEAD", HYPOTHESIS_LOG), at("HEAD", HYPOTHESIS_ARCHIVE))
+    work, dup_w = both(read(HYPOTHESIS_LOG), read(HYPOTHESIS_ARCHIVE))
+    for k in sorted(set(dup_h) | set(dup_w)):
+        fails.append(f"hypothesis [{k}]: two pre-committed Methods share this key, "
+                     f"or the entry is in both the log and its archive")
+    live_only = hypothesis_methods(read(HYPOTHESIS_LOG))[0]
+    for k in sorted(set(live_only) - set(HYPOTHESIS_PINS)):
+        warns.append(f"hypothesis [{k}]: pre-committed Method not pinned; add it to "
+                     f"HYPOTHESIS_PINS once its commit exists")
+    for k, rev in sorted(HYPOTHESIS_PINS.items()):
+        if subprocess.run(["git", "merge-base", "--is-ancestor", rev, "HEAD"],
+                          capture_output=True).returncode != 0:
+            fails.append(f"hypothesis [{k}]: pin {rev} is not an ancestor of HEAD")
+            continue
+        base = both(at(rev, HYPOTHESIS_LOG), at(rev, HYPOTHESIS_ARCHIVE))[0].get(k, "")
+        if not base:
+            fails.append(f"hypothesis [{k}]: no pre-committed Method at its pin {rev}")
+        elif head.get(k) != base:
+            fails.append(f"hypothesis [{k}]: Method EDITED since pin {rev}")
+        elif work.get(k) != base:
+            fails.append(f"hypothesis [{k}]: Method EDITED in the working tree since pin {rev}")
 
 
 def merged_sections(backlog_text, archive_text):
@@ -298,6 +389,9 @@ def main() -> int:
     fails.extend(untraceable)
 
     precommit_ok = check_precommit(fails, warns)
+    n_fails = len(fails)
+    check_hypothesis_methods(fails, warns)
+    hyp_ok = len(fails) == n_fails
 
     n_nums = sum(len([1 for k, v in e["metrics"].items()
                       if isinstance(v, (int, float)) and not isinstance(v, bool)])
@@ -311,6 +405,7 @@ def main() -> int:
     print(f"  4 numbers      {n_nums} numeric metrics checked, "
           f"{len(DERIVED_OK)} whitelisted as documented derivations")
     print(f"  5 precommit    Method bodies identical to {PRECOMMIT_REV}: {precommit_ok}")
+    print(f"  6 hypothesis   {len(HYPOTHESIS_PINS)} pinned hypothesis-log Methods unchanged: {hyp_ok}")
 
     for w in warns:
         print(f"  WARN  {w}")
