@@ -14,6 +14,7 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 - Add an entry when you take a provisional position you want to revisit later.
 - Each entry has a `Review by:` date and a `Revisit trigger:` so Claude can surface due items at session start and in `/curate`.
 - The **Method** field pins the falsification criterion *before* the data lands — that's the whole point. Don't loosen Method when the answer arrives; if you want to redefine the bet, open a new entry.
+- A pre-committed Method is byte-pinned by `scripts/audit_registry.py` check 6: add its key to `HYPOTHESIS_PINS` in the commit after it lands. Status, results and "discharged" marks go in a dated note **after** the Method, never inside it; check 6 fails on any edit within the block.
 - When an entry is resolved (ratified, revised, or no longer relevant), move it to the `## Resolved` section at the bottom with a one-line outcome.
 - Keep entries tight. If an entry grows a plan, it becomes a TODO; if it grows a rationale, it becomes an ADR.
 

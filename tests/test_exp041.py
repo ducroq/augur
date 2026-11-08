@@ -76,4 +76,5 @@ def test_read_runs_end_to_end_on_synthetic_state(tmp_path, monkeypatch):
     assert s["n_obs"] == 14 * 72
     assert s["skill_gate"]["verdict"] == "PASS"       # FM p50 exact, profile off by 5
     assert s["guardrail"]["fm_lower"] >= s["guardrail"]["profile_lower"]
-    assert s["lightgbm_reported_not_gated"]["n_vintages"] == 14
+    lg = s["lightgbm_reported_not_gated"]
+    assert lg["n_vintages"] == 14 and lg["fm_lower"] == s["guardrail"]["fm_lower"]

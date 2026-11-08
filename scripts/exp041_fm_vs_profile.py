@@ -152,8 +152,12 @@ def main() -> int:
         lg = np.array([prod[dd][k]["p50"] for dd, _, rows, _ in paired for k in sorted(rows)])
         fl = arrays(paired, lambda r, d, k: r["p50"])
         dml = diebold_mariano(np.abs(yl - fl), np.abs(yl - lg), hac_lags=HAC_LAGS)
+        # FM coverage on the same paired subset, so the two sides compare on
+        # one population (review 2026-11-08), not FM-on-14 vs LightGBM-on-fewer.
         lgbm = {"n_vintages": len(paired), "dm_mean_diff": dml.mean_diff,
                 "dm_p_one_sided": dml.p_value_one_sided,
+                "fm_lower": lower_side_coverage(yl, arrays(paired, lambda r, d, k: r["p10"])),
+                "fm_upper": float((yl <= arrays(paired, lambda r, d, k: r["p90"])).mean()),
                 "lgbm_lower": lower_side_coverage(yl, np.array([prod[dd][k]["p10"] for dd, _, rows, _ in paired for k in sorted(rows)])),
                 "lgbm_upper": float((yl <= np.array([prod[dd][k]["p90"] for dd, _, rows, _ in paired for k in sorted(rows)])).mean())}
 

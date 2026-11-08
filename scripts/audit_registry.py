@@ -25,9 +25,11 @@ Six checks:
                  `docs/archive/experiment-backlog-run.md`, never both; the
                  baseline is always read from the backlog at the pin.
 
-  6. HYPOTHESIS  every pre-committed Method in `docs/hypothesis-log.md` (or, once
-                 resolved, its archive) is byte-identical to the commit where it
-                 first appeared (`HYPOTHESIS_PINS`). The swap criteria live there.
+  6. HYPOTHESIS  every pre-committed Method in `docs/hypothesis-log.md` and its
+                 archive is byte-identical to its pin (`HYPOTHESIS_PINS`): the
+                 commit where it first appeared, or the version in force where
+                 an early edit is recorded beside the pin. An unpinned Method in
+                 either file warns. The swap criteria live there.
 
 Exit code is non-zero if any check fails, so it can gate `/curate` or CI.
 
@@ -166,6 +168,27 @@ HYPOTHESIS_PINS = {
     "2026-10-28 Product criterion: a forecaster earns the dashbo": "a6672d8",
     "2026-11-06 Calibrating CQR on unwidened scores restores P80": "510d60a",
     "2026-11-07 Stage 3 promotion criterion: Chronos-Bolt beats ": "b05d352",
+    # Resolved, in the archive. Traced 2026-11-08; unchanged since first commit
+    # unless noted.
+    "2026-05-29 Iteration-5 redesign of the calibration guardrai": "5fd9fb1",
+    "2026-05-29 LightGBM-Quantile passes the redesigned promotio": "5fd9fb1",
+    "2026-06-12 EXP-015: two-sided (per-side) CQR fixes the lowe": "bcc3e78",
+    "2026-06-12 EXP-016: per-side ACI closes the regime-shift co": "440b0b6",
+    "2026-08-20 Feature expansion is the highest-leverage untrie": "f427494",
+    "2026-08-25 EXP-018a: removing the six rolling-stat features": "d7581b9",
+    "2026-08-29 EXP-020: residual load and gas price carry price": "743476f",
+    "2026-08-29 EXP-021: a pretrained time-series foundation mod": "6cb2633",
+    "2026-08-30 EXP-023a: the 112-day window's 3.0% gain is real": "0f340bf",
+    "2026-10-28 EXP-038: an early, tripwire-exempt read of EXP-0": "91e18ce",
+    # Edited after first commit; pinned at the version in force. 62d3ffd ->
+    # 0647a1e, 53 minutes later, same day, before any data: the code made
+    # evaluable once the eval-log fields it needed existed.
+    "2026-04-30 LightGBM-Quantile shadow will pass plan §6 over ": "0647a1e",
+    # 89d4ac1 -> 9d356d6 (same day: EXP-035 does not discharge Step 2) ->
+    # 44fabcb (09-11: Alternative 3 struck through as discharged by EXP-037).
+    # Neither changed the gate; the verdict came 2026-11-06. The second is a
+    # status note written inside a Method, which belongs outside it.
+    "2026-09-06 The production model has no demonstrated skill o": "44fabcb",
 }
 # Bold fields that belong to a Method block rather than ending it. [2026-11-06]
 # states its 28-vintage live check as its own field.
@@ -221,8 +244,8 @@ def check_hypothesis_methods(fails, warns):
     for k in sorted(set(dup_h) | set(dup_w)):
         fails.append(f"hypothesis [{k}]: two pre-committed Methods share this key, "
                      f"or the entry is in both the log and its archive")
-    live_only = hypothesis_methods(read(HYPOTHESIS_LOG))[0]
-    for k in sorted(set(live_only) - set(HYPOTHESIS_PINS)):
+    # Both files: an entry archived before its pin is added must not escape.
+    for k in sorted(set(work) - set(HYPOTHESIS_PINS)):
         warns.append(f"hypothesis [{k}]: pre-committed Method not pinned; add it to "
                      f"HYPOTHESIS_PINS once its commit exists")
     for k, rev in sorted(HYPOTHESIS_PINS.items()):
