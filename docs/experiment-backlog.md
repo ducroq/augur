@@ -20,6 +20,7 @@ Different from its neighbours:
 |---|---|---|---|
 | EXP-034 fragility-conditioned bands | minutes | CPU | **Added 2026-08-31, not run.** Parked 2026-10-28 with the LightGBM tuning |
 | EXP-040 TabPFN-2/3, a tabular foundation model with covariates | GPU min–h (unverified) | b650-gpu | **Added 2026-10-29, not run.** License and feasibility checks first; see its own sequencing note |
+| EXP-041 FM vs the profile rule on live vintages (replaces the [2026-11-07] skill gate) | minutes | CPU, situla | **Added 2026-11-08, not run.** Waits on 14 qualifying FM vintages |
 
 **EXP-040 was added 2026-10-29** from Lipiecki & Weron (2026, arXiv:2609.00089), the first outside evidence that a *tabular* foundation model beats Chronos-2 on electricity prices. Its Method was fixed before any TabPFN number existed for Augur.
 
@@ -147,3 +148,31 @@ The EXP-040 section above stays byte-identical. `scripts/audit_registry.py` chec
 8. **Id.** EXP-040 is fixed, not provisional. The audit keys check 5 on it.
 9. **Source paragraph.** The 10–22% and 12–15% CRPS gains are TabPFN-3's. The primary arm, TabPFN-2, is 8–19% better than Chronos-2 and 10–11% better than DDNN-JSU (Tables 3–5).
 10. **Declared deviations from the paper's Eq. 5:** target-hour values instead of full 24-hour vectors, pooled per block instead of one model per hour, and no EUA/TTF/Brent/API2 columns.
+
+---
+
+## EXP-041 — Chronos-Bolt beats the profile rule, the dashboard's incumbent, on point error without worse band coverage, on live vintages
+
+**Added 2026-11-08 on the engineer's decision of that day, before any FM vintage counted under it was read.** It replaces the skill gate and the calibration guardrail of `docs/hypothesis-log.md` [2026-11-07], whose comparator, production LightGBM, has been a shadow since ADR-009. That entry's Method text is unchanged; it stays the record of the old gate. EXP-021a Stage 3 said its criterion would be re-derived against "the incumbent of the day", and since 2026-11-07 that is the profile rule. Without this entry the FM met the incumbent only on k6 regret, which is not a proper scoring rule ([2026-10-28], related evidence) and should sit beside a proper-score gate, never replace it. The id is fixed; check 5 keys on it.
+
+**What is known before writing, so this is part-blind.** Offline, EXP-038 (60 vintages): bolt-base MAE 37.5 vs `lean` 45.6, and at h49–72 its k6 regret only ties the profile floor (7.87 vs 7.81). EXP-036: production `p50` sits 12.4% behind the floor offline. FM MAE against the floor was not computed in either. No live FM vintage with `cqr_n_calib_days ≥ 3` existed when this was written (`scripts/vintage_counts.py`: 0 of 14).
+
+**Position (provisional).** On live vintages, Chronos-Bolt's `p50` has lower absolute error than the profile rule's shipped forecast, and its shipped bands are not worse covered on either side.
+
+**Alternatives (falsification signals).**
+
+1. **The FM wins on error and loses on ranking.** It improves MAE by flattening, as LightGBM did (EXP-037). **Signal:** the skill gate passes and the [2026-10-28] product criterion fails in at least one block. Then no swap: both are required.
+2. **The rule's own-error bands are the stronger bands.** They are fitted on the rule's last 28 days of errors per block, while the FM's CQR window is shorter. **Signal:** the guardrail blocks with the skill gate passing. Then the band choice is a separate question (an FM `p50` with the rule's bands is a new entry, not a reading of this one).
+3. **The offline win was a LightGBM-relative win.** **Signal:** the FM beats LightGBM (reported below) and fails the skill gate against the rule. Then EXP-021's result does not transfer to the incumbent that matters.
+
+**Method (pre-committed 2026-11-08).**
+
+- **Population.** The first 14 FM vintages in date order that meet all of: (a) the [2026-11-07] FM conditions: every row has `cqr_n_calib_days ≥ 3`, and after keeping the last row per (`eval_day`, `timestamp_utc`) in `fm_state.json:calibration_history`, 72 unique timestamps all have `realized`; (b) a shipped profile forecast for the same vintage: the `static/data/augur_forecast_profile.json` in the daily commit for that `eval_day`, whose `metadata.t0` equals the FM vintage's `t0_utc`, with `forecast`, `forecast_lower` and `forecast_upper` present on the same 72 timestamps. A vintage failing (b), such as one where the profile step was skipped, is excluded and listed in the verdict, never for its result. `y` is the FM row's `realized`. Observations are ordered by `t0`, then horizon. No interim read, and the window isn't extended.
+- **Skill gate.** `ml/shadow/metrics.py:diebold_mariano` with `loss_a = |y − FM p50|`, `loss_b = |y − profile forecast|`, per observation, `hac_lags = 71`, one-sided α = 0.10. Passes iff the mean difference is negative and p < 0.10.
+- **Calibration guardrail.** Lower-side coverage (share of `y ≥ lower`) and upper-side coverage (share of `y ≤ upper`), FM `p10`/`p90` after CQR against the profile's `forecast_lower`/`forecast_upper`, on the same population. Blocks if FM coverage is more than 0.02 below the rule's on either side. Winkler score and median width are reported, never gated (ADR-007).
+- **Reported, not gated.** The same DM and coverage against production LightGBM on the vintages of this population that also meet the [2026-11-07] pairing, and the profile JSON's `n_holiday_fallback_hours` per vintage.
+- **Swap.** Requires EXP-021a Stage 1 passed as written, this skill gate passed, no guardrail block here, and the [2026-10-28] product criterion passed. The judgement on operational surface stays the engineer's.
+
+**Revisit trigger.** 14 such vintages exist. Read before the first leaves the FM's 30-day `calibration_history`; the profile side lives in git history and doesn't expire.
+
+**Cost.** Minutes, CPU, situla, from committed state and git history. The runner (`scripts/exp041_*.py`) is written before the read, and its docstring states this pre-commitment.

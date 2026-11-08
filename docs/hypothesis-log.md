@@ -29,7 +29,7 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 > | [2026-08-30] EXP-028a | ≥28 vintages | **Deferred 2026-11-06** past the EXP-021a Stage 1 read, since it is moot if that fails; Review by 11-30. Lagged-arm source: the EDH publish archive (see the entry's notes) |
 > | [2026-11-06] CQR on unwidened scores | 28 post-deploy vintages (`t0 ≥ 2026-11-06 22:00`) | fix merged 2026-11-06; live check running. **No slack:** 28 plus two partial vintages fill the 30-day history, so read it the run the 28th is fully realised (the counter's room hits 0) |
 > | [2026-10-28] product criterion | FM Stage 3 shadow reaches 14 vintages | pre-committed; the floor drives the dashboard since 2026-11-07 (ADR-009), so this is the bar to replace it |
-> | [2026-11-07] Stage 3 promotion criterion | 14 fully realised FM vintages with live CQR | pre-committed and signed off 2026-11-07 |
+> | [2026-11-07] Stage 3 promotion criterion → **EXP-041** | 14 fully realised FM vintages with live CQR and a shipped profile forecast | skill gate and guardrail moved to the profile rule by EXP-041 (backlog, 2026-11-08); the counter's FM row doesn't check the shipped-profile condition yet |
 > | [2026-05-29] publishable | engineer's call | not due (12-31) |
 >
 > EXP-018a Stage 1 and EXP-023a Stage B are parked and moved to `docs/archive/hypothesis-log-resolved.md`; the [2026-10-28] park entry below holds their revisit trigger.
@@ -62,6 +62,8 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 **Domain:** EXP-021a, ADR-006, ADR-007, augur#15.
 
 **Note added 2026-11-07, after ADR-009; the Method above is unchanged.** The dashboard now shows the day-type profile rule, and LightGBM is a shadow. The skill gate still pairs FM with LightGBM as written. The Swap clause's product criterion is against the floor, which is now the incumbent, so a passing swap replaces the rule. Whether the LightGBM skill gate still earns its place is the engineer's call. Changing it is a new entry, written before the 14 vintages are read.
+
+**Note added 2026-11-08; the Method above is unchanged.** The engineer decided to move the gate: `docs/experiment-backlog.md` EXP-041 (pre-committed 2026-11-08, before any qualifying FM vintage existed) replaces this entry's skill gate and calibration guardrail with the same tests against the profile rule. LightGBM is reported there, not gated. This entry's population conditions carry over into EXP-041's.
 
 ### [2026-11-06] Calibrating CQR on unwidened scores restores P80 coverage without costing either side
 
