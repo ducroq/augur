@@ -21,15 +21,13 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 
 ## Open
 
-> **Counted 2026-11-06 — use this, not the "≈date" in any entry below; those dates are all stale.**
-> 62 eval days since 2026-08-26 in `ml/shadow/eval_log.jsonl`; 7 vintages with `t0 ≥ 2026-10-30` (clean for EXP-021a Stage 1).
-> **`calibration_history` can't count past 30:** `MAX_HISTORY_DAYS` trims it, so the 2026-10-16 "30 vintages" here was the cap.
+> **Counts: run `.venv/bin/python scripts/vintage_counts.py`.** Don't hand-count, and don't trust an "≈date" in any entry below; those dates are all stale. It counts fully realised 72-hour vintages per each entry's Method, plus the room left before the oldest one leaves `calibration_history` (30 vintage days, `MAX_HISTORY_DAYS`). Eval-log days are h1–24 only and overcount: the 2026-11-06 hand count said 7 when 6 were fully realised.
 >
-> | Entry | Trigger | Status 2026-11-06 |
+> | Entry | Trigger | Status |
 > |---|---|---|
-> | [2026-08-29] EXP-021a Stage 1 | 14 clean vintages | **7 of 14**, ≈2026-11-16; Review by 10-15 passed, gate vs `lean` per its own Method |
+> | [2026-08-29] EXP-021a Stage 1 | 14 clean vintages (`t0 ≥ 2026-10-30`, after EXP-038's window) | ≈2026-11-16; Review by 10-15 passed, gate vs `lean` per its own Method |
 > | [2026-08-30] EXP-028a | ≥28 vintages | **Deferred 2026-11-06** past the EXP-021a Stage 1 read, since it is moot if that fails; Review by 11-30. Lagged-arm source: the EDH publish archive (see the entry's notes) |
-> | [2026-11-06] CQR on unwidened scores | 28 post-deploy vintages | fix merged 2026-11-06; live check running |
+> | [2026-11-06] CQR on unwidened scores | 28 post-deploy vintages (`t0 ≥ 2026-11-06 22:00`) | fix merged 2026-11-06; live check running. **No slack:** 28 plus two partial vintages fill the 30-day history, so read it the run the 28th is fully realised (the counter's room hits 0) |
 > | [2026-10-28] product criterion | FM Stage 3 shadow reaches 14 vintages | pre-committed; the floor drives the dashboard since 2026-11-07 (ADR-009), so this is the bar to replace it |
 > | [2026-11-07] Stage 3 promotion criterion | 14 fully realised FM vintages with live CQR | pre-committed and signed off 2026-11-07 |
 > | [2026-05-29] publishable | engineer's call | not due (12-31) |
