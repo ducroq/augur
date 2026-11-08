@@ -61,6 +61,18 @@ cd $DATAHUB_DIR && git pull --quiet
 echo "Pulling Augur..."
 cd $AUGUR_DIR && git pull --quiet
 
+# Re-exec once on the freshly pulled script. bash reads a script from disk as it
+# runs, by byte offset, so a pull that changes this file leaves the running
+# shell executing misaligned text. On 2026-11-07 that silently skipped the
+# ADR-009 profile step, with no alarm (gotcha-log 2026-11-08). Keep every byte
+# above this block unchanged: an old shell pulling this file mid-run must land
+# exactly here.
+if [ -z "${AUGUR_DAILY_REEXEC:-}" ]; then
+    echo "Re-executing on the pulled script ($(git rev-parse --short HEAD))..."
+    export AUGUR_DAILY_REEXEC=1
+    exec /bin/bash "$AUGUR_DIR/scripts/daily_update.sh" "$@"
+fi
+
 # Load environment
 source $AUGUR_DIR/.venv/bin/activate
 # Conventional safe pattern — handles quoted values with spaces, unlike
@@ -565,6 +577,21 @@ except Exception:
     print(-1)
 " 2>/dev/null || echo -1)
     [ "${PROFILE_HOURS:--1}" -lt 72 ] && PROFILE_MARKER=" [ALARM: profile forecast ${PROFILE_HOURS}h of 72]"
+fi
+# A step that never ran leaves PROFILE_RC unset, which reads as OK above. On
+# 2026-11-07 the step was skipped that way (see the re-exec block). Assert on
+# the artifact instead: after a good shadow run, the profile must share its t0.
+if [ "${SHADOW_UPDATE_RC:-1}" -eq 0 ] && [ -z "$PROFILE_MARKER" ]; then
+    PROFILE_T0_MATCH=$(python3 -c "
+import json
+try:
+    t = [json.load(open('$AUGUR_DIR/static/data/' + n))['metadata']['t0']
+         for n in ('augur_forecast_profile.json', 'augur_forecast_shadow.json')]
+    print(1 if t[0] == t[1] else 0)
+except Exception:
+    print(0)
+" 2>/dev/null || echo 0)
+    [ "$PROFILE_T0_MATCH" = "1" ] || PROFILE_MARKER=" [ALARM: profile forecast t0 behind shadow]"
 fi
 FM_MARKER=""
 [ "${FM_UPDATE_RC:-0}" -ne 0 ] && FM_MARKER=" [ALARM: FM shadow failed exit ${FM_UPDATE_RC}]"
