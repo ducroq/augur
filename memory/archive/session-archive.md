@@ -5,6 +5,13 @@
      Moved out of memory/MEMORY.md 2026-09-06 — it is history, not current state,
      and the index is read at every session start. Nothing here was edited. -->
 
+## Closed 2026-11-08
+
+- Ask: "continue" (queue 0: check the ADR-009 deploy), then help through the FM-gate decision, "are hypotheses and experiments set up properly, also in the registers?", "fix it all" (twice), then wrap up: docs, hypotheses, todos, issues, curate, commit, merge, push, deploy; prune the read surface.
+- Closed: the 11-07 run had skipped `update_profile` by pulling its own script mid-run; fixed (re-exec + `t0 behind shadow` ALARM) and pulled onto sadalsuud before the 11-08 job left its gate. Trigger counts mechanized (`scripts/vintage_counts.py`). Engineer decided the FM gate moves to the profile rule: EXP-041 pre-committed and pinned, runner written. Audit check 6 pins all 17 hypothesis-log Methods (two archived ones carry recorded early edits). Two Codex review passes, no defects left. [2026-05-29] publishable retired to augur#38. Issues #37, #15, #19, #33 commented.
+- Partial: augur#37 stays open until the 11-08 night checks out (queue 0). Read-surface pruning (a)–(c) queued with measured targets (queue 1).
+- Not done, by choice: the full review battery (queue 5, engineer's call).
+
 ## Closed 2026-11-07 (second session)
 
 - Ask: "continue" (queue item 0: ship the day-type rule to the dashboard), then: wrap up, clean, update docs, hypotheses, todos and issues, curate, commit, push and deploy; prune the read surface.

@@ -4,7 +4,15 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
-## 2026-11-07 (latest) — The dashboard shows the day-type profile rule (ADR-009)
+## 2026-11-08 (latest) — The first ADR-009 night skipped the profile step; the FM gate moves to the profile rule (EXP-041)
+
+**What happened.** The 2026-11-07 run pulled the ADR-009 commit at `daily_update.sh:62`, resumed misaligned in the changed script (bash reads by byte offset) and never ran `update_profile`. The unset `PROFILE_RC` read as OK, so there was no alarm. The dashboard kept the manual-deploy forecast (`t0` 11-07 22:00). Fix: the job re-execs once on its pulled script, and `[ALARM: profile forecast t0 behind shadow]` asserts on the artifact. Deployed to sadalsuud by hand pull before the 2026-11-08 run started (gotcha-log 2026-11-08, RUNBOOK "Monitoring").
+
+**Decision (engineer, 2026-11-08).** The FM's skill gate and band guardrail compare against the profile rule, the incumbent since ADR-009, not the LightGBM shadow: EXP-041 in the backlog, runner `scripts/exp041_fm_vs_profile.py`. LightGBM is reported, not gated. No model or forecast changed.
+
+**Instruments.** `scripts/vintage_counts.py` replaces the hand-counted trigger table (the 11-06 count read eval days, 7, where 6 vintages were fully realised). Audit check 6 pins all 17 pre-committed hypothesis-log Methods.
+
+## 2026-11-07 — The dashboard shows the day-type profile rule (ADR-009)
 
 **What changed.** A new step, `python -m ml.shadow.update_profile`, runs right after `update_shadow` on its `t0`. It writes `static/data/augur_forecast_profile.json` (shadow schema, consumer fields), and `dashboard.js:loadAugurForecast` now reads it. LightGBM keeps running unchanged as a shadow. Failure is `[ALARM: profile forecast failed rc=N]`. Why: live k6 regret 11.6/11.0/10.0 (LightGBM) vs 5.8/5.6/5.9 (rule) per block since 2026-09-14 (ADR-009, augur#37).
 

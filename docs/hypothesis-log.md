@@ -31,8 +31,7 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 > | [2026-11-06] CQR on unwidened scores | 28 post-deploy vintages (`t0 ≥ 2026-11-06 22:00`) | fix merged 2026-11-06; live check running. **No slack:** 28 plus two partial vintages fill the 30-day history, so read it the run the 28th is fully realised (the counter's room hits 0) |
 > | [2026-10-28] product criterion | FM Stage 3 shadow reaches 14 vintages | pre-committed; the floor drives the dashboard since 2026-11-07 (ADR-009), so this is the bar to replace it |
 > | [2026-11-07] Stage 3 promotion criterion → **EXP-041** | 14 fully realised FM vintages with live CQR and a shipped profile forecast | skill gate and guardrail moved to the profile rule by EXP-041 (backlog, 2026-11-08); runner `scripts/exp041_fm_vs_profile.py` |
-> | [2026-05-29] publishable | engineer's call | not due (12-31) |
->
+> >
 > EXP-018a Stage 1 and EXP-023a Stage B are parked and moved to `docs/archive/hypothesis-log-resolved.md`; the [2026-10-28] park entry below holds their revisit trigger.
 >
 > Vintage holes: count them at run time; do not trust a list here. Holes since 2026-09-14 have not been enumerated.
@@ -219,41 +218,6 @@ Incumbent = whichever base EXP-018a Stage 1 leaves standing (`lean` if it passes
 **Status:** open — pre-committed 2026-08-29 immediately after EXP-021 resolved, before any production path was touched.
 
 **Note added 2026-11-06 (Method unchanged):** the CQR fix in [2026-11-06] shifts CQR-widened live coverage at its deploy date, so read Alternative 4's signal across that date with care. The Stage 1 gate uses raw bands and is unaffected.
-
-### [2026-05-29] The Augur method + the M4 arc are publishable if we invest ~2-3 weeks of empirical follow-up
-
-**Position (provisional):** Augur's production stack (ADR-006: LightGBM-Quantile multi-horizon + CQR + horizon-as-feature stacking + 56-day rolling window on NL day-ahead) is *not* novel as a method — every component is in Lago, Marcjasz, De Schutter & Weron (2021) or Nowotarski & Weron (2018). On its own it's a competent application, not a paper. But combined with the five-iteration M4 → EXP-014 narrative arc (`docs/articles/m4-metric-redesign-story.md`) and the promotion method (ADR-007), plus ~2-3 weeks of standard EPF empirical follow-up, the package becomes publishable as an applied methodology paper at *International Journal of Forecasting* practitioner section, IEEE PES workshops, or similar applied-ML venues.
-
-**Alternatives (failure modes):**
-
-1. **Novelty bar still not met** even after the empirical follow-up. LGBM+CQR on NL is well-trod ground; the arc's contribution might be too case-study-y for a methodology venue. **Signal:** a peer skim says "interesting but not a methodology contribution." Fallback: publish the arc as a long-form blog post (Towards Data Science, Medium) instead. ~4-6 hours of light polish, no empirical follow-up needed.
-2. **Interest drift before the work is done.** 2-3 weeks of empirical work is non-trivial; we may not have the bandwidth or motivation when the time comes. **Signal:** the review-by date passes without the work being prioritised. Fallback: same as (1) — blog only.
-3. **A better venue exists we haven't surveyed.** EPF has its own conference culture (EEM, ENERGYCON), and an applied-ML practitioner audience might find the arc more useful than a methodology audience. **Signal:** finding a better-fit venue during the polish pass. Adjust target accordingly.
-
-**Method (what gets the package to paper-ready, in order):**
-
-When motivated to publish:
-
-1. **Naive baseline + persistence** (rMAE per Lago 2021 — table-stakes for EPF). Add to `scripts/exp012_evaluate.py` or a sibling script.
-2. **PIT histograms + reliability diagram** for LightGBM's 80% interval (table-stakes per Nowotarski & Weron 2018).
-3. **Multi-window robustness** — re-run the EXP-014 criterion at 7/14/21/30-day windows from the same eval_log; confirm conclusions stable.
-4. **Per-feature ablation** — drop each feature group (lags, calendar, wind, solar, load) and measure MAE/CRPS regression; cheap because LGBM trains fast.
-5. **Hyperparameter sensitivity** — small grid around `n_estimators × num_leaves × learning_rate`; cheap.
-6. **Optional: epftoolbox comparison** — if an NL dataset exists in `epftoolbox`, run LEAR/DNN as the benchmark. If not, skip.
-7. **Canonical CRPS** — retrain at 9-19 quantiles, compute proper CRPS, re-run paired DM. Resolves the "3-point mean quantile score" caveat.
-8. **Canonical threshold-weighted CRPS** — implement the Gneiting-Ranjan integral form, re-run on the same data. Resolves the "abstention-rewards" issue in the per-quantile-decomposition variant we have.
-9. **Rewrite ADR-006 + arc article + ADR-007 into a single methodology paper** with these as the empirical contribution.
-
-Items 1-5 are ~1 week. Items 6-8 are ~1 week. Item 9 is the polishing pass, ~3-5 days. Total ~2-3 weeks of focused work.
-
-**Cheap shortcut (only the blog post):** items 1-3 sharpen the arc article enough for a TDS / Medium long-form, with no method-paper claims. ~3-4 days total. The current draft is already 80% there.
-
-**Revisit trigger:** when we have a 2-3 week window we want to spend on publishing AND we still find the topic interesting. Surfaced by `/curate` at session-end. Independent of the production system — Augur runs whether or not we publish.
-
-**Review by:** 2026-12-31 (loose — there's no external deadline; this becomes stale, not blocking).
-
-**Domain:** Augur publication strategy, methodology dissemination
-**Status:** open — backlog entry, no immediate action
 
 ---
 

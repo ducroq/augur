@@ -22,6 +22,11 @@ Residuals of entries archived 2026-11-06, as recorded then and not re-checked: d
 **Root cause**: bash reads a script from disk by byte offset as it runs. ADR-009 edited header comments above the pull, so the running shell resumed misaligned in the new text. `${PROFILE_RC:-0}` then read the never-run step as OK. This bites only when a push lands before the job's pull and changes the script above the current offset, so every earlier script change got through by luck.
 **Fix**: (1) re-exec once on the pulled script right after the pull (`AUGUR_DAILY_REEXEC`), with every byte above it left unchanged so an old shell lands on it; simulated in a scratch toy. (2) A `t0 behind shadow` ALARM: an output assertion that catches any skipped profile step. Pattern: the promoted rc=0 row (7th occurrence: a check on rc cannot see a step that never ran).
 
+### `pgrep -f` over ssh matched its own command line and nearly skipped a deploy (2026-11-08)
+**Problem**: Checking "is `daily_update.sh` running?" on sadalsuud returned RUNNING twice, so the hand pull was skipped. Nothing was running.
+**Root cause**: The `ssh 'bash -c …'` command line itself contained `daily_update.sh` (in a later `bash -n scripts/daily_update.sh`), and `pgrep -f` matches the whole command line, including its own shell's.
+**Fix**: Ask systemd or match a pattern the probe can't contain: `pgrep -f '^/bin/bash /home/jeroen/local_dev/augur/scripts/daily_update.sh'`, run in an ssh command that names nothing else.
+
 ## Promoted
 
 | Date | Gotcha | Occurrences | Promoted to |
@@ -37,7 +42,7 @@ Residuals of entries archived 2026-11-06, as recorded then and not re-checked: d
 | 2026-08-25 | **Ablate before you expand.** Measure what existing features are worth before plumbing in new ones; it can invert the plan (EXP-018: removing six production features cut MAE 6%). | 2 — 2026-08-25, confirmed 2026-08-29 (EXP-020) | `scripts/exp018_stage0_ablation.py`; `docs/archive/hypothesis-log-resolved.md` [2026-08-25] EXP-018a |
 | 2026-08-29 | **A tree model on a short window rejects added *level* columns, whatever their provenance.** Before proposing a feature, ask level or shape: levels are already carried by the price lags and cost skill. | **4** — EXP-019 + EXP-020 (2026-08-29), EXP-024 + EXP-029 (2026-08-30) | `experiments/registry.jsonl` EXP-019, 020, 024, 029 |
 | 2026-07-03 | Loose `>=` pins + a fresh venv = an unannounced major upgrade, and pickles don't survive it. Install from a committed exact lockfile, and avoid yanked releases. Bumping river needs a warmup regen of `river_model.pkl`. | 1 — 2026-07-03 | `requirements.lock` + `scripts/bootstrap_venv.sh`; `requirements.txt` has ceilings as a backstop |
-| 2026-08-30 | If a number goes into a durable record (registry, ADR, memory), commit the script that regenerates it in the same commit — `scripts/audit_registry.py` check 4 enforces it | **2** — 2026-08-30 <br> **recurred 2026-10-29**: paper percentages re-typed across four docs, wrong twice; see the 2026-10-29 entry | `experiments/registry.jsonl`, `scripts/posthoc_diagnostics.py` |
+| 2026-08-30 | If a number goes into a durable record (registry, ADR, memory), commit the script that regenerates it in the same commit — `scripts/audit_registry.py` check 4 enforces it | **3** — 2026-08-30 <br> **recurred 2026-10-29**: paper percentages re-typed across four docs, wrong twice; see the 2026-10-29 entry <br> **recurred 2026-11-08**: hand-counted trigger vintages, 7 where 6 were fully realised; now `scripts/vintage_counts.py` | `experiments/registry.jsonl`, `scripts/posthoc_diagnostics.py` |
 | 2026-08-30 | If a cheap pre-screen is meant to veto an expensive test, validate it against that test once before trusting it — EXP-029's screen would have vetoed EXP-028's true positive | 1 — 2026-08-30 | Experiment design (ADR-007) |
 | 2026-08-31 | **An integrity check that makes the correct action fail is a defect, not strictness.** Enumerate the legitimate changes an immutability check must permit, give each an auditable route, and keep a hashed slice's boundary independent of what follows it. | **2** — 2026-08-31, 2026-09-10 | `scripts/audit_registry.py:PRECOMMIT_REV_BY_ID`, `method_sections`; `tests/test_audit_registry.py` |
 | 2026-08-31 | **A cursor from multi-source data is bounded by the source that ends FIRST.** Derive the anchor from the intersection of availability, and name the short source in the alarm. | 1 — 2026-08-31 | `ml/shadow/update_shadow.py:latest_feasible_t0` |
@@ -62,6 +67,8 @@ Review findings turned into a deterministic check (`review-changes` Step 3.1). `
 | 2026-11-06 | A pinned entry added after `PRECOMMIT_REV`, lost from the backlog, was in no key set and passed unchecked | `scripts/audit_registry.py` check 5: `PRECOMMIT_REV_BY_ID` joins the key set; `tests/test_audit_registry.py` seeds the loss | live | 0 |
 | 2026-11-07 | Heavy Python deps added to `requirements.txt` could reach the Netlify build (augur#35) | `tests/test_update_fm.py`: `test_torch_stays_out_of_what_netlify_may_install` | proposed | 1 |
 | 2026-11-07 | A shadow step's `rc=N` marker read as production down in the heartbeat mail | `tests/test_heartbeat_check.py`: `test_fm_failure_is_not_reported_as_production_down` | proposed | 1 |
+| 2026-11-08 | A pipeline step that never ran leaves its rc unset, and `${RC:-0}` reads it as OK | `scripts/daily_update.sh`: `[ALARM: profile forecast t0 behind shadow]` compares the artifact's `t0` with the shadow's | live | 1 |
+| 2026-11-08 | Hypothesis-log Methods that gate live swaps were pinned by convention only | `scripts/audit_registry.py` check 6 (`HYPOTHESIS_PINS`, 17 Methods, both files) | live | 1 |
 
 ---
 
