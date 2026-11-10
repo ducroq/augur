@@ -59,6 +59,7 @@ Review findings turned into a deterministic check (`review-changes` Step 3.1). `
 | Date | Finding shape | Check | Status | Occurrences |
 |------|---------------|-------|--------|-------------|
 | 2026-11-06 | A scripted row edit left a table with broken `> ` prefixes, invisible in the diff | Blockquote-continuity rule in `~/repos/agent-ready-projects/scripts/md-structure-check.sh` <!-- placeholder --> | proposed | 1 |
+| 2026-11-10 | A staleness check that skips whole lines to ignore a commit hash also ignores what else is on them, or the same text in free-form notes | `tests/test_render_results.py::test_check_catches_tampered_registry_state_line`, `::test_hash_mask_does_not_hide_note_drift` | live | 0 |
 | 2026-11-07 | A dashboard forecast step exits 0 with only some of its 72 hours filled, and the commit subject stays clean | `PROFILE_HOURS` guard in `scripts/daily_update.sh` (`[ALARM: profile forecast Nh of 72]`); seeded 24h file made it fire | live | 0 |
 | 2026-10-29 | An unreachable pre-commit pin skipped check 5 for **every** entry with a WARN and still exited 0 | `scripts/audit_registry.py` check 5: `CalledProcessError` is a FAIL naming the unread revision | live (seeded `deadbee`) | 0 |
 | 2026-10-29 | An amended or rebased pin still resolves from the reflog, so `git show` alone can't detect it | `scripts/audit_registry.py` check 5: each pin must pass `git merge-base --is-ancestor <pin> HEAD` | live (seeded orphan commit) | 0 |

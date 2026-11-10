@@ -2,14 +2,18 @@
 
 `registry.jsonl` is the source of truth and is machine-readable by design — one
 JSON object per line, diffable and greppable. That makes it a poor thing to
-*read*. This renders it into `docs/experiment-results.md`: a summary table plus
-a per-experiment section with the headline numbers pulled straight out of the
-committed `summary.json` artifacts.
+*read*. This renders it into two files (split 2026-11-10 to keep the session
+read surface small):
+
+- `docs/experiment-results.md`, the digest a session reads: Decision state
+  (closed / live / standing evidence) and the summary table.
+- `docs/experiment-results-detail.md`, one section per experiment with every
+  recorded metric, caveat, artifact and commit. Grep it by id; don't load it.
 
 **The output is generated, never hand-edited.** Every value comes from the
 registry or from an artifact the registry points at, so the digest cannot drift
 from the record it summarises. `--check` re-renders and diffs without writing,
-exiting non-zero if the committed digest is stale — suitable for `/curate` or
+exiting non-zero if either committed file is stale — suitable for `/curate` or
 CI alongside `scripts/audit_registry.py`.
 
 CLI:
@@ -22,12 +26,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 
 OUT = Path("docs/experiment-results.md")
+DETAIL_OUT = Path("docs/experiment-results-detail.md")
 
 DECISION_GLYPH = {
     "kept": "**kept**", "parked": "parked", "rejected": "rejected",
@@ -66,7 +72,10 @@ def fmt(v):
     return str(v)
 
 
-def render(entries, since=None) -> str:
+def render(entries, since=None, detail_ref=DETAIL_OUT.name,
+           digest_ref=OUT.name) -> tuple[str, str]:
+    """Return (digest, detail) markdown. Each *_ref is the other file's path
+    relative to the file that names it."""
     scope = [e for e in entries if not since or e["id"] >= since]
     head = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
                           capture_output=True, text=True).stdout.strip()
@@ -76,7 +85,9 @@ def render(entries, since=None) -> str:
     L.append("**Generated file — do not edit.** Rendered from `experiments/registry.jsonl` "
              "and the `summary.json` artifacts it references, by "
              "`scripts/render_results.py`. Regenerate after appending to the registry; "
-             "`--check` fails if this file is stale.\n")
+             "`--check` fails if this file is stale. Per-experiment sections (every "
+             f"metric, caveat, artifact, commit) are in `{detail_ref}`: "
+             "grep it by id rather than reading it whole.\n")
     L.append(f"Registry state: **{len(entries)} entries**, rendered at `{head}`. "
              "Integrity of the underlying record is verified separately by "
              "`scripts/audit_registry.py` (schema, id order, artifact existence, "
@@ -141,7 +152,14 @@ def render(entries, since=None) -> str:
         L.append(f"| {e['id']} | {e['date']} | {DECISION_GLYPH.get(e['decision'], e['decision'])} "
                  f"| {'<br>'.join(hl) if hl else '—'} | {title} |")
     L.append("")
+    digest = "\n".join(L)
 
+    L = []
+    L.append("# Experiment Results — per-experiment detail\n")
+    L.append("**Generated file — do not edit.** Rendered from `experiments/registry.jsonl` "
+             "by `scripts/render_results.py`. Decision state and the summary are in "
+             f"`{digest_ref}`. Grep this file by id.\n")
+    L.append(f"Registry state: **{len(entries)} entries**, rendered at `{head}`.\n")
     for e in scope:
         L.append(f"## {e['id']} — {e['title']}\n")
         L.append(f"**{DECISION_GLYPH.get(e['decision'], e['decision'])}** · {e['date']} · "
@@ -166,39 +184,52 @@ def render(entries, since=None) -> str:
         if e.get("commits"):
             L.append(f"**Commits.** {' '.join('`'+c+'`' for c in e['commits'])}\n")
         L.append("---\n")
-    return "\n".join(L)
+    return digest, "\n".join(L)
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--registry", default="experiments/registry.jsonl")
     ap.add_argument("--out", default=str(OUT))
+    ap.add_argument("--detail-out", default=None,
+                    help="per-experiment file (default: experiment-results-detail.md beside --out)")
     ap.add_argument("--since", default=None)
     ap.add_argument("--check", action="store_true",
                     help="verify the committed digest is current; write nothing")
     args = ap.parse_args()
 
     entries = [json.loads(l) for l in open(args.registry)]
-    text = render(entries, args.since)
     out = Path(args.out)
+    detail = Path(args.detail_out) if args.detail_out else out.with_name(DETAIL_OUT.name)
+    if out.resolve() == detail.resolve():
+        print(f"ERROR: digest and detail both resolve to {out.resolve()}")
+        return 2
+    texts = dict(zip((out, detail), render(
+        entries, args.since,
+        detail_ref=os.path.relpath(detail.resolve(), out.resolve().parent),
+        digest_ref=os.path.relpath(out.resolve(), detail.resolve().parent))))
 
     if args.check:
-        if not out.exists():
-            print(f"STALE: {out} does not exist")
+        # The rendered-at hash legitimately changes every commit; mask only the
+        # hash, so the rest of the "Registry state:" line (entry count) is checked.
+        strip = lambda s: re.sub(r"^(Registry state: .*?rendered at `)[0-9a-f]*(`)",
+                                 r"\1HASH\2", s, flags=re.M)
+        stale = False
+        for path, text in texts.items():
+            if not path.exists():
+                print(f"STALE: {path} does not exist")
+                stale = True
+            elif strip(path.read_text()) != strip(text):
+                print(f"STALE: {path} does not match the registry — rerun render_results.py")
+                stale = True
+        if stale:
             return 1
-        cur = out.read_text()
-        # The rendered-at commit line legitimately changes every commit; compare
-        # everything else so the check tracks content, not the hash.
-        strip = lambda s: "\n".join(l for l in s.splitlines()
-                                    if not l.startswith("Registry state:"))
-        if strip(cur) != strip(text):
-            print(f"STALE: {out} does not match the registry — rerun render_results.py")
-            return 1
-        print(f"{out} is current ({len(entries)} entries)")
+        print(f"{out} and {detail} are current ({len(entries)} entries)")
         return 0
 
-    out.write_text(text)
-    print(f"wrote {out}  ({len(entries)} entries, {len(text.splitlines())} lines)")
+    for path, text in texts.items():
+        path.write_text(text)
+        print(f"wrote {path}  ({len(entries)} entries, {len(text.splitlines())} lines)")
     return 0
 
 

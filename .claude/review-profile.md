@@ -12,7 +12,7 @@ pre-commitment record has none of its own.
 
 | Tier | File patterns | Depth |
 |------|-------------|-------|
-| **HIGH** | `.gitignore`, `/netlify.toml`, `/hugo.toml`, `/requirements.lock`, `/requirements.txt`, `/requirements-netlify.txt`, `/decrypt_data_cached.py`, `utils/secure_data_handler.py`, `scripts/*.sh`, `scripts/notify_email.py`, `scripts/systemd/**`, `scripts/audit_registry.py`, `scripts/render_results.py`, `ml/shadow/*.py`, `ml/data/consolidate.py`, `ml/update.py`, `static/js/**`, `layouts/**`, `experiments/registry.jsonl`, `docs/experiment-backlog.md`, `docs/archive/experiment-backlog-run.md`, `docs/hypothesis-log.md`, `docs/experiment-results.md`, `.claude/review-profile.md` | Full battery (3-4 lenses) |
+| **HIGH** | `.gitignore`, `/netlify.toml`, `/hugo.toml`, `/requirements.lock`, `/requirements.txt`, `/requirements-netlify.txt`, `/decrypt_data_cached.py`, `utils/secure_data_handler.py`, `scripts/*.sh`, `scripts/notify_email.py`, `scripts/systemd/**`, `scripts/audit_registry.py`, `scripts/render_results.py`, `ml/shadow/*.py`, `ml/data/consolidate.py`, `ml/update.py`, `static/js/**`, `layouts/**`, `experiments/registry.jsonl`, `docs/experiment-backlog.md`, `docs/archive/experiment-backlog-run.md`, `docs/hypothesis-log.md`, `docs/experiment-results.md`, `docs/experiment-results-detail.md`, `.claude/review-profile.md` | Full battery (3-4 lenses) |
 | **MEDIUM** | `ml/**`, `scripts/**`, `tests/**`, `utils/**`, `static/**`, `content/**`, `config/**`, `experiments/**`, `.github/**`, `/requirements*.txt`, `/package*.json`, `docs/decisions/**`, `docs/RUNBOOK.md`, `/CLAUDE.md` | Two lenses (adversarial + doc-accuracy) |
 | **LOW** | `memory/**`, `docs/**`, `/README.md`, `/LICENSE` | One lens (adversarial) |
 
@@ -69,8 +69,8 @@ MEDIUM. A hand edit to them is a carve-out below.
   entries retire unedited; the hypothesis log rests on review.
 - `experiments/registry.jsonl`, `scripts/audit_registry.py`, `scripts/render_results.py`: the
   registry is append-only for decided experiments. The audit exits non-zero on drift,
-  including check 5, the sha256 of backlog Method bodies. `docs/experiment-results.md` is only
-  ever generated.
+  including check 5, the sha256 of backlog Method bodies. `docs/experiment-results.md` and
+  `docs/experiment-results-detail.md` are only ever generated.
 - `.gitignore`: `secrets.ini`, `.env` and `.env.*`, `*.key`, and every `.claude/` at any
   depth (except this file at the root) stay untracked.
 - `/requirements.lock`: the nightly job's venv (`scripts/bootstrap_venv.sh`) runs the pinned
@@ -149,5 +149,5 @@ The full battery runs only when the diff touches a guarantee surface (above), an
 ## Project procedure kept with the profile
 
 When `experiments/`, `docs/experiment-backlog.md`, `docs/archive/experiment-backlog-run.md`, `docs/hypothesis-log.md` or
-`docs/experiment-results.md` changed, run the two checks in **Test baseline** before the
+`docs/experiment-results*.md` changed, run the two checks in **Test baseline** before the
 lenses. Both exit non-zero on drift, and a lens should not spend tokens on what they settle.
