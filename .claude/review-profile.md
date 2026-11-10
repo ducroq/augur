@@ -144,6 +144,8 @@ is new.
 codex exec -s read-only -C "$PWD" -o <scratchpad>/codex_review.md - < <scratchpad>/prompt.txt
 ```
 
+**When Codex's sandbox fails** (decided by the engineer 2026-11-10): on situla, Codex's `bwrap` sandbox mounts the whole filesystem, so it trips on the sadalmelik NAS automounts while the NAS sleeps, which is all day. Every command then fails before it runs (`Can't bind mount … /mnt/sadalmelik/… No such device`). Codex has given **no verdict** if `codex exec` exits non-zero, its console output (not the `-o` file, which holds only the final message) shows a `bwrap` or `Can't bind mount` error, or `codex_review.md` is missing, empty or says "review blocked". Check the console log as well as the file. Any of these is never a pass, and triggers this fallback. Run the same lens prompts as fresh-context Claude subagents, on the session's model within the stated token ceiling. Pairing lenses in one agent is fine; folding them into the author's own context is not. Don't try to wake the NAS. Since 2026-11-10 the NAS mounts belong to a `nas` account (`/etc/fstab`), so no agent running as `jeroen` can read them even when awake; the NAS holds PII, and no agent should touch `/mnt/sadalmelik`.
+
 The full battery runs only when the diff touches a guarantee surface (above), and its lens set and a token ceiling are stated before any lens starts. This narrows the skill's magnitude gate for this repo on purpose. The reason: on 2026-11-07 a five-lens Opus battery cost about 528k tokens on a 566-line change, while one Codex pass on the fixes cost 56k and found a real defect (`memory/gotcha-log.md`). The carve-outs and Step 1.5 still apply in full.
 
 ## Project procedure kept with the profile

@@ -5,6 +5,14 @@
      Moved out of memory/MEMORY.md 2026-09-06 — it is history, not current state,
      and the index is read at every session start. Nothing here was edited. -->
 
+## Closed 2026-11-10
+
+Ask: "continue" (queue items 0 and 1), then wrap up, curate, commit and push. Threads:
+- **Closed:** first real ADR-009 nights checked (11-08, 11-09: 72h, right `t0`, no ALARM); augur#37 closed. RUNBOOK "Common Problems" thinned 16k → 7.6k (`8adc6e8`). `render_results.py` split, digest 123k → 12k (`f990b83`). Three narrative docs archived; `ARCHIVED_ARTIFACTS` in check 3 (`e562c51`). Each review fix pinned by a test seen red first.
+- **Closed (detour):** Codex's read-only sandbox could read the PII-holding NAS; the engineer moved the mounts to a `nas` account, and the review profile gained a Claude-subagent fallback. Gotcha log 2026-11-10.
+- **Not ours:** confirming NAS access at night (engineer). Claude transcripts in other projects (personal-FAE, eline-en-face, SovereignStack, devreugdcoaching, home) mention `/mnt/sadalmelik`; not opened, an audit was offered.
+- **Kept live on purpose:** `metric-redesign-literature-review` (ADR-006/007 cite it).
+
 ## Closed 2026-11-08
 
 - Ask: "continue" (queue 0: check the ADR-009 deploy), then help through the FM-gate decision, "are hypotheses and experiments set up properly, also in the registers?", "fix it all" (twice), then wrap up: docs, hypotheses, todos, issues, curate, commit, merge, push, deploy; prune the read surface.

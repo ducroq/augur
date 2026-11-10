@@ -526,3 +526,21 @@ Moved out of `memory/gotcha-log.md` on 2026-10-16, unedited. The Promoted table 
 **Problem**: EXP-038's FM contexts read COMPROMISED at 17.5% missing, while the incumbents it was paired with trained on far fewer dropped rows.
 **Root cause**: `exp021_foundation_zeroshot.py` contexts mode built its row set from a hardcoded `CTL_VARIANTS` (four variants, including `lean_residual` and its 12%-missing solar column); the incumbent re-run used `--variants full,lean`. Same window, different rows.
 **Fix**: `--ctl-variants`, defaulting to the old list; EXP-038 passes `full,lean` (6.67%, matching 4,108 targets on both sides). If you re-run a paired harness with a subset of arms, re-derive every shared input from the arms actually run, and check the pair counts match before scoring.
+
+### A full review battery cost ~528k tokens on a 566-line change (2026-11-07) [RESOLVED]
+**Problem**: `/review-changes` ran five Opus lenses without stating a ceiling; the engineer flagged the cost. One Codex pass on the fixes cost 56k and still found a real defect.
+**Root cause**: The skill's budget step was skipped, and the profile names no cheaper reviewer.
+**Fix**: The engineer set a cheaper default on 2026-11-07, now in `.claude/review-profile.md` "Reviewer model": checks plus one read-only Codex pass, and the full battery only on guarantee surfaces, with a ceiling stated first.
+**Confirmed 2026-11-07 (ADR-009 change, 1,030 lines, 4 guarantee surfaces):** all four lenses in one Codex pass, ceiling stated first, cost 56k Codex tokens and no Claude tokens, and it found 2 real warnings (a silent partial forecast; DST wording).
+
+### The daily job pulled its own script mid-run and silently skipped the ADR-009 profile step (2026-11-08) [RESOLVED]
+**Problem**: The 2026-11-07 run pulled `0ebacf9` at `daily_update.sh:62` and never ran `update_profile`: no "Running profile" log line, no commit of `augur_forecast_profile.json`, and no alarm. The dashboard kept the manual-deploy forecast (`t0` 11-07 22:00), one day behind the shadow.
+**Root cause**: bash reads a script from disk by byte offset as it runs. ADR-009 edited header comments above the pull, so the running shell resumed misaligned in the new text. `${PROFILE_RC:-0}` then read the never-run step as OK. This bites only when a push lands before the job's pull and changes the script above the current offset, so every earlier script change got through by luck.
+**Fix**: (1) re-exec once on the pulled script right after the pull (`AUGUR_DAILY_REEXEC`), with every byte above it left unchanged so an old shell lands on it; simulated in a scratch toy. (2) A `t0 behind shadow` ALARM: an output assertion that catches any skipped profile step. Pattern: the promoted rc=0 row (7th occurrence: a check on rc cannot see a step that never ran).
+
+### `pgrep -f` over ssh matched its own command line and nearly skipped a deploy (2026-11-08) [RESOLVED]
+**Problem**: Checking "is `daily_update.sh` running?" on sadalsuud returned RUNNING twice, so the hand pull was skipped. Nothing was running.
+**Root cause**: The `ssh 'bash -c …'` command line itself contained `daily_update.sh` (in a later `bash -n scripts/daily_update.sh`), and `pgrep -f` matches the whole command line, including its own shell's.
+**Fix**: Ask systemd or match a pattern the probe can't contain: `pgrep -f '^/bin/bash /home/jeroen/local_dev/augur/scripts/daily_update.sh'`, run in an ssh command that names nothing else.
+**Resolved 2026-11-10** (all three, archived from the live log): the re-exec ran clean on 11-08 and 11-09 (`Re-executing on the pulled script` then `Running profile forecast`, augur#37 closed); the review default holds, with a Claude-subagent fallback when Codex's sandbox fails (`.claude/review-profile.md`); the pgrep recipe stands as written.
+
