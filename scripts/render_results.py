@@ -35,6 +35,25 @@ from pathlib import Path
 OUT = Path("docs/experiment-results.md")
 DETAIL_OUT = Path("docs/experiment-results-detail.md")
 
+def _archived_artifacts() -> dict:
+    """ARCHIVED_ARTIFACTS from audit_registry.py, the single place it is kept."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "audit_registry", Path(__file__).resolve().with_name("audit_registry.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.ARCHIVED_ARTIFACTS
+
+
+ARCHIVED = _archived_artifacts()
+
+
+def fmt_artifact(a: str) -> str:
+    base = re.sub(r"\s*\(.*\)\s*$", "", a).strip()
+    moved = ARCHIVED.get(base)
+    return f"`{a}` (archived: `{moved}`)" if moved else f"`{a}`"
+
+
 DECISION_GLYPH = {
     "kept": "**kept**", "parked": "parked", "rejected": "rejected",
     "rolled_back": "rolled back", "superseded": "superseded",
@@ -179,7 +198,7 @@ def render(entries, since=None, detail_ref=DETAIL_OUT.name,
 
         if e.get("notes"):
             L.append(f"**Caveats.** {e['notes']}\n")
-        arts = " · ".join(f"`{a}`" for a in e["artifacts"])
+        arts = " · ".join(fmt_artifact(a) for a in e["artifacts"])
         L.append(f"**Artifacts.** {arts}\n")
         if e.get("commits"):
             L.append(f"**Commits.** {' '.join('`'+c+'`' for c in e['commits'])}\n")

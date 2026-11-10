@@ -2,7 +2,7 @@
 
 **Generated file — do not edit.** Rendered from `experiments/registry.jsonl` by `scripts/render_results.py`. Decision state and the summary are in `experiment-results.md`. Grep this file by id.
 
-Registry state: **37 entries**, rendered at `8b52ab1`.
+Registry state: **37 entries**, rendered at `f990b83`.
 
 ## EXP-001 — Initial ARF warmup baseline (pre-backfill)
 
@@ -316,7 +316,7 @@ Registry state: **37 entries**, rendered at `8b52ab1`.
 
 **Caveats.** 14-day window cron-effective 2026-05-08 (after the 2026-05-01..07 silent-failure recovery). Method evaluated trailing 14 of 20 collected rows per pre-committed 'most-recent 14, ignore cron-shake-out' clause: 2026-05-14..2026-05-27. Per-day low-price MAEs are unweighted in (a) ratio (matches pre-committed Method exactly); hours-weighted spot check gives 1.55, same direction. Companion hypothesis (live MAE vs backtest h+1 of 13.21) refuted at ratio 1.84 > 1.20 threshold - freshness skew material, argues prioritising augur#12. Next bet (postmortem section 6): metric redesign before model redesign - promote pinball-at-p10 / CRPS over MAE on low-price slice.
 
-**Artifacts.** `docs/lightgbm-shadow-postmortem.md` · `ml/shadow/eval_log.jsonl` · `scripts/m4_method_run.py`
+**Artifacts.** `docs/lightgbm-shadow-postmortem.md` (archived: `docs/archive/lightgbm-shadow-postmortem.md`) · `ml/shadow/eval_log.jsonl` · `scripts/m4_method_run.py`
 
 ---
 
@@ -359,7 +359,7 @@ Registry state: **37 entries**, rendered at `8b52ab1`.
 
 **Caveats.** No retraining or new data collection — uses ml/models/shadow/shadow_state.json:calibration_history (the LGBM predictions that were already collected during M4) paired with ml/forecasts/{YYYYMMDD_1445}_forecast.json (ARF predictions pulled from sadalsuud). 842 paired observations across 14 distinct eval days. Honest caveat: 3-quantile output gives biased CRPS estimator — labeled 'mean quantile score (3-point estimator)' not CRPS. Manual Newey-West HAC implementation in ml/shadow/metrics.py (scipy 1.17 broke statsmodels.api on the dev env). The 'clamp at 0' note in CLAUDE.md / arf-retired.md may reflect a different regime than the M4 window; worth checking ml/update.py:337 and the ARF metrics_history for clamp incidence as a follow-up question.
 
-**Artifacts.** `docs/exp-012-results.md` · `ml/shadow/metrics.py` · `scripts/exp012_evaluate.py`
+**Artifacts.** `docs/exp-012-results.md` (archived: `docs/archive/exp-012-results.md`) · `ml/shadow/metrics.py` · `scripts/exp012_evaluate.py`
 
 ---
 
@@ -398,7 +398,7 @@ Registry state: **37 entries**, rendered at `8b52ab1`.
 
 **Caveats.** Not a new experiment — supersedes EXP-012's reported metrics with corrected values. The EXP-012 registry entry's metrics field is preserved as-recorded-at-time (per append-only policy); use this EXP-013 entry's values when citing EXP-012's results. Per-horizon pinball-at-p10 with corrected vintage: h<=24 LGBM 1.83 / ARF 4.48, 24<h<=48 LGBM 5.85 / ARF 7.51, 48<h<=72 LGBM 10.18 / ARF 7.86. ARF still wins at h>48 — ARF's prior may genuinely be better at long horizons (Reading B in article §4). Code-review battery also surfaced: HAC default lag (floor(n^(1/3))=8) too short for 72h-ahead hourly data — should be max_horizon-1=71; reported test statistic of -12.4 with proper bandwidth would be roughly -6 to -8, still highly significant but the standard error doubles. MQS-vs-MAE has ~2x structural asymmetry (degenerate quantile predictor has MQS=0.5*MAE) — the apples-to-apples LGBM MAE / ARF MAE ratio is 1.6x, not 4.1x. None of these caveats reverse the overall-skill conclusion.
 
-**Artifacts.** `docs/exp-012-results.md` · `docs/articles/m4-metric-redesign-story.md` · `ml/shadow/metrics.py` · `scripts/exp012_evaluate.py` · `tests/test_metrics.py` · `ml/shadow/lightgbm_quantile.py` · `ml/shadow/update_shadow.py`
+**Artifacts.** `docs/exp-012-results.md` (archived: `docs/archive/exp-012-results.md`) · `docs/articles/m4-metric-redesign-story.md` · `ml/shadow/metrics.py` · `scripts/exp012_evaluate.py` · `tests/test_metrics.py` · `ml/shadow/lightgbm_quantile.py` · `ml/shadow/update_shadow.py`
 
 ---
 

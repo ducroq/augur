@@ -2,7 +2,7 @@
 
 **Date**: 2026-04-29
 **Branch**: `feat/lightgbm-shadow`
-**Predecessor**: milestone 2 (`summary.md`) flagged P80 band coverage at 56.3 % vs the [75 %, 85 %] target in `docs/lightgbm-quantile-shadow-plan.md` §6 (b).
+**Predecessor**: milestone 2 (`summary.md`) flagged P80 band coverage at 56.3 % vs the [75 %, 85 %] target in `docs/archive/lightgbm-quantile-shadow-plan.md` §6 (b).
 
 ## Diagnosis
 

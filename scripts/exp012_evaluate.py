@@ -17,7 +17,7 @@ retraining at 9+ quantiles (potential Phase 2).
 
 Output:
 - prints summary to stdout
-- writes `docs/exp-012-results.md` with full report
+- wrote `docs/exp-012-results.md` (archived 2026-11-10 to `docs/archive/exp-012-results.md`) with full report
 - prints alignment diagnostics if data is sparse
 """
 from __future__ import annotations

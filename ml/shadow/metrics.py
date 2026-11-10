@@ -2,7 +2,7 @@
 
 Implements the literature-recommended replacement for the M4 criterion (a)
 that failed methodologically — see `docs/metric-redesign-literature-review.md`
-and `docs/lightgbm-shadow-postmortem.md` §6.
+and `docs/archive/lightgbm-shadow-postmortem.md` §6.
 
 Core functions:
 

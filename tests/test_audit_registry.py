@@ -228,3 +228,28 @@ class TestHypothesisMethods:
         after = audit.hypothesis_methods(HYP.replace(
             "## Resolved", "### [2026-11-03] Delta\n\n**Method (pre-committed 2026-11-03):** Z.\n\n## Resolved"))[0]
         assert all(after[k] == v for k, v in before.items())
+
+
+def test_archived_artifacts_moved_not_copied():
+    """Each ARCHIVED_ARTIFACTS entry: the archived file exists under docs/archive/
+    and the old path is gone (a copy left behind would hide a stale edit)."""
+    root = SCRIPT.parents[1]
+    assert audit.ARCHIVED_ARTIFACTS
+    for old, new in audit.ARCHIVED_ARTIFACTS.items():
+        assert new.startswith("docs/archive/"), new
+        assert (root / new).is_file(), new
+        assert not (root / old).exists(), old
+
+
+def test_check3_resolves_archived_artifacts_on_the_real_registry():
+    """End to end: without the ARCHIVED_ARTIFACTS branch in check 3, EXP-011..013
+    report 'artifact missing' and the audit exits non-zero."""
+    import sys
+    root = SCRIPT.parents[1]
+    r = subprocess.run([sys.executable, str(SCRIPT)], cwd=root,
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout[-2000:]
+    import re
+    m = re.search(r"(\d+) resolved via ARCHIVED_ARTIFACTS", r.stdout)
+    assert m and int(m.group(1)) >= len(audit.ARCHIVED_ARTIFACTS), r.stdout[-2000:]
+    assert "artifact missing" not in r.stdout

@@ -46,7 +46,7 @@ Per-day detail in `comparison.csv`.
 
 ## Promotion criteria — preliminary read
 
-Plan (`docs/lightgbm-quantile-shadow-plan.md` §6) requires all three over a contiguous 14-day shadow window. This milestone-2 backtest is not the formal shadow window, but a directional check:
+Plan (`docs/archive/lightgbm-quantile-shadow-plan.md` §6) requires all three over a contiguous 14-day shadow window. This milestone-2 backtest is not the formal shadow window, but a directional check:
 
 | Criterion | Threshold | Backtest reading | Verdict |
 |---|---|---|---|

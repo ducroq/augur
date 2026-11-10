@@ -1,7 +1,7 @@
 # Metric redesign — literature review
 
 **Purpose**: Input to the next-bet decision following the M4 Path B park
-(2026-05-29, see `docs/lightgbm-shadow-postmortem.md` §6). Researches what the
+(2026-05-29, see `docs/archive/lightgbm-shadow-postmortem.md` §6). Researches what the
 academic + industry electricity-price-forecasting (EPF) literature recommends
 for evaluating probabilistic forecasts on markets with frequent negative
 prices — i.e. what should replace the failed "MAE on hours where realised <

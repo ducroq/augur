@@ -135,3 +135,10 @@ def test_cross_references_resolve_through_symlinks(tmp_path, monkeypatch):
                                      "--out", str(out), "--detail-out", str(detail)])
     assert rr.main() == 0
     assert "`det.md`" in out.read_text() and "`digest.md`" in detail.read_text()
+
+
+def test_archived_artifacts_show_their_new_location():
+    old, new = next(iter(rr.ARCHIVED.items()))
+    assert rr.fmt_artifact(old) == f"`{old}` (archived: `{new}`)"
+    assert rr.fmt_artifact(f"{old} (a note)").endswith(f"(archived: `{new}`)")
+    assert rr.fmt_artifact("ml/shadow/eval_log.jsonl") == "`ml/shadow/eval_log.jsonl`"

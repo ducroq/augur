@@ -583,9 +583,9 @@ you've stopped finding things. We're at four. There may be a fifth.
 
 In-repo:
 
-- `docs/lightgbm-shadow-postmortem.md` — M4 verdict, full diagnosis
+- `docs/archive/lightgbm-shadow-postmortem.md` — M4 verdict, full diagnosis
 - `docs/metric-redesign-literature-review.md` — focused literature pass
-- `docs/exp-012-results.md` — re-evaluation on existing data
+- `docs/archive/exp-012-results.md` — re-evaluation on existing data
 - `docs/literature.md` — topic-indexed bibliography
 - `docs/hypothesis-log.md` — pre-committed M4 criteria, resolved 2026-05-29
 - `experiments/registry.jsonl` — EXP-008 (ARF retirement), EXP-009/010

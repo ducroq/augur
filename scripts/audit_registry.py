@@ -73,6 +73,15 @@ BACKLOG = "docs/experiment-backlog.md"
 # to the archive can establish a pre-commitment.
 BACKLOG_ARCHIVE = "docs/archive/experiment-backlog-run.md"
 
+# Registry artifact paths whose file was later moved to docs/archive/ (the
+# registry is append-only, so the old path stays in it). Check 3 resolves the
+# old path through this map and fails if the archived file is missing;
+# render_results.py shows the archived location beside the original.
+ARCHIVED_ARTIFACTS = {
+    "docs/exp-012-results.md": "docs/archive/exp-012-results.md",
+    "docs/lightgbm-shadow-postmortem.md": "docs/archive/lightgbm-shadow-postmortem.md",
+}
+
 # Which artifacts back which entry's numbers. Entries absent from this map are
 # skipped by check 4 (their numbers predate the artifact convention).
 NUMBER_SOURCES = {
@@ -380,6 +389,7 @@ def main() -> int:
     # separately — they are unresolvable from the worktree by design.
     pinned = 0
     annotated = 0
+    archived = 0
     for e in scope:
         for a in e.get("artifacts", []):
             if "@" in a or "#" in a:
@@ -388,8 +398,14 @@ def main() -> int:
             base = re.sub(r"\s*\(.*\)\s*$", "", a).strip()
             if base != a:
                 annotated += 1
+            if base in ARCHIVED_ARTIFACTS:
+                if os.path.exists(base):
+                    fails.append(f"{e['id']}: {base} is mapped as archived but still exists")
+                base = ARCHIVED_ARTIFACTS[base]
+                archived += 1
             if not os.path.exists(base):
-                fails.append(f"{e['id']}: artifact missing: {a}")
+                where = "" if base == re.sub(r"\s*\(.*\)\s*$", "", a).strip() else f" (archived path {base})"
+                fails.append(f"{e['id']}: artifact missing: {a}{where}")
 
     # 4 NUMBERS
     untraceable = []
@@ -424,7 +440,8 @@ def main() -> int:
     print(f"  1 schema       {len(scope)} entries, {len(REQUIRED)} required fields")
     print(f"  2 order        sorted={ids == sorted(ids)}  unique={len(set(ids)) == len(ids)}")
     print(f"  3 artifacts    checked; {pinned} commit-pinned/anchored, "
-          f"{annotated} annotated 'path (note)' (base path verified)")
+          f"{annotated} annotated 'path (note)' (base path verified), "
+          f"{archived} resolved via ARCHIVED_ARTIFACTS")
     print(f"  4 numbers      {n_nums} numeric metrics checked, "
           f"{len(DERIVED_OK)} whitelisted as documented derivations")
     print(f"  5 precommit    Method bodies identical to {PRECOMMIT_REV}: {precommit_ok}")
