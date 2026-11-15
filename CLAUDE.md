@@ -91,7 +91,7 @@ Browser: 5 tabs (Prices, Weather, Grid, Market, Model); augur_forecast_profile.j
 | `scripts/daily_update.sh` | The sadalsuud job and every commit-subject marker |
 | `scripts/wait_for_edh.sh` | Readiness gate. **Read its header before changing any clause** |
 | `scripts/check_gate_lag.sh` | The only detector for gate lag (augur#34); run over ssh with `bash -s` |
-| `scripts/heartbeat_check.sh`, `alert_failure.sh`, `notify_email.py`, `scripts/systemd/` | Alerting and the canonical units (install/rollback in its README) |
+| `scripts/heartbeat_check.sh`, `alert_failure.sh`, `notify_email.py`, `daily_slot_done.sh`, `scripts/systemd/` | Alerting, the boot catch-up guard (augur#39) and the canonical units (install/rollback in its README) |
 | `experiments/registry.jsonl`, `scripts/audit_registry.py`, `scripts/render_results.py` | Experiment record (EXP-001..039; EXP-040 and EXP-041 are pre-committed in the backlog), its auditor (check 6 also pins hypothesis-log Methods), the generated digest |
 | `scripts/exp0NN_*.py` | One runner per experiment; each docstring states its pre-commitment and host |
 | `ml/shadow/expNNN_*/summary.json` | Committed experiment records. Gitignored dumps next to them are **links into `/home/jeroen/lab/augur/shadow/`**. They aren't byte-reproducible, so treat them as data |

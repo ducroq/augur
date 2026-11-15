@@ -134,3 +134,12 @@ Ask: answer infra-f3's home-cleanup questions (sadalsuud, then b650-gpu). It gre
 - ✅ Literature bibliography: `docs/literature.md`, `docs/metric-redesign-literature-review.md`.
 - ✅ ADR-006 and ADR-007 written.
 - ✅ `tests/test_metrics.py` (19 tests) added.
+
+## 2026-11-15: lost run on 11-13, boot catch-up, sadalsuud resets
+
+**Ask**: "augur runs are failing, pls check git". The cause wasn't code: sadalsuud reset unclean at 17:42 CET on 11-13, mid-gate. `Persistent=true` doesn't replay a trigger that already fired, so the day was lost (`dcbcf8b`: `[ALARM: t0 jumped 2d]`). The forecast vintage was lost, but no eval date (the 11-13 row covers 48h).
+
+**Threads**
+- Closed: diagnosis; augur#39 built, reviewed (Codex ×3 + a Claude lens; 1 blocker fixed: a commit made but not pushed counted as done), deployed and smoke-tested (`eb25a21`, `82cc1ca`); heartbeat subject-only selection (same commit); old pre-FM venv deleted on sadalsuud; Fable-day nominations sent to infra (ARF retirement: skipped; EXP-021a Stage 1: pending).
+- Partial: augur#39's boot trigger has never fired. On systemd 255 a timer restart doesn't fire an elapsed `OnBootSec`, so only a real boot proves it.
+- Not ours: augur#40 (6 unclean resets since 2026-09-04, idle and cool, no MCE, no watchdog; suspects are the power brick/supply, then the Ryzen idle reset). Needs the engineer at the box; plan in the issue.

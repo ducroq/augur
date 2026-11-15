@@ -26,7 +26,7 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 >
 > | Entry | Trigger | Status |
 > |---|---|---|
-> | [2026-08-29] EXP-021a Stage 1 | 14 clean vintages (`t0 ≥ 2026-10-30`, after EXP-038's window) | ≈2026-11-16; Review by 10-15 passed, gate vs `lean` per its own Method |
+> | [2026-08-29] EXP-021a Stage 1 | 14 clean vintages (`t0 ≥ 2026-10-30`, after EXP-038's window) | **TRIGGERED**: 14 of 14 as of the 2026-11-14 run (`vintage_counts.py`, 2026-11-15). Read next session; gate vs `lean` per its own Method |
 > | [2026-08-30] EXP-028a | ≥28 vintages | **Deferred 2026-11-06** past the EXP-021a Stage 1 read, since it is moot if that fails; Review by 11-30. Lagged-arm source: the EDH publish archive (see the entry's notes) |
 > | [2026-11-06] CQR on unwidened scores | 28 post-deploy vintages (`t0 ≥ 2026-11-06 22:00`) | fix merged 2026-11-06; live check running. **No slack:** 28 plus two partial vintages fill the 30-day history, so read it the run the 28th is fully realised (the counter's room hits 0) |
 > | [2026-10-28] product criterion | FM Stage 3 shadow reaches 14 vintages | pre-committed; the floor drives the dashboard since 2026-11-07 (ADR-009), so this is the bar to replace it |
