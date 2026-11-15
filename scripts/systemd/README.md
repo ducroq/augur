@@ -43,6 +43,32 @@ sudo systemctl disable --now augur-daily.timer
 crontab -e
 ```
 
+## Boot catch-up (augur#39, 2026-11-15)
+
+`augur-daily.timer` also fires 5 min after boot, and `augur-daily.service`
+gates every start with `ExecCondition=scripts/daily_slot_done.sh`, which skips
+cleanly when the latest 16:30 UTC slot already has a `Daily update` commit that
+is on `origin/main`.
+Ship both files together. A timer with `OnBootSec` but no guard would re-run a
+finished slot on every boot.
+
+```bash
+# On sadalsuud, ideally not while the job is in its window (16:30 UTC until it commits):
+cd ~/local_dev/augur && git pull
+sudo cp scripts/systemd/augur-daily.service scripts/systemd/augur-daily.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+# Restarting the timer fires the service within ~1 min: an OnBootSec already in
+# the past elapses on activation (systemd.timer(5)), plus RandomizedDelaySec=60.
+# That's the first live test of the guard. If the latest slot's commit is
+# already on origin/main (the usual case outside the window), it should skip;
+# otherwise it correctly starts the job.
+sudo systemctl restart augur-daily.timer
+sleep 90; grep 'slot guard:' logs/daily_update.log | tail -1   # usual case, a NEW line: "... already committed and pushed (...), skipping"
+systemctl show augur-daily.service -p ExecCondition
+```
+
+Rollback: copy the previous unit files back from git and `daemon-reload`.
+
 ## Failure alerting + heartbeat (2026-08-30)
 
 Two units, covering two structurally different silences. Deploy both or

@@ -80,10 +80,10 @@ class Env:
         subprocess.run(["git", *args], cwd=self.root, check=True,
                        capture_output=True)
 
-    def commit(self, subject):
+    def commit(self, subject, body=None):
         (self.root / "f.txt").write_text(str(time.time()))
         self._git("add", "-A")
-        self._git("commit", "-q", "-m", subject)
+        self._git("commit", "-q", "-m", subject, *(["-m", body] if body else []))
 
     def run(self, remind_days=3):
         env = dict(os.environ)
@@ -489,3 +489,26 @@ class TestFindingTextMatchesTheFinding:
         body = self._body(env)
         assert self.STALE_CLAIM in body
         assert "ARF FAIL rc=2" in body
+
+
+class TestDailyCommitSelection:
+    """Only a SUBJECT starting "Daily update " is a daily run (2026-11-15).
+
+    `git log --grep='^Daily update'` also matched body lines, so a doc commit
+    quoting a daily subject read as the newest run: its clean subject hid the
+    real run's ALARM marker, and its fresh timestamp would have hidden a missed day.
+    """
+
+    def test_body_quote_does_not_mask_the_last_runs_alarm(self, tmp_path):
+        env = Env(tmp_path)
+        env.commit(ALARM)
+        env.commit("Document incident", body=CLEAN)
+        env.run()
+        assert len(env.sent) == 1  # the ALARM run's marker, not the doc commit's clean subject
+
+    def test_word_split_lookalike_is_not_a_daily_run(self, tmp_path):
+        env = Env(tmp_path)
+        env.commit(ALARM)
+        env.commit("Daily   update lookalike")
+        env.run()
+        assert len(env.sent) == 1

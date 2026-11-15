@@ -10,6 +10,12 @@ User=jeroen
 Group=jeroen
 WorkingDirectory=/home/jeroen/local_dev/augur
 
+# Skip when this slot (the latest 16:30 UTC) already has a `Daily update`
+# commit (augur#39). That makes the timer's boot trigger safe: a reboot after a
+# finished run is a no-op, and a reboot that killed a run re-runs it. Exit 1 =
+# clean skip, never a failure. Fails open. Header of the script has the rest.
+ExecCondition=/home/jeroen/local_dev/augur/scripts/daily_slot_done.sh
+
 # Wait for EDH to publish a USABLE dataset before running. Rewritten
 # 2026-09-01: readiness is now a content contract read from
 # data_quality_report.json (report strictly newer than the last consumed, and

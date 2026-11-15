@@ -7,8 +7,16 @@ Description=Trigger Augur daily update after EDH publishes (16:30 UTC start, pol
 # publishes today's data_quality_report.json (typically 17:00-19:00 UTC).
 OnCalendar=*-*-* 16:30:00 UTC
 
-# Run a missed job at next boot (covers reboots during the daily window).
+# Run a missed job at next boot. This covers a box that was DOWN at 16:30 UTC,
+# not a run killed mid-way: that trigger already fired, so Persistent= never
+# replays it (2026-11-13).
 Persistent=true
+
+# Also fire at every boot, so a reboot that kills a run in flight is picked up
+# again (augur#39). The service's ExecCondition (scripts/daily_slot_done.sh)
+# skips quietly when the slot already has its `Daily update` commit, which is
+# the usual case.
+OnBootSec=5min
 
 # Small jitter so a server-time spike doesn't fire at the exact second.
 RandomizedDelaySec=60

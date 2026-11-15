@@ -65,7 +65,15 @@ mkdir -p "$(dirname "$LOG")" 2>/dev/null || true
 
 cd "$AUGUR_DIR" || { echo "$TS: heartbeat ERROR — cannot cd to $AUGUR_DIR" >> "$LOG"; exit 1; }
 
-LAST_EPOCH=$(git log -1 --grep='^Daily update' --format=%ct 2>/dev/null)
+# The newest commit whose SUBJECT starts with the literal "Daily update ".
+# Not `git log --grep='^Daily update'`: that matches any line of the message, so
+# a doc commit quoting a daily subject in its body would read as a fresh run and
+# hide a missed day (2026-11-15, found reviewing augur#39). Mirrors
+# scripts/daily_slot_done.sh.
+LAST_SHA=$(git log --format='%H %s' 2>/dev/null |
+    awk '{ sha = $1; sub(/^[^ ]+ /, "") } index($0, "Daily update ") == 1 { print sha; exit }')
+LAST_EPOCH=""
+[ -n "$LAST_SHA" ] && LAST_EPOCH=$(git log -1 --format=%ct "$LAST_SHA" 2>/dev/null)
 if [ -z "$LAST_EPOCH" ]; then
     echo "$TS: heartbeat ERROR — no 'Daily update' commit found in $AUGUR_DIR" >> "$LOG"
     exit 1
@@ -73,13 +81,13 @@ fi
 
 NOW_EPOCH=$(date +%s)
 AGE_H=$(( (NOW_EPOCH - LAST_EPOCH) / 3600 ))
-LAST_SUBJECT=$(git log -1 --grep='^Daily update' --format='%h %ad %s' --date=iso 2>/dev/null)
+LAST_SUBJECT=$(git log -1 --format='%h %ad %s' --date=iso "$LAST_SHA" 2>/dev/null)
 
 TIMER_ENABLED=$(systemctl is-enabled augur-daily.timer 2>&1 || true)
 TIMER_ACTIVE=$(systemctl is-active augur-daily.timer 2>&1 || true)
 NEXT_RUN=$(systemctl show augur-daily.timer -p NextElapseUSecRealtime --value 2>/dev/null || true)
 UNPUSHED=$(git rev-list --count origin/main..HEAD 2>/dev/null || echo "?")
-LAST_BODY=$(git log -1 --grep='^Daily update' --format='%s' 2>/dev/null)
+LAST_BODY=$(git log -1 --format='%s' "$LAST_SHA" 2>/dev/null)
 # Soft-failure markers daily_update.sh composes into the subject: any [ALARM: ...],
 # `ARF FAIL rc=N`, a non-zero step rc, or a step gated off as `rc=skip`.
 # NB: paste -d takes a LIST of delimiters applied cyclically, so a two-character
