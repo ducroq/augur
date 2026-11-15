@@ -57,15 +57,18 @@ finished slot on every boot.
 cd ~/local_dev/augur && git pull
 sudo cp scripts/systemd/augur-daily.service scripts/systemd/augur-daily.timer /etc/systemd/system/
 sudo systemctl daemon-reload
-# Restarting the timer fires the service within ~1 min: an OnBootSec already in
-# the past elapses on activation (systemd.timer(5)), plus RandomizedDelaySec=60.
-# That's the first live test of the guard. If the latest slot's commit is
-# already on origin/main (the usual case outside the window), it should skip;
-# otherwise it correctly starts the job.
-sudo systemctl restart augur-daily.timer
-sleep 90; grep 'slot guard:' logs/daily_update.log | tail -1   # usual case, a NEW line: "... already committed and pushed (...), skipping"
-systemctl show augur-daily.service -p ExecCondition
+sudo systemctl restart augur-daily.timer    # picks up OnBootSec. It does NOT fire now: measured
+                                            # 2026-11-15 on systemd 255, an elapsed OnBootSec stays
+                                            # unfired after a restart, despite systemd.timer(5)
+# Live test of the ExecCondition path, outside the window (the guard skips, so no job runs):
+sudo systemctl start augur-daily.service
+journalctl -u augur-daily.service -n 2 --no-pager   # expect: Skipped due to 'exec-condition'
+grep 'slot guard:' logs/daily_update.log | tail -1  # expect: ... already committed and pushed (...), skipping
 ```
+
+The boot trigger itself is only proven by a real boot. After the next one:
+`journalctl -b -u augur-daily.service` should show a start about 5 min in, and
+`logs/daily_update.log` a `slot guard:` line with that time.
 
 Rollback: copy the previous unit files back from git and `daemon-reload`.
 
