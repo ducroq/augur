@@ -90,6 +90,7 @@ Browser: 5 tabs (Prices, Weather, Grid, Market, Model); augur_forecast_profile.j
 | `decrypt_data_cached.py`, `utils/secure_data_handler.py` | Decryption with `--force` (ADR-003); AES-CBC-256 + HMAC-SHA256 |
 | `scripts/daily_update.sh` | The sadalsuud job and every commit-subject marker |
 | `scripts/wait_for_edh.sh` | Readiness gate. **Read its header before changing any clause** |
+| `scripts/read_surface.sh` | Size of the live docs against the 100k-char ceiling; exits 1 over it |
 | `scripts/check_gate_lag.sh` | The only detector for gate lag (augur#34); run over ssh with `bash -s` |
 | `scripts/heartbeat_check.sh`, `alert_failure.sh`, `notify_email.py`, `daily_slot_done.sh`, `scripts/systemd/` | Alerting, the boot catch-up guard (augur#39) and the canonical units (install/rollback in its README) |
 | `experiments/registry.jsonl`, `scripts/audit_registry.py`, `scripts/render_results.py` | Experiment record (EXP-001..042; EXP-040 and EXP-041 are pre-committed in the backlog, not yet run), its auditor (check 6 also pins hypothesis-log Methods), the generated digest |
