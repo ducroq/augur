@@ -140,3 +140,8 @@ ml/shadow/exp026_size_ladder/size_chronos-bolt-*
 # Lab tree: gitignored experiment data lives in /home/jeroen/lab/augur and is
 # linked back in by scripts/link_lab.sh (see its header).
 /lab
+# EXP-021a Stage 1 (2026-11-15): same dumps, formal read on clean vintages.
+ml/shadow/exp021_stage1_incumbents/predictions.parquet
+ml/shadow/exp021_stage1/contexts.parquet
+ml/shadow/exp021_stage1/targets.parquet
+ml/shadow/exp021_stage1/fm_predictions.parquet

@@ -2,6 +2,76 @@
 
 Moved out of `docs/hypothesis-log.md` on 2026-10-16, unedited. Scripts and docs cite entries by date (e.g. `[2026-09-14]`); grep this file for those dates.
 
+### [2026-08-29 → resolved 2026-11-15] EXP-021a: Chronos-Bolt's 20% zero-shot win survives on fresh vintages, and survives contact with production constraints
+
+**Position (provisional):** EXP-021 (resolved same day) measured `chronos-bolt-base` zero-shot at **-20.3% quantile score and -16% MAE against the lean LightGBM incumbent**, with raw band coverage 0.811 against a 0.80 target where the incumbent sits at 0.611, on 260 paired vintages. Position: this reproduces on vintages that did not exist when it was measured, and the operational objections to running it in production (latency, dependency weight, the loss of a nightly-refit story, no CPU path on sadalsuud) are surmountable rather than disqualifying.
+
+**Why this needs its own pre-commit:** EXP-021's window is the same one EXP-018/019/020 already explored. The usual selection-bias objection is *weaker* here than it was for EXP-018a — a zero-shot arm tunes nothing, so there was no search to overfit with, and the model's weights were frozen 2025-11-21, before the window opens. But "weaker" is not "absent": the window was chosen because it is the one already instrumented, the FM was chosen after a literature scan, and a 20% claim against a production system should clear a fresh-vintage bar at least as high as the 8% one did. Per ADR-007 the confirming test is fixed here, before the confirming data exists and before any production path is touched.
+
+**Alternatives (failure-mode signals):**
+
+1. **The gap is a backtest artifact of exogenous freshness.** The EXP-018 harness reads a parquet whose exogenous rows are overwritten by later vintages (refuted-hypothesis 2026-05-29, ratio 1.84), so the *incumbent* is scored with fresher inputs than the live cron sees — but the incumbent is also the arm that gets hurt if that advantage is removed, and the FM uses no exogenous at all. **Signal:** the gap *widens* on live vintages rather than narrowing. That is a confirmation, not a failure — recorded here so the direction is fixed in advance and cannot be read either way after the fact.
+2. **Latency or footprint makes it undeployable.** 205M params, a torch install, and a GPU-less production host. **Signal:** CPU inference for 1 vintage x 72h exceeds ~60s on sadalsuud's hardware, or the dependency set cannot be installed alongside the existing venv. Then the arm is offline-only — an ensemble member or a band source scored on the GPU box, not the nightly production path.
+3. **Zero-shot skill is unstable vintage-to-vintage.** Pooled means can hide a model that is excellent on 8 days and catastrophic on the 9th, which matters far more for a live dashboard than for a pooled score. **Signal:** the FM's per-vintage MAE distribution has a materially heavier right tail than the incumbent's (95th percentile more than 1.5x the incumbent's 95th). Then the pooled win is not the operationally relevant statistic and a hybrid/guarded design is needed.
+4. **The calibration win does not survive CQR.** EXP-021 compared *raw* bands, where the incumbent is at 0.611 and badly under-covering. Production wraps CQR around it. **Signal:** the incumbent's CQR-widened live coverage (`shadow_state.json:calibration_history`) is comparable to the FM's raw coverage. Then the calibration half of EXP-021 is an artifact of comparing a pre-conformal band to a post-conformal one, and only the skill half stands.
+
+**Method (pre-committed 2026-08-29, before any fresh vintage is scored and before any production path is touched):**
+
+*Stage 1 — fresh-vintage confirmation, offline, zero production risk.* When ≥14 vintages with `t0 ≥ 2026-08-25` exist in the parquet (≈2026-09-09 — the same trigger as EXP-018a Stage 1, which has priority on that window and must run first), re-run all three arms on `t0 ≥ 2026-08-25` only:
+
+```
+PYTHONPATH=. .venv/bin/python scripts/exp021_foundation_zeroshot.py contexts \
+    --start 2026-08-25 --end <first-unrealised-day> --context-end-offset-h 1 \
+    --out ml/shadow/exp021_stage1
+# predict on b650-gpu, then:
+PYTHONPATH=. .venv/bin/python scripts/exp021_foundation_zeroshot.py score \
+    --out ml/shadow/exp021_stage1 --incumbents <fresh full/lean predictions>
+```
+
+Incumbent = whichever base EXP-018a Stage 1 leaves standing (`lean` if it passes, `full` if it fails); if EXP-018a has not concluded, the primary gate stays against `lean`, the harder bar, exactly as in EXP-021. **The matched-information arm (`--context-end-offset-h 1`) is the one that counts**; the unmatched arm is not run again. IMPLEMENT-as-candidate iff all four hold:
+
+1. **Skill:** paired DM on per-observation quantile score, H1 FM better, one-sided **p < 0.10**, HAC bandwidth 71.
+2. **Effect size survives:** FM QS at least **10% better** than the incumbent. Deliberately higher than EXP-018a's 3%: the in-sample effect is 20%, and a bar of 3% would let a 90%-shrunken result pass as confirmation.
+3. **Calibration:** FM lower- and upper-side coverage each **not more than 0.02 worse** than the incumbent (raw quantiles, no CQR, both arms).
+4. **Sharpness:** FM mean Winkler (α=0.20) **≤ 1.05 ×** incumbent.
+
+*Stage 2 — operational feasibility, gated on Stage 1 and decided on measurement, not preference.* Only if Stage 1 passes. Measure, on sadalsuud's actual hardware: (a) CPU-only wall-clock for one 1344-point context x 72h forecast, 10 runs, report median and max; (b) venv size delta and whether `torch` installs cleanly alongside the existing pins; (c) a 14-day replay of per-vintage MAE distributions for Alternative 3's tail check. Feasible iff median CPU latency ≤60s **and** the p95 per-vintage MAE ratio (FM ÷ incumbent) ≤1.5. Infeasible on latency alone → the FM becomes an offline band source for augur#19 rather than the production forecaster, which is a smaller but still real win.
+
+*Stage 3 — shadow, then swap.* Only if Stages 1 and 2 pass. The FM runs as a **shadow** alongside production LightGBM for **14 evaluable vintages**, written to a separate output file, dashboard untouched — the same shape as the original LightGBM shadow that produced ADR-006, and for the same reason: EXP-014's promotion was earned by a live shadow, not a backtest, and this one will be too. Promotion criterion at that point is ADR-007's, re-derived against whatever the incumbent then is; ADR-006 is amended only after a live swap, never before.
+
+**Addendum 2026-11-07 (Stage 3 build: a deviation from the Method, whose text stands):**
+- **Order: deviation.** The Method runs Stage 3 "only if Stages 1 and 2 pass". By the engineer's call of 2026-11-06 the shadow starts before Stage 1 reads, so it starts collecting vintages while Stage 1 waits for its 14. What still holds is narrower than the Method: no swap unless Stage 1 passes as written. A failed Stage 1 stops the shadow.
+- **Overlap.** The first shadow vintages fall inside Stage 1's window. Same frozen model, same hours, so they aren't independent evidence.
+- **Context: deviation.** `update_fm.py` keeps the offset and length EXP-038/039 measured (ends at t0 − 1h, prediction length 73), but on price rows only. EXP-038 also dropped rows with exogenous NaNs, which the FM doesn't read, so this isn't EXP-021's exact matched row set and it can hold a few more prices than the incumbent's (median 18 per context across EXP-038's 60 vintages, maximum 18, and for some vintages all 18 fall in the last week).
+- **Read.** `fm_state.json` keeps 30 days, and FM regret lands in `ml/shadow/fm_regret_log.jsonl`, separate from production's log. The promotion criterion, which excludes cold-start vintages, is the [2026-11-07] entry.
+
+**What is explicitly not decided by this entry:** whether Augur's production forecaster *should* be a 205M-parameter pretrained model rather than a 1344-row nightly refit is a question about operational surface, reproducibility and the project's ability to debug its own forecasts — not only about quantile score. Stage 3 is where that judgement gets made, with a live shadow in hand. Recording it here so a strong Stage 1 does not read as having settled it.
+
+**Revisit trigger:** ≥14 vintages with `t0 ≥ 2026-08-25` in the parquet — ≈2026-09-09, **after** EXP-018a Stage 1 has run on the same window. Surface in `/curate`.
+
+**Review by:** 2026-10-15.
+
+**Domain:** EXP-021a, augur#15 (foundation models), augur#19 (calibration), model class, ADR-006, ADR-007.
+
+**Status:** open — pre-committed 2026-08-29 immediately after EXP-021 resolved, before any production path was touched.
+
+**Note added 2026-11-06 (Method unchanged):** the CQR fix in [2026-11-06] shifts CQR-widened live coverage at its deploy date, so read Alternative 4's signal across that date with care. The Stage 1 gate uses raw bands and is unaffected.
+
+**→ RESOLVED 2026-11-15 (EXP-042, `kept`): Stage 1 PASSES, with one recorded deviation.** 14 clean vintages (`t0` 2026-10-30..2026-11-12, tripwire OK: 1.81% missing, longest run 24h), 1,007 paired hours. Deviation: the 14th vintage has 71 of its 72 hours, the last not yet in the snapshot (EXP-038's end convention); on the 13 complete vintages alone all four gates also pass (QS −18.6%, p = 0.0096). Gates unchanged, matched-information arm, primary against `lean`:
+
+| Gate | Bar | Measured | |
+|---|---|---|---|
+| 1 Skill | DM one-sided p < 0.10, HAC 71 | p = 0.0044 | pass |
+| 2 Effect | FM QS ≥ 10% better | −19.7% (13.64 vs 16.98) | pass |
+| 3 Calibration | each side ≤ 0.02 worse, raw | lower 0.921 vs 0.828, upper 0.849 vs 0.762 | pass |
+| 4 Sharpness | Winkler ≤ 1.05× | 0.80× (216.6 vs 270.7) | pass |
+
+Against `full`: −23.4%, p = 0.0007, all four pass. Descriptive: the FM has the lower MAE on 12 of 14 vintages; p95 per-vintage MAE ratio 0.89 (Alternative 3 does not fire); live production's CQR-widened band covered 0.704 on the same days against the FM's raw 0.770 (Alternative 4 does not fire, read across the 2026-11-06 CQR fix). The window is a price spike (mean 258 EUR/MWh, maximum 609), so absolute errors run well above EXP-038's.
+
+**What this settles and what it doesn't.** Stage 1 (this) and Stage 2 (EXP-039) are discharged, and the Addendum's Stage 1 condition for a swap is met. Stage 3 is not: the shadow is at 2 of 14 vintages and continues under the live [2026-11-07] entry and EXP-041, which is why this entry can leave `## Open`. The comparator here is LightGBM, which has been a shadow since ADR-009. The bar for the dashboard is the profile rule: EXP-041 and the [2026-10-28] product criterion, both still open. Record: `ml/shadow/exp021_stage1/summary.json` (`stage1_reading`), snapshot sha256 `dca616d2…d045`. Moved out of `## Open` 2026-11-15.
+
+---
+
 ### [2026-09-06 → resolved 2026-11-06] The production model has no demonstrated skill over a seasonal-naive baseline, and the eval harness could not have told us
 
 **Position (provisional):** LightGBM-Quantile's point forecast does not beat "same clock hour, last day available at t0" — not at any horizon, and not on average over the record. The 20-odd experiments since EXP-018 have been optimising deltas against a reference that itself loses to one line of pandas. Until a skill-vs-naive floor is in the log, no model comparison here is interpretable.

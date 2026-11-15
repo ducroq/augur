@@ -102,6 +102,7 @@ NUMBER_SOURCES = {
     "EXP-036": ["ml/shadow/exp036_profile_floor/summary.json"],
     "EXP-037": ["ml/shadow/exp037_rank_metric/summary.json",
                 "ml/shadow/exp037_rank_metric/diagnostics.json"],
+    "EXP-042": ["ml/shadow/exp021_stage1/summary.json"],
 }
 # Values that are arithmetic on artifact-backed numbers rather than stored ones.
 # Each must state HOW it is derived, so the claim is checkable by a reader.

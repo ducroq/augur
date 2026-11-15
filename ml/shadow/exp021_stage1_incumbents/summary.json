@@ -1,0 +1,144 @@
+{
+  "config": {
+    "parquet": "ml/data/training_history_2026-11-14.parquet",
+    "vintage_start": "2026-10-30",
+    "vintage_end": "2026-11-13",
+    "window_days": 56,
+    "max_horizon": 72,
+    "hac_lags": 71,
+    "quantiles": [
+      0.1,
+      0.5,
+      0.9
+    ],
+    "cqr_applied": false,
+    "n_vintages": 14,
+    "residual_load_definition": "load_forecast - wind_gen_forecast_mw - solar_gen_forecast_mw",
+    "primary_comparison": "lean_fund vs lean",
+    "confirmatory_comparison": "full_fund vs full",
+    "purpose": "discovery \u2014 winners must clear fresh-vintage gates (docs/hypothesis-log.md [2026-08-29])"
+  },
+  "variants": {
+    "full": {
+      "n_obs": 1007,
+      "n_vintages": 14,
+      "mae": 46.19203777418428,
+      "quantile_score": 17.799584089937607,
+      "coverage_lower": 0.7825223435948362,
+      "coverage_upper": 0.7288977159880834,
+      "coverage_band": 0.5114200595829196,
+      "band_width_median": 97.8038195062584,
+      "winkler": 300.7295560824375,
+      "n_features": 24,
+      "columns": [
+        "price_lag_1h",
+        "price_lag_2h",
+        "price_lag_3h",
+        "price_lag_6h",
+        "price_lag_12h",
+        "price_lag_24h",
+        "price_lag_48h",
+        "price_lag_168h",
+        "price_rolling_mean_6h",
+        "price_rolling_mean_24h",
+        "price_rolling_mean_168h",
+        "price_rolling_std_6h",
+        "price_rolling_std_24h",
+        "price_rolling_std_168h",
+        "hour",
+        "hour_sin",
+        "hour_cos",
+        "dow_sin",
+        "dow_cos",
+        "is_weekend",
+        "month_sin",
+        "wind_speed_80m",
+        "solar_ghi",
+        "load_forecast"
+      ],
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 84,
+          "mae": 12.135086693575158,
+          "quantile_score": 4.966909627447313,
+          "coverage_lower": 0.4880952380952381,
+          "coverage_upper": 0.9404761904761905
+        },
+        "h7_24": {
+          "n_obs": 252,
+          "mae": 48.53008780595865,
+          "quantile_score": 16.949608047299535,
+          "coverage_lower": 0.8174603174603174,
+          "coverage_upper": 0.7063492063492064
+        },
+        "h25_72": {
+          "n_obs": 671,
+          "mae": 49.57742567696225,
+          "quantile_score": 19.725275025249054,
+          "coverage_lower": 0.8062593144560357,
+          "coverage_upper": 0.7108792846497765
+        }
+      }
+    },
+    "lean": {
+      "n_obs": 1007,
+      "n_vintages": 14,
+      "mae": 47.33338806300882,
+      "quantile_score": 16.975104530399356,
+      "coverage_lower": 0.8282025819265144,
+      "coverage_upper": 0.7616683217477657,
+      "coverage_band": 0.5898709036742801,
+      "band_width_median": 96.4768039901574,
+      "winkler": 270.69071408311265,
+      "n_features": 15,
+      "columns": [
+        "price_lag_1h",
+        "price_lag_2h",
+        "price_lag_3h",
+        "price_lag_6h",
+        "price_lag_12h",
+        "price_lag_24h",
+        "price_lag_48h",
+        "price_lag_168h",
+        "hour",
+        "hour_sin",
+        "hour_cos",
+        "dow_sin",
+        "dow_cos",
+        "is_weekend",
+        "month_sin"
+      ],
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 84,
+          "mae": 13.940279019276256,
+          "quantile_score": 4.463040209828795,
+          "coverage_lower": 0.7142857142857143,
+          "coverage_upper": 0.8452380952380952
+        },
+        "h7_24": {
+          "n_obs": 252,
+          "mae": 46.846183356131526,
+          "quantile_score": 17.09868308131705,
+          "coverage_lower": 0.8690476190476191,
+          "coverage_upper": 0.7777777777777778
+        },
+        "h25_72": {
+          "n_obs": 671,
+          "mae": 51.69672151428543,
+          "quantile_score": 18.495032411318387,
+          "coverage_lower": 0.827123695976155,
+          "coverage_upper": 0.7451564828614009
+        }
+      },
+      "dm_variant_beats_base": {
+        "base": "full",
+        "statistic": -1.264588444964689,
+        "p_one_sided": 0.10300944868032708,
+        "mean_loss_diff_variant_minus_base": -0.8244795595382497,
+        "hac_lags": 71
+      }
+    }
+  },
+  "gates": {}
+}

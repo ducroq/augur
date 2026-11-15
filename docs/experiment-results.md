@@ -2,7 +2,7 @@
 
 **Generated file — do not edit.** Rendered from `experiments/registry.jsonl` and the `summary.json` artifacts it references, by `scripts/render_results.py`. Regenerate after appending to the registry; `--check` fails if this file is stale. Per-experiment sections (every metric, caveat, artifact, commit) are in `experiment-results-detail.md`: grep it by id rather than reading it whole.
 
-Registry state: **37 entries**, rendered at `f990b83`. Integrity of the underlying record is verified separately by `scripts/audit_registry.py` (schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed).
+Registry state: **38 entries**, rendered at `3167e12`. Integrity of the underlying record is verified separately by `scripts/audit_registry.py` (schema, id order, artifact existence, number traceability, and sha256 proof that no pre-committed Method was edited after its result landed).
 
 Decision values: `kept` (evidence stands / in production) · `parked` (works, not adopted, revisit) · `rejected` (does not work) · `rolled_back` · `superseded`.
 
@@ -66,6 +66,7 @@ The registry records *what was found*; the **revisit trigger and review-by date 
 | EXP-037 | The product lens does not rescue the incumbent |
 | EXP-038 | Chronos-Bolt's zero-shot win reproduces on 60 fresh vintages |
 | EXP-039 | Chronos-Bolt is feasible on sadalsuud |
+| EXP-042 | EXP-021a Stage 1 passes on 14 clean vintages |
 | EXP-001 | Initial ARF warmup baseline (pre-backfill) |
 
 ## Summary
@@ -109,3 +110,4 @@ The registry records *what was found*; the **revisit trigger and review-by date 
 | EXP-037 | 2026-09-11 | **kept** | — | The product lens does not rescue the incumbent: on cost regret it is WORSE than the carry it already barely beat on MAE, and the cause is amplitude collapse |
 | EXP-038 | 2026-10-28 | **kept** | — | Chronos-Bolt's zero-shot win reproduces on 60 fresh vintages: 21.5% better quantile score than lean LightGBM, better calibrated, and best on cheap-hour regret at h1-48 |
 | EXP-039 | 2026-10-28 | **kept** | — | Chronos-Bolt is feasible on sadalsuud: 1.2s per forecast on CPU, installs beside every pin, and no heavier error tail than lean |
+| EXP-042 | 2026-11-15 | **kept** | — | EXP-021a Stage 1 passes on 14 clean vintages: Chronos-Bolt zero-shot scores 19.7% better than lean LightGBM on quantile score, with better coverage on both sides |

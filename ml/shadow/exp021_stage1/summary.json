@@ -1,0 +1,306 @@
+{
+  "config": {
+    "fm_predictions": "ml/shadow/exp021_stage1/fm_predictions.parquet",
+    "incumbents": "ml/shadow/exp021_stage1_incumbents/predictions.parquet",
+    "window_days": 56,
+    "max_horizon": 72,
+    "hac_lags": 71,
+    "quantiles": [
+      0.1,
+      0.5,
+      0.9
+    ],
+    "cqr_applied": false,
+    "primary_base": "lean",
+    "secondary_base": "full",
+    "n_paired_vintages": 14,
+    "n_paired_observations": 1007,
+    "max_realized_delta_across_arms": 0.0,
+    "purpose": "model-class arm \u2014 gates in docs/hypothesis-log.md [2026-08-29]"
+  },
+  "variants": {
+    "chronos_bolt_base": {
+      "n_obs": 1007,
+      "n_vintages": 14,
+      "mae": 38.49642514907852,
+      "quantile_score": 13.636632812005011,
+      "coverage_lower": 0.9205561072492552,
+      "coverage_upper": 0.8490566037735849,
+      "coverage_band": 0.7696127110228401,
+      "band_width_median": 100.63803100585938,
+      "winkler": 216.61685861475772,
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 84,
+          "mae": 11.940957532610213,
+          "quantile_score": 3.9236848492092546,
+          "coverage_lower": 0.9166666666666666,
+          "coverage_upper": 0.9523809523809523
+        },
+        "h7_24": {
+          "n_obs": 252,
+          "mae": 34.568089134579616,
+          "quantile_score": 12.026486524955304,
+          "coverage_lower": 0.9365079365079365,
+          "coverage_upper": 0.8690476190476191
+        },
+        "h25_72": {
+          "n_obs": 671,
+          "mae": 43.29612702007265,
+          "quantile_score": 15.457265439741775,
+          "coverage_lower": 0.9150521609538003,
+          "coverage_upper": 0.8286140089418778
+        }
+      },
+      "dm_fm_beats_lean": {
+        "base": "lean",
+        "statistic": -2.6231267917429286,
+        "p_one_sided": 0.004356342087718083,
+        "mean_loss_diff_fm_minus_base": -3.338471718394348,
+        "hac_lags": 71
+      },
+      "dm_fm_beats_full": {
+        "base": "full",
+        "statistic": -3.201270378498291,
+        "p_one_sided": 0.0006841153921464807,
+        "mean_loss_diff_fm_minus_base": -4.1629512779325974,
+        "hac_lags": 71
+      }
+    },
+    "lean": {
+      "n_obs": 1007,
+      "n_vintages": 14,
+      "mae": 47.33338806300882,
+      "quantile_score": 16.975104530399356,
+      "coverage_lower": 0.8282025819265144,
+      "coverage_upper": 0.7616683217477657,
+      "coverage_band": 0.5898709036742801,
+      "band_width_median": 96.4768039901574,
+      "winkler": 270.69071408311265,
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 84,
+          "mae": 13.940279019276256,
+          "quantile_score": 4.463040209828795,
+          "coverage_lower": 0.7142857142857143,
+          "coverage_upper": 0.8452380952380952
+        },
+        "h7_24": {
+          "n_obs": 252,
+          "mae": 46.846183356131526,
+          "quantile_score": 17.09868308131705,
+          "coverage_lower": 0.8690476190476191,
+          "coverage_upper": 0.7777777777777778
+        },
+        "h25_72": {
+          "n_obs": 671,
+          "mae": 51.69672151428543,
+          "quantile_score": 18.495032411318387,
+          "coverage_lower": 0.827123695976155,
+          "coverage_upper": 0.7451564828614009
+        }
+      }
+    },
+    "full": {
+      "n_obs": 1007,
+      "n_vintages": 14,
+      "mae": 46.19203777418428,
+      "quantile_score": 17.799584089937607,
+      "coverage_lower": 0.7825223435948362,
+      "coverage_upper": 0.7288977159880834,
+      "coverage_band": 0.5114200595829196,
+      "band_width_median": 97.8038195062584,
+      "winkler": 300.7295560824375,
+      "by_horizon_group": {
+        "h1_6": {
+          "n_obs": 84,
+          "mae": 12.135086693575158,
+          "quantile_score": 4.966909627447313,
+          "coverage_lower": 0.4880952380952381,
+          "coverage_upper": 0.9404761904761905
+        },
+        "h7_24": {
+          "n_obs": 252,
+          "mae": 48.53008780595865,
+          "quantile_score": 16.949608047299535,
+          "coverage_lower": 0.8174603174603174,
+          "coverage_upper": 0.7063492063492064
+        },
+        "h25_72": {
+          "n_obs": 671,
+          "mae": 49.57742567696225,
+          "quantile_score": 19.725275025249054,
+          "coverage_lower": 0.8062593144560357,
+          "coverage_upper": 0.7108792846497765
+        }
+      }
+    }
+  },
+  "gates": {
+    "primary": {
+      "base": "lean",
+      "gate_1_dm_p_lt_0.10": true,
+      "gate_2_qs_delta_pct": -19.66686987061401,
+      "gate_2_superiority": true,
+      "gate_3_coverage": true,
+      "gate_4_winkler": true,
+      "dm_p_one_sided": 0.004356342087718083,
+      "verdict": "SUPERIORITY"
+    },
+    "secondary": {
+      "base": "full",
+      "gate_1_dm_p_lt_0.10": true,
+      "gate_2_qs_delta_pct": -23.387913205713495,
+      "gate_2_superiority": true,
+      "gate_3_coverage": true,
+      "gate_4_winkler": true,
+      "dm_p_one_sided": 0.0006841153921464807,
+      "verdict": "SUPERIORITY"
+    }
+  },
+  "alternative_1_error_decorrelation": {
+    "lean": {
+      "pearson_r_abs_errors": 0.7481368963731977,
+      "pearson_r_signed_errors": 0.8091536928704559,
+      "decorrelated_r_lt_0.8": true,
+      "mae_fm": 38.49642514907852,
+      "mae_base": 47.33338806300882,
+      "mae_50_50_median_blend": 40.442300119287665
+    },
+    "full": {
+      "pearson_r_abs_errors": 0.7127594634682098,
+      "pearson_r_signed_errors": 0.7847511912152789,
+      "decorrelated_r_lt_0.8": true,
+      "mae_fm": 38.49642514907852,
+      "mae_base": 46.19203777418428,
+      "mae_50_50_median_blend": 39.80811521734975
+    }
+  },
+  "alternative_3_rollout_boundary": {
+    "h1_64_native": {
+      "n_obs_per_arm": 896,
+      "chronos_bolt_base": {
+        "mae": 37.04840613433293,
+        "quantile_score": 13.157984709796452
+      },
+      "full": {
+        "mae": 44.6772473797674,
+        "quantile_score": 17.023536099481717
+      },
+      "lean": {
+        "mae": 45.51754903785739,
+        "quantile_score": 16.341113349880647
+      },
+      "fm_qs_delta_pct_vs_lean": -19.47926418433077
+    },
+    "h65_72_rollout": {
+      "n_obs_per_arm": 111,
+      "chronos_bolt_base": {
+        "mae": 50.18493899783573,
+        "quantile_score": 17.50031479019302
+      },
+      "full": {
+        "mae": 58.4195350119997,
+        "quantile_score": 24.06389940028427
+      },
+      "lean": {
+        "mae": 61.99097154531221,
+        "quantile_score": 22.09272703260446
+      },
+      "fm_qs_delta_pct_vs_lean": -20.786986756474
+    }
+  },
+  "alternative_5_monthly_upper_coverage": {
+    "2026-10": {
+      "chronos_bolt_base": {
+        "coverage_lower": 1.0,
+        "coverage_upper": 0.9166666666666666,
+        "coverage_band": 0.9166666666666666,
+        "mean_price": 249.90104166666666
+      },
+      "full": {
+        "coverage_lower": 0.875,
+        "coverage_upper": 0.7916666666666666,
+        "coverage_band": 0.6666666666666666,
+        "mean_price": 249.90104166666666
+      },
+      "lean": {
+        "coverage_lower": 1.0,
+        "coverage_upper": 1.0,
+        "coverage_band": 1.0,
+        "mean_price": 249.90104166666666
+      },
+      "fm_upper_minus_lean_upper": -0.08333333333333337,
+      "signal_fm_upper_better_by_0.05": false
+    },
+    "2026-11": {
+      "chronos_bolt_base": {
+        "coverage_lower": 0.9186164801627671,
+        "coverage_upper": 0.8474059003051883,
+        "coverage_band": 0.7660223804679552,
+        "mean_price": 257.76073753814853
+      },
+      "full": {
+        "coverage_lower": 0.780264496439471,
+        "coverage_upper": 0.7273652085452695,
+        "coverage_band": 0.5076297049847406,
+        "mean_price": 257.76073753814853
+      },
+      "lean": {
+        "coverage_lower": 0.8240081383519837,
+        "coverage_upper": 0.7558494404883012,
+        "coverage_band": 0.5798575788402849,
+        "mean_price": 257.76073753814853
+      },
+      "fm_upper_minus_lean_upper": 0.09155645981688709,
+      "signal_fm_upper_better_by_0.05": true
+    }
+  },
+  "stage1_reading": {
+    "method": "docs/hypothesis-log.md [2026-08-29] EXP-021a, Stage 1; primary vs lean (EXP-018a parked, not concluded)",
+    "window": "t0 2026-10-30..2026-11-12 (the clean window fixed by the [2026-10-28] EXP-038 entry), --end 2026-11-13. 13 vintages have all 72 hours; the last (t0 2026-11-12 23:00Z) has 71, its final hour not yet in the snapshot. Same end convention as EXP-038; scoring pairs realised hours only.",
+    "parquet_sha256": "dca616d2a8d805a225dddb1d07c1d38fd162b68c9c4a57feed5a89bf94d0d045",
+    "parquet_source": "sadalsuud ml/data/training_history.parquet, written 2026-11-14 20:22 UTC; copy at ~/lab/augur/data/training_history_2026-11-14.parquet",
+    "contexts_tripwire": "OK (1.81% missing, longest run 24h)",
+    "model_revision": "amazon/chronos-bolt-base@5d9f166d69f47aef3401367a7b842e78fe97b121, offline, CPU (situla)",
+    "g1_dm_p_one_sided": 0.004356342087718083,
+    "g1_pass": true,
+    "g2_threshold_pct": -10.0,
+    "g2_qs_delta_pct": -19.66686987061401,
+    "g2_pass": true,
+    "g3_pass": true,
+    "g4_winkler_ratio": 0.8002374937333383,
+    "g4_pass": true,
+    "verdict": "PASS",
+    "descriptive": {
+      "note": "not gates",
+      "per_vintage_mae_p95_fm": 75.37566572231717,
+      "per_vintage_mae_p95_lean": 84.75681689681687,
+      "per_vintage_mae_p95_ratio": 0.8893168535821686,
+      "vintages_fm_lower_mae": 12,
+      "n_vintages": 14,
+      "mean_realized_price": 257.5734160873883,
+      "alt4_live_production_cqr": {
+        "note": "shadow_state calibration_history, eval_day 2026-10-30..2026-11-12, t0 22:00Z (one hour before the harness t0), CQR fix deployed 2026-11-06 inside the window",
+        "n": 1008,
+        "coverage_lower": 0.9087301587301587,
+        "coverage_upper": 0.7956349206349206,
+        "coverage_band": 0.7043650793650794
+      },
+      "complete_vintages_only": {
+        "note": "sensitivity, not the gate read: the 13 vintages with all 72 hours",
+        "n_vintages": 13,
+        "n_obs": 936,
+        "qs_delta_pct_vs_lean": -18.57,
+        "dm_p_one_sided": 0.009576388884041154,
+        "fm_coverage_lower": 0.916,
+        "fm_coverage_upper": 0.838,
+        "lean_coverage_lower": 0.841,
+        "lean_coverage_upper": 0.744,
+        "winkler_ratio": 0.803,
+        "all_four_pass": true
+      }
+    },
+    "deviation": "The Method's trigger counts 14 vintages; the 14th here is one hour short. Recorded, not corrected: the read was scored once on this population."
+  }
+}

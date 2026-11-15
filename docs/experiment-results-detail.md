@@ -2,7 +2,7 @@
 
 **Generated file — do not edit.** Rendered from `experiments/registry.jsonl` by `scripts/render_results.py`. Decision state and the summary are in `experiment-results.md`. Grep this file by id.
 
-Registry state: **37 entries**, rendered at `f990b83`.
+Registry state: **38 entries**, rendered at `3167e12`.
 
 ## EXP-001 — Initial ARF warmup baseline (pre-backfill)
 
@@ -1472,5 +1472,54 @@ Registry state: **37 entries**, rendered at `f990b83`.
 **Caveats.** Venv grows 577M -> 1.7G. torch resolved 2.15.0+cpu on sadalsuud; pin it when Stage 3 lands it in requirements.lock.
 
 **Artifacts.** `ml/shadow/exp039_stage2_feasibility/summary.json`
+
+---
+
+## EXP-042 — EXP-021a Stage 1 passes on 14 clean vintages: Chronos-Bolt zero-shot scores 19.7% better than lean LightGBM on quantile score, with better coverage on both sides
+
+****kept**** · 2026-11-15 · model: amazon/chronos-bolt-base zero-shot (CPU, situla, revision 5d9f166, offline) vs LightGBM-Quantile full and lean retrained per vintage (EXP-020 control harness)
+
+**Hypothesis.** The formal fresh-vintage confirmation pre-committed in docs/hypothesis-log.md [2026-08-29] EXP-021a, Stage 1, run with its gates unchanged on the clean window the [2026-10-28] EXP-038 entry fixed (t0 >= 2026-10-30, contexts free of the 2026-08-31 EDH outage). IMPLEMENT-as-candidate iff all four hold against lean on the matched-information arm: paired DM on per-observation quantile score one-sided p < 0.10 (HAC 71); FM QS at least 10% better; lower- and upper-side raw coverage each not more than 0.02 worse; mean Winkler <= 1.05x.
+
+**Outcome.** All four pre-committed Stage 1 gates pass against lean, and against full, so EXP-021a Stage 1 passes. Stage 2 passed as EXP-039. Stage 3 is not done: the live shadow continues under docs/hypothesis-log.md [2026-11-07] and EXP-041, and with the [2026-10-28] product criterion that is the FM's route to the dashboard, against the profile rule.
+
+<details><summary>All recorded metrics (26)</summary>
+
+| metric | value |
+|---|---|
+| `n_paired_observations` | 1007 |
+| `fm_quantile_score` | 13.6366 |
+| `lean_quantile_score` | 16.9751 |
+| `full_quantile_score` | 17.7996 |
+| `qs_delta_pct_vs_lean` | -19.6669 |
+| `dm_p_one_sided_vs_lean` | 0.00435634 |
+| `qs_delta_pct_vs_full` | -23.3879 |
+| `dm_p_one_sided_vs_full` | 0.000684115 |
+| `fm_mae` | 38.4964 |
+| `lean_mae` | 47.3334 |
+| `fm_coverage_lower` | 0.920556 |
+| `fm_coverage_upper` | 0.849057 |
+| `fm_coverage_band` | 0.769613 |
+| `lean_coverage_lower` | 0.828203 |
+| `lean_coverage_upper` | 0.761668 |
+| `lean_coverage_band` | 0.589871 |
+| `fm_winkler` | 216.617 |
+| `lean_winkler` | 270.691 |
+| `winkler_ratio` | 0.800237 |
+| `per_vintage_mae_p95_ratio` | 0.889317 |
+| `vintages_fm_lower_mae` | 12 |
+| `live_production_cqr_coverage_band` | 0.704365 |
+| `mean_realized_price` | 257.573 |
+| `stage1_all_gates_pass` | yes |
+| `complete_vintages_only_qs_delta_pct_vs_lean` | -18.57 |
+| `complete_vintages_only_dm_p_one_sided` | 0.00957639 |
+
+</details>
+
+**Caveats.** The comparator is LightGBM, a shadow since ADR-009; nothing here is measured against the profile rule that drives the dashboard, and EXP-036 puts production p50 12.4% behind that floor offline. Scored once. `commits` holds the Method's pin, since a row cannot name its own commit. Window: --start 2026-10-30 --end 2026-11-13. Deviation: 13 vintages have all 72 hours and the 14th (t0 2026-11-12 23:00Z) has 71, its last hour not yet in the snapshot; EXP-038 used the same end convention. On the 13 complete vintages alone all four gates also pass (QS -18.6%, DM p 0.0096; a sensitivity, not the gate read). Tripwire OK (1.81% missing, longest run 24h). The window is a price spike (mean 258 EUR/MWh, max 609), so absolute scores are not comparable with EXP-038's. Gate 2 is read at the entry's 10% bar; the runner's own verdict line uses EXP-021's 3%. Quantile score uses raw quantiles, as in EXP-018 onward; with lean's sorted quantiles the gap is -19.4%. Live production CQR coverage is on t0 22:00Z vintages, one hour before the harness's, across the 2026-11-06 CQR fix. Parquet snapshot ~/lab/augur/data/training_history_2026-11-14.parquet (sadalsuud's of 2026-11-14 20:22 UTC), sha256 dca616d2a8d805a225dddb1d07c1d38fd162b68c9c4a57feed5a89bf94d0d045. Prediction dumps in /home/jeroen/lab/augur/shadow/exp021_stage1*. torch 2.15.0+cpu, chronos-forecasting 2.3.1 in a throwaway venv.
+
+**Artifacts.** `ml/shadow/exp021_stage1/summary.json` · `ml/shadow/exp021_stage1/contexts_meta.json` · `ml/shadow/exp021_stage1/fm_predict_meta.json` · `ml/shadow/exp021_stage1_incumbents/summary.json` · `scripts/exp021_foundation_zeroshot.py`
+
+**Commits.** `6cb2633`
 
 ---

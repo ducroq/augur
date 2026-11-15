@@ -26,13 +26,12 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 >
 > | Entry | Trigger | Status |
 > |---|---|---|
-> | [2026-08-29] EXP-021a Stage 1 | 14 clean vintages (`t0 ≥ 2026-10-30`, after EXP-038's window) | **TRIGGERED**: 14 of 14 as of the 2026-11-14 run (`vintage_counts.py`, 2026-11-15). Read next session; gate vs `lean` per its own Method |
-> | [2026-08-30] EXP-028a | ≥28 vintages | **Deferred 2026-11-06** past the EXP-021a Stage 1 read, since it is moot if that fails; Review by 11-30. Lagged-arm source: the EDH publish archive (see the entry's notes) |
+> | [2026-08-30] EXP-028a | ≥28 vintages | Deferred 2026-11-06 past the EXP-021a Stage 1 read. That read **passed 2026-11-15** (EXP-042), so this is no longer moot; Review by 11-30. Lagged-arm source: the EDH publish archive (see the entry's notes) |
 > | [2026-11-06] CQR on unwidened scores | 28 post-deploy vintages (`t0 ≥ 2026-11-06 22:00`) | fix merged 2026-11-06; live check running. **No slack:** 28 plus two partial vintages fill the 30-day history, so read it the run the 28th is fully realised (the counter's room hits 0) |
 > | [2026-10-28] product criterion | FM Stage 3 shadow reaches 14 vintages | pre-committed; the floor drives the dashboard since 2026-11-07 (ADR-009), so this is the bar to replace it |
 > | [2026-11-07] Stage 3 promotion criterion → **EXP-041** | 14 fully realised FM vintages with live CQR and a shipped profile forecast | skill gate and guardrail moved to the profile rule by EXP-041 (backlog, 2026-11-08); runner `scripts/exp041_fm_vs_profile.py` |
 > >
-> EXP-018a Stage 1 and EXP-023a Stage B are parked and moved to `docs/archive/hypothesis-log-resolved.md`; the [2026-10-28] park entry below holds their revisit trigger.
+> EXP-021a Stage 1 passed 2026-11-15 (EXP-042; Stage 3 continues under [2026-11-07] and EXP-041) and the entry moved to `docs/archive/hypothesis-log-resolved.md`, as did the parked EXP-018a Stage 1 and EXP-023a Stage B; the [2026-10-28] park entry below holds their revisit trigger.
 >
 > Vintage holes: count them at run time; do not trust a list here. Holes since 2026-09-14 have not been enumerated.
 
@@ -163,61 +162,6 @@ bolt_base                reference  (frozen weights, contamination-free anchor)
 **Status:** open — pre-committed 2026-08-30, before any fresh vintage was scored.
 
 **Related evidence (added 2026-10-29, outside the Method, which is unchanged):** Lipiecki & Weron (2026, arXiv:2609.00089; deep-dive `docs/foundation-models-epf-literature-review.md`), DE/PL/ES day-ahead 2021–2025. Two points for this review. **(a) Alternative 1 has a cheap, direct test that this Method doesn't contain:** `Chronos-2-synth`, pretrained on synthetic data only, matches Chronos-2 there (CRPS better in DE and PL, 2% worse in ES). Re-running EXP-028's covariate-vs-univariate pair with it would be contamination-free by construction and could use all 260 stored vintages instead of the 77 after 2026-06-05. **(b) Chronos-2 is not the strongest covariate model:** TabPFN-3 (10–22% better CRPS) and TabPFN-2 (8–19%), tabular and also synthetic-only, beat it in every market (backlog EXP-040). Both are new entries. Day-ahead only, so neither speaks to 25–72h. **(c) Alternative 4's mandatory lagged arm has a source:** `scripts/exp028_chronos2_covariates.py` has no `c2_known_future_lagged` arm yet, but the energydatahub repo archives every EDH publish (`data/YYMMDD_HHMMSS_<feed>.json`, encrypted, from 2025-12-01), so covariates as published at t0 can be rebuilt (found 2026-10-29).
-
-### [2026-08-29] EXP-021a: Chronos-Bolt's 20% zero-shot win survives on fresh vintages, and survives contact with production constraints
-
-**Position (provisional):** EXP-021 (resolved same day) measured `chronos-bolt-base` zero-shot at **-20.3% quantile score and -16% MAE against the lean LightGBM incumbent**, with raw band coverage 0.811 against a 0.80 target where the incumbent sits at 0.611, on 260 paired vintages. Position: this reproduces on vintages that did not exist when it was measured, and the operational objections to running it in production (latency, dependency weight, the loss of a nightly-refit story, no CPU path on sadalsuud) are surmountable rather than disqualifying.
-
-**Why this needs its own pre-commit:** EXP-021's window is the same one EXP-018/019/020 already explored. The usual selection-bias objection is *weaker* here than it was for EXP-018a — a zero-shot arm tunes nothing, so there was no search to overfit with, and the model's weights were frozen 2025-11-21, before the window opens. But "weaker" is not "absent": the window was chosen because it is the one already instrumented, the FM was chosen after a literature scan, and a 20% claim against a production system should clear a fresh-vintage bar at least as high as the 8% one did. Per ADR-007 the confirming test is fixed here, before the confirming data exists and before any production path is touched.
-
-**Alternatives (failure-mode signals):**
-
-1. **The gap is a backtest artifact of exogenous freshness.** The EXP-018 harness reads a parquet whose exogenous rows are overwritten by later vintages (refuted-hypothesis 2026-05-29, ratio 1.84), so the *incumbent* is scored with fresher inputs than the live cron sees — but the incumbent is also the arm that gets hurt if that advantage is removed, and the FM uses no exogenous at all. **Signal:** the gap *widens* on live vintages rather than narrowing. That is a confirmation, not a failure — recorded here so the direction is fixed in advance and cannot be read either way after the fact.
-2. **Latency or footprint makes it undeployable.** 205M params, a torch install, and a GPU-less production host. **Signal:** CPU inference for 1 vintage x 72h exceeds ~60s on sadalsuud's hardware, or the dependency set cannot be installed alongside the existing venv. Then the arm is offline-only — an ensemble member or a band source scored on the GPU box, not the nightly production path.
-3. **Zero-shot skill is unstable vintage-to-vintage.** Pooled means can hide a model that is excellent on 8 days and catastrophic on the 9th, which matters far more for a live dashboard than for a pooled score. **Signal:** the FM's per-vintage MAE distribution has a materially heavier right tail than the incumbent's (95th percentile more than 1.5x the incumbent's 95th). Then the pooled win is not the operationally relevant statistic and a hybrid/guarded design is needed.
-4. **The calibration win does not survive CQR.** EXP-021 compared *raw* bands, where the incumbent is at 0.611 and badly under-covering. Production wraps CQR around it. **Signal:** the incumbent's CQR-widened live coverage (`shadow_state.json:calibration_history`) is comparable to the FM's raw coverage. Then the calibration half of EXP-021 is an artifact of comparing a pre-conformal band to a post-conformal one, and only the skill half stands.
-
-**Method (pre-committed 2026-08-29, before any fresh vintage is scored and before any production path is touched):**
-
-*Stage 1 — fresh-vintage confirmation, offline, zero production risk.* When ≥14 vintages with `t0 ≥ 2026-08-25` exist in the parquet (≈2026-09-09 — the same trigger as EXP-018a Stage 1, which has priority on that window and must run first), re-run all three arms on `t0 ≥ 2026-08-25` only:
-
-```
-PYTHONPATH=. .venv/bin/python scripts/exp021_foundation_zeroshot.py contexts \
-    --start 2026-08-25 --end <first-unrealised-day> --context-end-offset-h 1 \
-    --out ml/shadow/exp021_stage1
-# predict on b650-gpu, then:
-PYTHONPATH=. .venv/bin/python scripts/exp021_foundation_zeroshot.py score \
-    --out ml/shadow/exp021_stage1 --incumbents <fresh full/lean predictions>
-```
-
-Incumbent = whichever base EXP-018a Stage 1 leaves standing (`lean` if it passes, `full` if it fails); if EXP-018a has not concluded, the primary gate stays against `lean`, the harder bar, exactly as in EXP-021. **The matched-information arm (`--context-end-offset-h 1`) is the one that counts**; the unmatched arm is not run again. IMPLEMENT-as-candidate iff all four hold:
-
-1. **Skill:** paired DM on per-observation quantile score, H1 FM better, one-sided **p < 0.10**, HAC bandwidth 71.
-2. **Effect size survives:** FM QS at least **10% better** than the incumbent. Deliberately higher than EXP-018a's 3%: the in-sample effect is 20%, and a bar of 3% would let a 90%-shrunken result pass as confirmation.
-3. **Calibration:** FM lower- and upper-side coverage each **not more than 0.02 worse** than the incumbent (raw quantiles, no CQR, both arms).
-4. **Sharpness:** FM mean Winkler (α=0.20) **≤ 1.05 ×** incumbent.
-
-*Stage 2 — operational feasibility, gated on Stage 1 and decided on measurement, not preference.* Only if Stage 1 passes. Measure, on sadalsuud's actual hardware: (a) CPU-only wall-clock for one 1344-point context x 72h forecast, 10 runs, report median and max; (b) venv size delta and whether `torch` installs cleanly alongside the existing pins; (c) a 14-day replay of per-vintage MAE distributions for Alternative 3's tail check. Feasible iff median CPU latency ≤60s **and** the p95 per-vintage MAE ratio (FM ÷ incumbent) ≤1.5. Infeasible on latency alone → the FM becomes an offline band source for augur#19 rather than the production forecaster, which is a smaller but still real win.
-
-*Stage 3 — shadow, then swap.* Only if Stages 1 and 2 pass. The FM runs as a **shadow** alongside production LightGBM for **14 evaluable vintages**, written to a separate output file, dashboard untouched — the same shape as the original LightGBM shadow that produced ADR-006, and for the same reason: EXP-014's promotion was earned by a live shadow, not a backtest, and this one will be too. Promotion criterion at that point is ADR-007's, re-derived against whatever the incumbent then is; ADR-006 is amended only after a live swap, never before.
-
-**Addendum 2026-11-07 (Stage 3 build: a deviation from the Method, whose text stands):**
-- **Order: deviation.** The Method runs Stage 3 "only if Stages 1 and 2 pass". By the engineer's call of 2026-11-06 the shadow starts before Stage 1 reads, so it starts collecting vintages while Stage 1 waits for its 14. What still holds is narrower than the Method: no swap unless Stage 1 passes as written. A failed Stage 1 stops the shadow.
-- **Overlap.** The first shadow vintages fall inside Stage 1's window. Same frozen model, same hours, so they aren't independent evidence.
-- **Context: deviation.** `update_fm.py` keeps the offset and length EXP-038/039 measured (ends at t0 − 1h, prediction length 73), but on price rows only. EXP-038 also dropped rows with exogenous NaNs, which the FM doesn't read, so this isn't EXP-021's exact matched row set and it can hold a few more prices than the incumbent's (median 18 per context across EXP-038's 60 vintages, maximum 18, and for some vintages all 18 fall in the last week).
-- **Read.** `fm_state.json` keeps 30 days, and FM regret lands in `ml/shadow/fm_regret_log.jsonl`, separate from production's log. The promotion criterion, which excludes cold-start vintages, is the [2026-11-07] entry.
-
-**What is explicitly not decided by this entry:** whether Augur's production forecaster *should* be a 205M-parameter pretrained model rather than a 1344-row nightly refit is a question about operational surface, reproducibility and the project's ability to debug its own forecasts — not only about quantile score. Stage 3 is where that judgement gets made, with a live shadow in hand. Recording it here so a strong Stage 1 does not read as having settled it.
-
-**Revisit trigger:** ≥14 vintages with `t0 ≥ 2026-08-25` in the parquet — ≈2026-09-09, **after** EXP-018a Stage 1 has run on the same window. Surface in `/curate`.
-
-**Review by:** 2026-10-15.
-
-**Domain:** EXP-021a, augur#15 (foundation models), augur#19 (calibration), model class, ADR-006, ADR-007.
-
-**Status:** open — pre-committed 2026-08-29 immediately after EXP-021 resolved, before any production path was touched.
-
-**Note added 2026-11-06 (Method unchanged):** the CQR fix in [2026-11-06] shifts CQR-widened live coverage at its deploy date, so read Alternative 4's signal across that date with care. The Stage 1 gate uses raw bands and is unaffected.
 
 ---
 

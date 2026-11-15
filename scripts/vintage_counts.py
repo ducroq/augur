@@ -13,8 +13,6 @@ Definitions (each from its entry's Method):
 - fully realised: 72 unique `timestamp_utc` with a non-null `realized`, after
   keeping the last row per (`eval_day`, `timestamp_utc`). `eval_day` labels the
   vintage, one per `t0`.
-- [2026-08-29] EXP-021a Stage 1: fully realised, `t0` >= 2026-10-30 (after
-  EXP-038's window, which ends at `t0` 2026-10-28). Target 14.
 - [2026-11-06] CQR live check: fully realised, `t0` >= 2026-11-06 22:00 UTC, the
   first run after the fix (4854b4e). Target 28.
 - EXP-041 (the FM gate since 2026-11-08; also the [2026-10-28] product
@@ -102,7 +100,6 @@ def main() -> None:
                         if l.strip()})
 
     rows = [
-        ("[2026-08-29] EXP-021a Stage 1", *count_t0_since(prod, "2026-10-30"), 14),
         ("[2026-11-06] CQR live check", *count_t0_since(prod, "2026-11-06T22:00"), 28),
         ("[2026-11-07] FM paired with LightGBM (reported only)", *count_fm_paired(fm, prod), 14),
     ]
