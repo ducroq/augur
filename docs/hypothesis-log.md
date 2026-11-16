@@ -29,8 +29,6 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 > | [2026-08-30] EXP-028a | ≥28 vintages | Deferred 2026-11-06 past the EXP-021a Stage 1 read. That read **passed 2026-11-15** (EXP-042), so this is no longer moot; Review by 11-30. Lagged-arm source: the EDH publish archive (see the entry's notes) |
 > | [2026-11-06] CQR on unwidened scores | 28 post-deploy vintages (`t0 ≥ 2026-11-06 22:00`) | fix merged 2026-11-06; live check running. **No slack:** 28 plus two partial vintages fill the 30-day history, so read it the run the 28th is fully realised (the counter's room hits 0) |
 > | [2026-10-28] product criterion | FM Stage 3 shadow reaches 14 vintages | pre-committed; the floor drives the dashboard since 2026-11-07 (ADR-009), so this is the bar to replace it |
-> >
-> EXP-021a Stage 1 passed 2026-11-15 (EXP-042; Stage 3 continues under EXP-041, which replaced [2026-11-07]'s gate; that entry was archived as superseded on 2026-11-16) and the entry moved to `docs/archive/hypothesis-log-resolved.md`, as did the parked EXP-018a Stage 1 and EXP-023a Stage B; the [2026-10-28] park entry below holds their revisit trigger.
 >
 > Vintage holes: count them at run time; do not trust a list here. Holes since 2026-09-14 have not been enumerated.
 

@@ -68,6 +68,8 @@ PRECOMMIT_REV_BY_ID = {
     "EXP-040": "d53af7a",
     "EXP-040/addendum-2026-10-29": "47b2f16",
     "EXP-041": "db18a39",
+    "EXP-043": "4b604d8",
+    "EXP-044": "4b604d8",
 }
 BACKLOG = "docs/experiment-backlog.md"
 # Executed entries retire here, bytes unchanged. It is a location for HEAD and
