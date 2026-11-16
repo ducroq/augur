@@ -143,3 +143,12 @@ Ask: answer infra-f3's home-cleanup questions (sadalsuud, then b650-gpu). It gre
 - Closed: diagnosis; augur#39 built, reviewed (Codex ×3 + a Claude lens; 1 blocker fixed: a commit made but not pushed counted as done), deployed and smoke-tested (`eb25a21`, `82cc1ca`); heartbeat subject-only selection (same commit); old pre-FM venv deleted on sadalsuud; Fable-day nominations sent to infra (ARF retirement: skipped; EXP-021a Stage 1: pending).
 - Partial: augur#39's boot trigger has never fired. On systemd 255 a timer restart doesn't fire an elapsed `OnBootSec`, so only a real boot proves it.
 - Not ours: augur#40 (6 unclean resets since 2026-09-04, idle and cool, no MCE, no watchdog; suspects are the power brick/supply, then the Ryzen idle reset). Needs the engineer at the box; plan in the issue.
+
+## 2026-11-15/16: Fable day, EXP-021a Stage 1 read, read-surface check
+
+**Ask**: "it is fable day, enjoy it" (atlas task 5b: the EXP-021a Stage 1 formal read), then wrap up.
+
+**Threads**
+- Closed: Stage 1 scored once and passed (EXP-042, `5bac1a0`); entry archived; atlas told at start and done. `scripts/read_surface.sh` + 10 tests (`5bdfbef`). Two Codex passes, 3 findings fixed. augur#15 commented.
+- Open: read surface 125.7k against 100k; backlog first (queue item 2a).
+- Not ours: augur#40 power visit, the NAS check (queue item 0).
