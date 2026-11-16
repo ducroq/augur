@@ -12,7 +12,7 @@ pre-commitment record has none of its own.
 
 | Tier | File patterns | Depth |
 |------|-------------|-------|
-| **HIGH** | `.gitignore`, `/netlify.toml`, `/hugo.toml`, `/requirements.lock`, `/requirements.txt`, `/requirements-netlify.txt`, `/decrypt_data_cached.py`, `utils/secure_data_handler.py`, `scripts/*.sh`, `scripts/notify_email.py`, `scripts/systemd/**`, `scripts/audit_registry.py`, `scripts/render_results.py`, `ml/shadow/*.py`, `ml/data/consolidate.py`, `ml/update.py`, `static/js/**`, `layouts/**`, `experiments/registry.jsonl`, `docs/experiment-backlog.md`, `docs/archive/experiment-backlog-run.md`, `docs/hypothesis-log.md`, `docs/experiment-results.md`, `docs/experiment-results-detail.md`, `.claude/review-profile.md` | Full battery (3-4 lenses) |
+| **HIGH** | `.gitignore`, `/netlify.toml`, `/hugo.toml`, `/requirements.lock`, `/requirements.txt`, `/requirements-netlify.txt`, `/decrypt_data_cached.py`, `utils/secure_data_handler.py`, `scripts/*.sh`, `scripts/notify_email.py`, `scripts/systemd/**`, `scripts/audit_registry.py`, `scripts/render_results.py`, `ml/shadow/*.py`, `ml/data/consolidate.py`, `ml/update.py`, `static/js/**`, `layouts/**`, `experiments/registry.jsonl`, `docs/experiment-backlog.md`, `docs/archive/experiment-backlog-run.md`, `docs/archive/experiment-backlog-parked.md`, `docs/hypothesis-log.md`, `docs/experiment-results.md`, `docs/experiment-results-detail.md`, `.claude/review-profile.md` | Full battery (3-4 lenses) |
 | **MEDIUM** | `ml/**`, `scripts/**`, `tests/**`, `utils/**`, `static/**`, `content/**`, `config/**`, `experiments/**`, `.github/**`, `/requirements*.txt`, `/package*.json`, `docs/decisions/**`, `docs/RUNBOOK.md`, `/CLAUDE.md` | Two lenses (adversarial + doc-accuracy) |
 | **LOW** | `memory/**`, `docs/**`, `/README.md`, `/LICENSE` | One lens (adversarial) |
 
@@ -60,13 +60,14 @@ MEDIUM. A hand edit to them is a carve-out below.
 - `static/js/**`, `layouts/**`: times are rendered with `Intl.DateTimeFormat` and
   `timeZone: 'Europe/Amsterdam'`, never a fixed offset. The swap point stays
   `dashboard.js:loadAugurForecast`.
-- `docs/experiment-backlog.md`, `docs/archive/experiment-backlog-run.md`, `docs/hypothesis-log.md`: **a pre-committed Method body is
+- `docs/experiment-backlog.md`, `docs/archive/experiment-backlog-run.md`, `docs/archive/experiment-backlog-parked.md`, `docs/hypothesis-log.md`: **a pre-committed Method body is
   never edited once committed.** A changed method is a new, dated entry. In the hypothesis
   log, dated notes and addenda may follow a Method. In the backlog, check 5 hashes the
   **whole** `## EXP-NNN` section, so anything added later goes in a section of its own
   (`## Addendum YYYY-MM-DD to EXP-NNN`), which check 5 hashes and which must be pinned in
-  `PRECOMMIT_REV_BY_ID` too. Check 5 covers the backlog and its archive, where executed
-  entries retire unedited; the hypothesis log rests on review.
+  `PRECOMMIT_REV_BY_ID` too. Check 5 covers the backlog and its two archives: executed
+  entries retire unedited to `-run.md`, and unrun entries that are not next wait unedited in
+  `-parked.md` (2026-11-16). The hypothesis log has check 6.
 - `experiments/registry.jsonl`, `scripts/audit_registry.py`, `scripts/render_results.py`: the
   registry is append-only for decided experiments. The audit exits non-zero on drift,
   including check 5, the sha256 of backlog Method bodies. `docs/experiment-results.md` and
@@ -101,17 +102,17 @@ is new.
 - `ml/models/shadow/shadow_state.json`, `ml/models/state.json`: a hand edit (anything not
   committed by the nightly job) rewrites calibration history, t0 hold-back state or the
   surcharge cache that production reads.
-- **Any edit inside an existing Method block** (the paragraph opening with `**Method**`) of `docs/experiment-backlog.md`, `docs/archive/experiment-backlog-run.md` or
+- **Any edit inside an existing Method block** (the paragraph opening with `**Method**`) of `docs/experiment-backlog.md`, `docs/archive/experiment-backlog-run.md`, `docs/archive/experiment-backlog-parked.md` or
   `docs/hypothesis-log.md`, however small: one changed number in a gate is a moved goalpost.
 
 ## Project lenses
 
-- `pre-commitment` — fires on: `docs/experiment-backlog.md`, `docs/archive/experiment-backlog-run.md`, `docs/hypothesis-log.md`,
+- `pre-commitment` — fires on: `docs/experiment-backlog.md`, `docs/archive/experiment-backlog-run.md`, `docs/archive/experiment-backlog-parked.md`, `docs/hypothesis-log.md`,
   `experiments/registry.jsonl`
   *You are checking the integrity of pre-registered experiments (ADR-007). (1) Diff every
   Method, Gates and Alternatives block that existed at the baseline: report any byte that
   changed inside one as REFUTED. In the hypothesis log, notes added after a block are fine.
-  In the backlog, any change inside an existing `## EXP-NNN` section is REFUTED, because
+  In the backlog and its two archives, any change inside an existing `## EXP-NNN` section is REFUTED, because
   check 5 hashes the whole section. Also check that every new backlog entry is pinned in
   `PRECOMMIT_REV_BY_ID` to a commit that stays reachable (not amended, rebased or left
   unpushed). (2) For each new pre-commit, check that it can actually be decided before data is
@@ -150,6 +151,6 @@ The full battery runs only when the diff touches a guarantee surface (above), an
 
 ## Project procedure kept with the profile
 
-When `experiments/`, `docs/experiment-backlog.md`, `docs/archive/experiment-backlog-run.md`, `docs/hypothesis-log.md` or
+When `experiments/`, `docs/experiment-backlog.md`, `docs/archive/experiment-backlog-run.md`, `docs/archive/experiment-backlog-parked.md`, `docs/hypothesis-log.md` or
 `docs/experiment-results*.md` changed, run the two checks in **Test baseline** before the
 lenses. Both exit non-zero on drift, and a lens should not spend tokens on what they settle.

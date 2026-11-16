@@ -22,7 +22,7 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 | **Parsing or changing EDH data** | `memory/data-formats.md` (schema v2.2 envelope, units, timezones) |
 | **Deployment, build pipeline, alarms** | `docs/RUNBOOK.md`: Netlify build, `--force`, every `[ALARM:]`/`[NOTE:]` marker symptom by symptom |
 | **Making or parking a decision** | ADRs → `docs/decisions/`. Provisional positions → `docs/hypothesis-log.md` (`## Open` starts with a dated trigger table; resolved entries in `docs/archive/hypothesis-log-resolved.md`). Citations → `docs/literature.md`. |
-| **Session rhythm** | Before committing structural changes: `/review-changes` (tiers, guarantees and lenses in `.claude/review-profile.md`; `/code-review` is an optional extra pass for code bugs), then `python -m pytest tests/`. If `experiments/`, `docs/experiment-backlog.md` (or its archive `docs/archive/experiment-backlog-run.md`), `docs/hypothesis-log.md` or `docs/experiment-results.md` changed, also run `scripts/audit_registry.py` and `scripts/render_results.py --check` (both exit non-zero on drift). Ending a session: `/curate`. Monthly: `/audit-context`, then `/update-drift`. |
+| **Session rhythm** | Before committing structural changes: `/review-changes` (tiers, guarantees and lenses in `.claude/review-profile.md`; `/code-review` is an optional extra pass for code bugs), then `python -m pytest tests/`. If `experiments/`, `docs/experiment-backlog.md` (or its archives `docs/archive/experiment-backlog-{run,parked}.md`), `docs/hypothesis-log.md` or `docs/experiment-results.md` changed, also run `scripts/audit_registry.py` and `scripts/render_results.py --check` (both exit non-zero on drift). Ending a session: `/curate`. Monthly: `/audit-context`, then `/update-drift`. |
 
 ## Hard Constraints
 
@@ -93,7 +93,7 @@ Browser: 5 tabs (Prices, Weather, Grid, Market, Model); augur_forecast_profile.j
 | `scripts/read_surface.sh` | Size of the live docs against the 100k-char ceiling; exits 1 over it |
 | `scripts/check_gate_lag.sh` | The only detector for gate lag (augur#34); run over ssh with `bash -s` |
 | `scripts/heartbeat_check.sh`, `alert_failure.sh`, `notify_email.py`, `daily_slot_done.sh`, `scripts/systemd/` | Alerting, the boot catch-up guard (augur#39) and the canonical units (install/rollback in its README) |
-| `experiments/registry.jsonl`, `scripts/audit_registry.py`, `scripts/render_results.py` | Experiment record (EXP-001..042; EXP-040 and EXP-041 are pre-committed in the backlog, not yet run), its auditor (check 6 also pins hypothesis-log Methods), the generated digest |
+| `experiments/registry.jsonl`, `scripts/audit_registry.py`, `scripts/render_results.py` | Experiment record (EXP-001..042; EXP-040 and EXP-041 are pre-committed, not yet run: 041 in the backlog, 040 parked in `docs/archive/experiment-backlog-parked.md`), its auditor (check 6 also pins hypothesis-log Methods), the generated digest |
 | `scripts/exp0NN_*.py` | One runner per experiment; each docstring states its pre-commitment and host |
 | `ml/shadow/expNNN_*/summary.json` | Committed experiment records. Gitignored dumps next to them are **links into `/home/jeroen/lab/augur/shadow/`**. They aren't byte-reproducible, so treat them as data |
 | `scripts/link_lab.sh` | Recreates the lab links after `git clean -xfd` or in a new worktree. To adopt a new experiment's dumps, move them into the lab tree at the same relative path, then rerun |

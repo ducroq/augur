@@ -159,7 +159,7 @@ our QS magnitudes with their CRPS numbers.
    contamination-free re-run of the covariate arm across all 260 vintages, and
    TabPFN as the second covariate challenger. Both are outside the frozen
    Method, so both need new entries.
-2. **EXP-040 (backlog)**: TabPFN-2 (shippable if its license allows) and
+2. **EXP-040 (pre-committed; parked in `docs/archive/experiment-backlog-parked.md`)**: TabPFN-2 (shippable if its license allows) and
    TabPFN-3 (research arm) with covariates, on stored vintages, scored per
    horizon block against the profile floor. The open question it answers is
    whether a tabular in-context model keeps diurnal amplitude beyond 24h.

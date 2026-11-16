@@ -73,6 +73,13 @@ class TestMergedSections:
         _, dup = audit.merged_sections(HEADER + ENTRY_A, HEADER + ENTRY_A)
         assert dup == ["EXP-101"]
 
+    def test_a_third_home_merges_and_reports_like_the_second(self):
+        here, _ = audit.merged_sections(HEADER + ENTRY_A + "\n---\n\n" + ENTRY_B, "", "")
+        split, dup = audit.merged_sections(HEADER, HEADER + ENTRY_A, HEADER + ENTRY_B)
+        assert here == split and dup == []
+        _, dup = audit.merged_sections(HEADER, HEADER + ENTRY_A, HEADER + ENTRY_A)
+        assert dup == ["EXP-101"], "a copy in the run archive and the parked file is a duplicate too"
+
 
 class TestCheckFiveAcrossTheArchive:
     """Seeded positives, run against a real git repo.
@@ -97,6 +104,7 @@ class TestCheckFiveAcrossTheArchive:
         (tmp_path / "docs" / "archive").mkdir(parents=True)
         backlog = tmp_path / audit.BACKLOG
         archive = tmp_path / audit.BACKLOG_ARCHIVE
+        parked = tmp_path / audit.BACKLOG_PARKED
         git("init", "-q")
         backlog.write_text(HEADER + ENTRY_A)
         base = commit("pre-commit A")
@@ -105,7 +113,8 @@ class TestCheckFiveAcrossTheArchive:
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(audit, "PRECOMMIT_REV", base)
         monkeypatch.setattr(audit, "PRECOMMIT_REV_BY_ID", {"EXP-102": pin})
-        return SimpleNamespace(backlog=backlog, archive=archive, commit=commit)
+        return SimpleNamespace(backlog=backlog, archive=archive, parked=parked,
+                               commit=commit)
 
     @staticmethod
     def run():
@@ -161,12 +170,86 @@ class TestCheckFiveAcrossTheArchive:
         repo.archive.write_text(HEADER + ENTRY_A)
         ok, fails = self.run()
         assert not ok and fails == [
-            f"EXP-101: in both {audit.BACKLOG} and {audit.BACKLOG_ARCHIVE}"]
+            f"EXP-101: appears more than once across {audit.BACKLOG}, "
+            f"{audit.BACKLOG_ARCHIVE}, {audit.BACKLOG_PARKED}"]
 
     def test_the_archive_cannot_establish_a_baseline(self, repo):
         """An entry that first appears in the archive was never pre-committed."""
         repo.archive.write_text(HEADER + "## EXP-103 — late\n\nWritten after.\n")
         repo.commit("archive only")
+        ok, fails = self.run()
+        assert not ok and "EXP-103: no Method body at its pre-commit" in fails[0]
+
+    # The parked file (pre-committed, not next) has the run archive's standing.
+
+    def test_parking_an_unrun_entry_passes(self, repo):
+        repo.backlog.write_text(HEADER + ENTRY_A)
+        repo.parked.write_text(HEADER + ENTRY_B)
+        assert self.run() == (True, [])
+        repo.commit("park EXP-102")
+        assert self.run() == (True, [])
+
+    def test_an_edit_while_parking_fails(self, repo):
+        repo.backlog.write_text(HEADER + ENTRY_A)
+        repo.parked.write_text(HEADER + ENTRY_B.replace("other thing", "another thing"))
+        ok, fails = self.run()
+        assert not ok and "EXP-102: Method body EDITED in the working tree" in fails[0]
+
+    def test_an_edit_committed_in_the_parked_file_fails(self, repo):
+        repo.backlog.write_text(HEADER + ENTRY_A)
+        repo.parked.write_text(HEADER + ENTRY_B)
+        repo.commit("park")
+        repo.parked.write_text(HEADER + ENTRY_B.replace("other thing", "another thing"))
+        repo.commit("edit")
+        ok, fails = self.run()
+        assert not ok and "EXP-102: Method body EDITED since" in fails[0]
+
+    def test_deleting_the_parked_file_fails(self, repo):
+        repo.backlog.write_text(HEADER + ENTRY_A)
+        repo.parked.write_text(HEADER + ENTRY_B)
+        repo.commit("park")
+        repo.parked.unlink()
+        repo.commit("delete")
+        ok, fails = self.run()
+        assert not ok and "EXP-102: Method body EDITED since" in fails[0]
+
+    def test_a_copy_in_the_run_archive_and_the_parked_file_fails(self, repo):
+        repo.backlog.write_text(HEADER + ENTRY_B)
+        repo.archive.write_text(HEADER + ENTRY_A)
+        repo.parked.write_text(HEADER + ENTRY_A)
+        ok, fails = self.run()
+        assert not ok and fails[0].startswith("EXP-101: appears more than once across")
+
+    def test_two_copies_in_one_file_fail(self, repo):
+        """The parser keeps the last copy, so an edited first one would go unhashed."""
+        edited = ENTRY_B.replace("other thing", "another thing")
+        for target in (repo.backlog, repo.parked):
+            repo.backlog.write_text(HEADER + ENTRY_A)
+            target.write_text((HEADER + ENTRY_A if target is repo.backlog else HEADER)
+                              + "\n---\n\n" + edited + "\n---\n\n" + ENTRY_B)
+            ok, fails = self.run()
+            assert not ok and fails[0].startswith("EXP-102: appears more than once"), target
+            repo.parked.unlink(missing_ok=True)
+
+    def test_an_unreadable_home_at_head_fails_closed(self, repo, monkeypatch):
+        """A `git show` that fails on a file HEAD does hold is not an absent file."""
+        repo.backlog.write_text(HEADER + ENTRY_A)
+        repo.parked.write_text(HEADER + ENTRY_B)
+        repo.commit("park")
+        real = subprocess.run
+
+        def flaky(cmd, *a, **kw):
+            if cmd[:2] == ["git", "show"] and cmd[2] == f"HEAD:{audit.BACKLOG_PARKED}":
+                raise subprocess.CalledProcessError(128, cmd)
+            return real(cmd, *a, **kw)
+
+        monkeypatch.setattr(audit.subprocess, "run", flaky)
+        ok, fails = self.run()
+        assert not ok and "check 5 did not run" in fails[0]
+
+    def test_the_parked_file_cannot_establish_a_baseline(self, repo):
+        repo.parked.write_text(HEADER + "## EXP-103 — late\n\nWritten after.\n")
+        repo.commit("parked only")
         ok, fails = self.run()
         assert not ok and "EXP-103: no Method body at its pre-commit" in fails[0]
 

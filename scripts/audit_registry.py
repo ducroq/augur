@@ -21,9 +21,11 @@ Six checks:
   5. PRECOMMIT   for entries pre-committed in `docs/experiment-backlog.md`, the
                  Method body at the pre-commit revision is byte-identical to
                  HEAD, proving no Method was edited after its result landed.
-                 An executed entry may live in the backlog or in
-                 `docs/archive/experiment-backlog-run.md`, never both; the
-                 baseline is always read from the backlog at the pin.
+                 An entry lives in exactly one home: the backlog,
+                 `docs/archive/experiment-backlog-run.md` once executed, or
+                 `docs/archive/experiment-backlog-parked.md` while it is
+                 pre-committed but not next. The baseline is always read
+                 from the backlog at the pin.
 
   6. HYPOTHESIS  every pre-committed Method in `docs/hypothesis-log.md` and its
                  archive is byte-identical to its pin (`HYPOTHESIS_PINS`): the
@@ -72,6 +74,11 @@ BACKLOG = "docs/experiment-backlog.md"
 # the working tree only: baselines stay in BACKLOG at the pin, so nothing written
 # to the archive can establish a pre-commitment.
 BACKLOG_ARCHIVE = "docs/archive/experiment-backlog-run.md"
+# Pre-committed entries that are not next wait here, bytes unchanged, so the
+# backlog holds only what is live (added 2026-11-16 for the read-surface
+# ceiling). Same standing as the run archive: a location, never a baseline.
+BACKLOG_PARKED = "docs/archive/experiment-backlog-parked.md"
+BACKLOG_OTHER_HOMES = (BACKLOG_ARCHIVE, BACKLOG_PARKED)
 
 # Registry artifact paths whose file was later moved to docs/archive/ (the
 # registry is append-only, so the old path stays in it). Check 3 resolves the
@@ -137,6 +144,15 @@ def traceable(v, pool):
     return False
 
 
+def _section_key(head):
+    """`EXP-NNN`, `EXP-NNN/addendum-DATE`, or None for any other `## ` heading."""
+    m = re.match(r"(EXP-\d+)", head)
+    # A dated addendum supersedes part of a pinned Method, so it is
+    # hashed and pinned like one: `## Addendum YYYY-MM-DD to EXP-NNN …`.
+    a = re.match(r"Addendum (\d{4}-\d{2}-\d{2}) to (EXP-\d+)", head)
+    return m.group(1) if m else f"{a.group(2)}/addendum-{a.group(1)}" if a else None
+
+
 def method_sections(text):
     """Map EXP id -> its section body, independent of what follows it.
 
@@ -151,11 +167,7 @@ def method_sections(text):
     out = {}
     for part in re.split(r"\n## ", text)[1:]:
         head = part.split("\n", 1)[0].strip()
-        m = re.match(r"(EXP-\d+)", head)
-        # A dated addendum supersedes part of a pinned Method, so it is
-        # hashed and pinned like one: `## Addendum YYYY-MM-DD to EXP-NNN …`.
-        a = re.match(r"Addendum (\d{4}-\d{2}-\d{2}) to (EXP-\d+)", head)
-        key = m.group(1) if m else f"{a.group(2)}/addendum-{a.group(1)}" if a else None
+        key = _section_key(head)
         if key:
             body = part.rstrip()
             if body.endswith("---"):
@@ -272,14 +284,23 @@ def check_hypothesis_methods(fails, warns):
             fails.append(f"hypothesis [{k}]: Method EDITED in the working tree since pin {rev}")
 
 
-def merged_sections(backlog_text, archive_text):
-    """Sections across both homes, plus the ids found in both.
+def merged_sections(backlog_text, *other_texts):
+    """Sections across every home, plus the ids found in more than one.
 
     A duplicate is reported, not resolved: picking a winner would let the copy
     that was not hashed carry an edit.
     """
-    live, run = method_sections(backlog_text), method_sections(archive_text)
-    return {**run, **live}, sorted(set(live) & set(run))
+    merged, dups = {}, set()
+    for text in (*other_texts, backlog_text):
+        found = method_sections(text)
+        dups |= set(found) & set(merged)
+        # Twice in ONE file too: method_sections keeps the last copy, so an
+        # edited first copy would otherwise go unhashed.
+        heads = [h for h in (_section_key(part.split("\n", 1)[0].strip())
+                             for part in re.split(r"\n## ", text)[1:]) if h]
+        dups |= {h for h in heads if heads.count(h) > 1}
+        merged.update(found)
+    return merged, sorted(dups)
 
 
 def check_precommit(fails, warns):
@@ -292,25 +313,40 @@ def check_precommit(fails, warns):
                 capture_output=True, text=True, check=True).stdout)
 
         cache = {PRECOMMIT_REV: sections_at(PRECOMMIT_REV)}
-        # No archive at HEAD is legal (it predates the file). Should it vanish
-        # later, its entries read as empty below and fail as EDITED.
-        arch = subprocess.run(["git", "show", f"HEAD:{BACKLOG_ARCHIVE}"],
-                              capture_output=True, text=True)
+        # A home absent at HEAD is legal (the entries predate the file).
+        # Should it vanish later, its entries read as empty below and fail
+        # as EDITED. Absence is asked of the tree, so that a `git show` that
+        # fails for any other reason raises and fails the check, where it
+        # used to read as an empty file and could hide a duplicate.
+        def other_at_head(path):
+            listed = subprocess.run(["git", "ls-tree", "--full-tree", "--name-only", "HEAD", "--", path],
+                                    capture_output=True, text=True, check=True).stdout
+            if not listed.strip():
+                return ""
+            return subprocess.run(["git", "show", f"HEAD:{path}"],
+                                  capture_output=True, text=True, check=True).stdout
+
         b, dup_b = merged_sections(
             subprocess.run(["git", "show", f"HEAD:{BACKLOG}"],
                            capture_output=True, text=True, check=True).stdout,
-            arch.stdout if arch.returncode == 0 else "")
+            *(other_at_head(p) for p in BACKLOG_OTHER_HOMES))
         # The working tree too: the audit runs BEFORE committing, when HEAD
         # cannot show an uncommitted edit to a pinned Method.
         with open(BACKLOG) as fh:
             live_text = fh.read()
-        arch_text = ""
-        if os.path.exists(BACKLOG_ARCHIVE):
-            with open(BACKLOG_ARCHIVE) as fh:
-                arch_text = fh.read()
-        w, dup_w = merged_sections(live_text, arch_text)
+        other_texts = []
+        for path in BACKLOG_OTHER_HOMES:
+            # Only a missing file is an empty home; an unreadable one raises.
+            try:
+                with open(path) as fh:
+                    text = fh.read()
+            except FileNotFoundError:
+                text = ""
+            other_texts.append(text)
+        w, dup_w = merged_sections(live_text, *other_texts)
         for k in sorted(set(dup_b) | set(dup_w)):
-            fails.append(f"{k}: in both {BACKLOG} and {BACKLOG_ARCHIVE}")
+            fails.append(f"{k}: appears more than once across {BACKLOG}, "
+                         f"{', '.join(BACKLOG_OTHER_HOMES)}")
             precommit_ok = False
         for k in sorted(set(w) - set(b)):
             if k not in PRECOMMIT_REV_BY_ID:

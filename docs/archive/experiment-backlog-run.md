@@ -4,7 +4,7 @@ Pre-commitments that have been executed, retired here from `docs/experiment-back
 
 Every section below is byte-identical to its pre-commit revision, and `scripts/audit_registry.py` check 5 still proves it: the baseline comes from the backlog at the pinned revision and the current text from here. **Nothing in a section may change.** The rules are in `docs/experiment-backlog.md`.
 
-Moved with them, verbatim, is the backlog preamble these entries were written under. **It is a record, not current status.** Its "below" means this file, and its dates and statuses are as of writing, so EXP-036 still reads "not run". Its framing describes the 2026-08-29 batch; EXP-036 and EXP-037 came later. Its table also lists EXP-034 and EXP-040, which are still open and live in the backlog.
+Moved with them, verbatim, is the backlog preamble these entries were written under. **It is a record, not current status.** Its "below" means this file, and its dates and statuses are as of writing, so EXP-036 still reads "not run". Its framing describes the 2026-08-29 batch; EXP-036 and EXP-037 came later. Its table also lists EXP-034 and EXP-040, which are still open; since 2026-11-16 they wait in `docs/archive/experiment-backlog-parked.md`.
 
 **Written 2026-08-29**, immediately after EXP-021 (foundation model beats the incumbent by 20.3% QS) and EXP-022 (~12 of those points are pretrained prior, ~8 are context volume; the calibration half is *entirely* prior). Every entry below descends from those two results.
 
