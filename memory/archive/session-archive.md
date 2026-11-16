@@ -5,6 +5,13 @@
      Moved out of memory/MEMORY.md 2026-09-06 — it is history, not current state,
      and the index is read at every session start. Nothing here was edited. -->
 
+## Closed 2026-11-16 (third session)
+
+Ask: a Tweakers article on the Nymo boiler controller (dynamic-price mode from Dec 2026), then wrap up, prune, curate, commit, push. Threads:
+- **Closed:** EXP-043/044 (similar-day route) reviewed in two rounds (Codex 44k + 38k tokens, Opus 105k, Sonnet 82k; a `hac_lags` 3 → 5 blocker and four warnings fixed before freezing), committed `4b604d8`, pinned and parked `338f5e9`; augur#44. Nymo-derived candidates (gas-parity threshold criterion, fixed clock-window regret floor) filed as augur#43, not pre-committed.
+- **Closed:** read surface 125.3k → 98.9k chars (`read_surface.sh` exits 0): entries parked, hypothesis [2026-11-07] archived, 9 Mechanized rows, the deployed CQR gotcha and three process notes moved to archives.
+- **Open:** framework drift (`curate` differs from v1.52.2) → `/update-drift`. Consumer price-steering apps are kept as a reference in auto-memory (`consumer-price-steering-apps`).
+
 ## Closed 2026-11-10
 
 Ask: "continue" (queue items 0 and 1), then wrap up, curate, commit and push. Threads:
