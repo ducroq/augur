@@ -152,3 +152,12 @@ Ask: answer infra-f3's home-cleanup questions (sadalsuud, then b650-gpu). It gre
 - Closed: Stage 1 scored once and passed (EXP-042, `5bac1a0`); entry archived; atlas told at start and done. `scripts/read_surface.sh` + 10 tests (`5bdfbef`). Two Codex passes, 3 findings fixed. augur#15 commented.
 - Open: read surface 125.7k against 100k; backlog first (queue item 2a).
 - Not ours: augur#40 power visit, the NAS check (queue item 0).
+
+## 2026-11-16 (second session): backlog prune with cheaper models
+
+**Ask**: pipeline-atlas relayed the engineer's wish to offload work to Opus, Sonnet, Codex and Vibe; then "go", a relayed wind-down, and a wrap-up with merge and push.
+
+**Threads**
+- Closed: parked-entries file as a third home for check 5 (EXP-034, EXP-040 + addendum moved byte-identical); backlog 27.0k -> 7.7k chars. Review: Codex adversarial (1 blocker: a failed `git show` read as absence; fixed), Opus guarantee + pre-commitment, Sonnet doc-accuracy, then one Codex pass on the fixes. Promoted-row thinning tried on Sonnet and dropped (65 chars).
+- Open: read surface still over 100k (queue item 2); augur#42 (orphaned default pin, found by the Opus lens).
+- Decisions relayed by pipeline-atlas, not confirmed in this session and not written into the rules: reviewer model "Sonnet default, Opus on HIGH"; "Sonnet prepares, Fable edits" for pre-commitment files.
