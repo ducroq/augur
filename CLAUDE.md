@@ -2,7 +2,7 @@
 
 Energy price forecasting platform for the Netherlands. Combines data from 18+ APIs (via energyDataHub), ML-based week-ahead price predictions, and an interactive dashboard for smart consumption (heat pumps, EV charging, industrial thermal).
 
-- **Stack**: Python 3.12 (ML pipeline), Hugo + Plotly.js (dashboard). **The dashboard shows the day-type profile rule** (ADR-009, 2026-11-07); LightGBM-Quantile + CQR (ADR-006) keeps running as a shadow; River ARF kept running as a modelling fallback, not an availability backup; it also supplies the consumer surcharge.
+- **Stack**: Python 3.12 (ML pipeline), Hugo + Plotly.js (dashboard). **The dashboard shows the day-type profile rule** (ADR-009, 2026-11-07); LightGBM-Quantile + CQR (ADR-006) keeps running as a shadow; River ARF runs until its retirement (augur#32, step 1 done 2026-11-16).
 - **Status**: Production. Dashboard live at https://energy.jeroenveen.nl; ML pipeline runs daily on sadalsuud.
 - **Repo**: github.com/ducroq/augur
 - **agent-ready-projects**: v1.52.2
@@ -53,6 +53,7 @@ sadalsuud — augur-daily.timer 16:30 UTC, ExecStartPre=scripts/wait_for_edh.sh
     │   never fail-closed.
     ├── python -m ml.update               → ARF modelling fallback (NON-FATAL)
     ├── python -m ml.data.consolidate     → training parquet
+    ├── python -m ml.shadow.surcharge     → consumer surcharge cache (NON-FATAL; augur#32)
     ├── python -m ml.shadow.update_shadow → LightGBM: 56-day retrain, 72h predict, CQR (shadow; sets t0)
     ├── python -m ml.shadow.update_profile → day-type profile rule on that t0 → dashboard (ADR-009)
     ├── python -m ml.shadow.evaluate_shadow → eval row (h1–24 only): vs ARF + seasonal-naive + profile floor
@@ -70,7 +71,7 @@ Browser: 5 tabs (Prices, Weather, Grid, Market, Model); augur_forecast_profile.j
 ```
 
 **Dashboard forecast** (ADR-009): mean of the same hour over the last 5 matching day types, bands = P10/P90 of its own last-28-day errors per block. Revert to LightGBM: change the path in `dashboard.js:loadAugurForecast`.
-**LightGBM (shadow)**: 9 LGBMRegressor (3 horizon groups × p10/p50/p90), 24 features, split-conformal bands targeting P80. `t0` comes from `latest_feasible_t0` (the last complete feature row), anchored lag-0 since 2026-09-13. Consumer price = wholesale × VAT + ARF's cached surcharge (`update_shadow.py:read_arf_surcharge`).
+**LightGBM (shadow)**: 9 LGBMRegressor (3 horizon groups × p10/p50/p90), 24 features, split-conformal bands targeting P80. `t0` comes from `latest_feasible_t0` (the last complete feature row), anchored lag-0 since 2026-09-13. Consumer price = wholesale × VAT + the cached surcharge (`ml/shadow/surcharge.py`, its own nightly step).
 
 ## Key Paths
 
@@ -85,7 +86,7 @@ Browser: 5 tabs (Prices, Weather, Grid, Market, Model); augur_forecast_profile.j
 | `ml/models/shadow/shadow_state.json` | `calibration_history` (rolling 30-day cap, `MAX_HISTORY_DAYS`: count recent vintages here, older ones from `eval_log` dates), CQR stats, t0 hold-back |
 | `ml/shadow/secure_pickle.py` | HMAC sidecar; verify before load |
 | `ml/data/consolidate.py` → `ml/data/training_history.parquet` | EDH history → training parquet (gitignored, rebuilt nightly on sadalsuud) |
-| `ml/update.py`, `ml/models/state.json`, `ml/forecasts/` | ARF fallback pipeline, its state (holds the surcharge cache), forecast archives |
+| `ml/update.py`, `ml/models/state.json`, `ml/forecasts/` | ARF pipeline (retiring, augur#32), its state, forecast archives |
 | `static/js/dashboard.js`, `static/js/modules/` | Dashboard entry (swap point: `loadAugurForecast`) and modules |
 | `decrypt_data_cached.py`, `utils/secure_data_handler.py` | Decryption with `--force` (ADR-003); AES-CBC-256 + HMAC-SHA256 |
 | `scripts/daily_update.sh` | The sadalsuud job and every commit-subject marker |

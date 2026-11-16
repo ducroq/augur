@@ -388,42 +388,10 @@ def format_forecast_dicts(
     return forecast, upper, lower
 
 
-# EXP-014 promotion (2026-05-29): the shadow now drives the dashboard, so it
-# needs to produce consumer-pricing fields the same way ARF did. We read the
-# surcharge from ARF's state.json (which the production cron updates daily
-# from EZ/ENTSO-E overlap) rather than re-deriving — keeps the two pipelines
-# coupled to the same calibration without duplicating derive_surcharge logic.
-ARF_STATE_PATH = _REPO_ROOT / "ml" / "models" / "state.json"
-VAT_RATE = 1.21
-DEFAULT_SURCHARGE_EUR_MWH = 95.0
-
-
-def read_arf_surcharge() -> float:
-    """Read the consumer surcharge cached by ARF's state.json.
-
-    ARF's daily cron derives this from overlapping Energy Zero / ENTSO-E data
-    and caches it in `consumer_surcharge.value_eur_mwh`. Falls back to the
-    default if ARF state is missing or the field is absent — same fallback
-    semantics as ml.update.derive_surcharge.
-    """
-    try:
-        with open(ARF_STATE_PATH) as f:
-            arf_state = json.load(f)
-        value = arf_state.get("consumer_surcharge", {}).get("value_eur_mwh")
-        if value is None:
-            logger.warning(
-                "ARF state.json missing consumer_surcharge; using default %.2f",
-                DEFAULT_SURCHARGE_EUR_MWH,
-            )
-            return DEFAULT_SURCHARGE_EUR_MWH
-        return float(value)
-    except FileNotFoundError:
-        logger.warning(
-            "ARF state.json not found at %s; using default surcharge %.2f",
-            ARF_STATE_PATH,
-            DEFAULT_SURCHARGE_EUR_MWH,
-        )
-        return DEFAULT_SURCHARGE_EUR_MWH
+# Consumer pricing: wholesale * VAT_RATE + the cached surcharge. The surcharge
+# was ARF's until augur#32; it is now derived by its own nightly step.
+# Re-exported for update_profile / update_fm; the derivation lives in surcharge.py.
+from ml.shadow.surcharge import VAT_RATE, read_surcharge  # noqa: E402
 
 
 def format_consumer_dicts(
@@ -704,7 +672,7 @@ def run_shadow_update(
     logger.info("Saved HMAC-signed model to %s", model_path)
 
     forecast, upper, lower = format_forecast_dicts(preds)
-    surcharge = read_arf_surcharge()
+    surcharge = read_surcharge()
     consumer, consumer_upper, consumer_lower = format_consumer_dicts(
         forecast, upper, lower, surcharge
     )

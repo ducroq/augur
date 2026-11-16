@@ -63,7 +63,7 @@ from ml.shadow.update_shadow import (
     format_consumer_dicts,
     format_forecast_dicts,
     load_shadow_state,
-    read_arf_surcharge,
+    read_surcharge,
     save_shadow_state,
     trim_to_recent_days,
     widen_with_cqr,
@@ -218,7 +218,7 @@ def run_fm_update(
     state["pending_predictions"] = trim_to_recent_days(list(deduped.values()), MAX_HISTORY_DAYS)
 
     forecast, upper, lower = format_forecast_dicts(preds)
-    surcharge = read_arf_surcharge()
+    surcharge = read_surcharge()
     consumer, consumer_upper, consumer_lower = format_consumer_dicts(
         forecast, upper, lower, surcharge
     )

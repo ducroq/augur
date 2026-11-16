@@ -161,6 +161,7 @@ Thinned 2026-11-10. Each row's history and incident dates are in `docs/archive/r
 | `[ALARM: naive unscored N]` | Eval rows land without `lightgbm_skill_vs_naive`: the floor instrument broke. A real fault. | Check the parquet exists, has `price_eur_mwh` and no duplicate timestamps, and recent `calibration_history` rows carry `t0_utc`. `evaluate_shadow.py:load_price_history` logs which. |
 | `[NOTE: naive thin N]`, or the log line `N recent eval row(s) scored on <12 paired hours` | Rows scored on fewer than `MIN_NAIVE_HOURS` (12) paired hours are excluded from the counts. Caused by vintage damage upstream. | Nothing in the evaluator; look at `t0` alarms and EDH outages. |
 | `[NOTE: sub-naive L/N]` | LightGBM below the seasonal-naive floor on L of the last N rows carrying a usable naive score (N = 7 once enough exist; after an outage the window spans weeks, not 7 calendar days). A result, not a fault. | Nothing. The augur#29 verdict landed 2026-11-06; this marker is background. |
+| `[ALARM: surcharge rc=N]` / `… output malformed]`; `[NOTE: surcharge fallback V …]` / `… V vs ARF W]` | `ml/shadow/surcharge.py` failed, or found no EZ/ENTSO-E overlap and kept its cache (augur#32). Forecasters keep the cached value. | Fallback for days: check `energy_zero` in EDH. A mismatch while ARF is `OK`: diff against `ml/update.py:derive_surcharge`. |
 | ARF outputs an empty forecast | ARF not trained yet. | `python -m ml.training.warmup`. |
 
 **Build and browser**

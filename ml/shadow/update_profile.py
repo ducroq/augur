@@ -64,7 +64,7 @@ from ml.shadow.update_shadow import (
     _REPO_ROOT,
     format_consumer_dicts,
     load_shadow_state,
-    read_arf_surcharge,
+    read_surcharge,
     write_forecast_json,
 )
 
@@ -254,7 +254,7 @@ def run_profile_update(
             logger.warning("block %s: %d residuals < %d, no band", block, q["n"], MIN_BAND_RESIDUALS)
 
     forecast, upper, lower = format_profile_dicts(preds, t0, quantiles)
-    surcharge = read_arf_surcharge()
+    surcharge = read_surcharge()
     consumer, consumer_upper, consumer_lower = format_consumer_dicts(forecast, upper, lower, surcharge)
     metadata = {
         "model": f"DayTypeProfile-{PROFILE_DAYS}",

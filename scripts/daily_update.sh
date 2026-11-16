@@ -185,9 +185,38 @@ echo "Re-consolidating training_history.parquet..."
 python -m ml.data.consolidate --data-dir $DATAHUB_DIR/data
 SHADOW_CONSOLIDATE_RC=$?
 
+# Consumer surcharge (augur#32 step 1): derived here, cached in
+# ml/models/shadow/surcharge.json, read by every forecaster step. NON-FATAL:
+# on failure the readers keep the last cached value. Until ARF is removed
+# (step 2), compare with ARF's value from the same night: a mismatch is a
+# NOTE, since both derive from the same files and should agree exactly.
+echo "Deriving consumer surcharge..."
+SURCHARGE_OUT=$(python -m ml.shadow.surcharge --data-dir $DATAHUB_DIR/data)
+SURCHARGE_RC=$?
+echo "$SURCHARGE_OUT"
+SURCHARGE_MARKER=""
+if [ $SURCHARGE_RC -ne 0 ]; then
+    echo "ALARM: surcharge step failed (rc=$SURCHARGE_RC) — forecasters keep the cached value."
+    SURCHARGE_MARKER=" [ALARM: surcharge rc=${SURCHARGE_RC}]"
+else
+    # Contract: last line `SURCHARGE <v> ARF <v|none> derived|fallback`.
+    SC_LINE=$(printf '%s\n' "$SURCHARGE_OUT" | tail -1)
+    if ! [[ "$SC_LINE" =~ ^SURCHARGE\ (-?[0-9]+\.[0-9]{2})\ ARF\ (-?[0-9]+\.[0-9]{2}|none)\ (derived|fallback)$ ]]; then
+        echo "ALARM: surcharge step printed no valid record — check the cache."
+        SURCHARGE_MARKER=" [ALARM: surcharge output malformed]"
+    else
+        SC_NEW=${BASH_REMATCH[1]}; SC_ARF=${BASH_REMATCH[2]}; SC_SRC=${BASH_REMATCH[3]}
+        if [ "$SC_SRC" = "fallback" ]; then
+            SURCHARGE_MARKER=" [NOTE: surcharge fallback ${SC_NEW}, no EZ/ENTSO-E overlap]"
+        elif [ "$SC_NEW" != "$SC_ARF" ]; then
+            SURCHARGE_MARKER=" [NOTE: surcharge ${SC_NEW} vs ARF ${SC_ARF}]"
+        fi
+    fi
+fi
+
 # LGBM shadow steps RE-ENABLED 2026-05-29 with EXP-014 promotion. The
-# shadow now produces consumer_forecast fields too (via read_arf_surcharge
-# in update_shadow.py), so its output drives the dashboard's price charts.
+# shadow now produces consumer_forecast fields too (surcharge from the step
+# above), so its output drives the dashboard's price charts.
 # Dep probe (above) gates this — a broken venv would import-fail the same
 # way every minute, no value in running it just to fail.
 if [ $SHADOW_CONSOLIDATE_RC -eq 0 ] && [ $DEP_PROBE_OK -eq 1 ]; then
@@ -536,6 +565,7 @@ git add ml/models/river_model.pkl ml/models/state.json static/data/augur_forecas
 
 # Shadow artifacts (best-effort: only add if they exist)
 [ -f ml/models/shadow/shadow_state.json ] && git add ml/models/shadow/shadow_state.json
+[ -f ml/models/shadow/surcharge.json ] && git add ml/models/shadow/surcharge.json
 [ -f static/data/augur_forecast_shadow.json ] && git add static/data/augur_forecast_shadow.json
 [ -f static/data/augur_forecast_profile.json ] && git add static/data/augur_forecast_profile.json
 [ -f ml/shadow/eval_log.jsonl ] && git add ml/shadow/eval_log.jsonl
@@ -612,7 +642,7 @@ if [ -f "$EDH_VERDICT_FILE" ]; then
 fi
 
 git diff --cached --quiet && echo "No changes to commit" || {
-    git commit -m "Daily update $(date -u '+%Y-%m-%d') — ${ARF_STATUS} | ${SHADOW_STATUS}${STALE_MARKER}${DEP_MARKER}${SMOKE_MARKER}${REGRET_MARKER}${PROFILE_MARKER}${FM_MARKER}${ARF_EMPTY_MARKER}${EVAL_STALE_MARKER}${NAIVE_MARKER}${T0_MARKER}${EDH_MARKER}"
+    git commit -m "Daily update $(date -u '+%Y-%m-%d') — ${ARF_STATUS} | ${SHADOW_STATUS}${STALE_MARKER}${DEP_MARKER}${SMOKE_MARKER}${REGRET_MARKER}${PROFILE_MARKER}${FM_MARKER}${ARF_EMPTY_MARKER}${SURCHARGE_MARKER}${EVAL_STALE_MARKER}${NAIVE_MARKER}${T0_MARKER}${EDH_MARKER}"
     git push
 }
 

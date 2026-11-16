@@ -4,7 +4,15 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
-## 2026-11-08 (latest) — The first ADR-009 night skipped the profile step; the FM gate moves to the profile rule (EXP-041)
+## 2026-11-16 (latest) — The consumer surcharge leaves ARF (augur#32, step 1 of 2)
+
+**What changed.** `ml.update.derive_surcharge` moved (same rule; non-finite results now rejected) to `ml/shadow/surcharge.py`, run as its own non-fatal step after consolidate. It caches `ml/models/shadow/surcharge.json`; `update_shadow`, `update_profile` and `update_fm` read it via `read_surcharge` (cache, else ARF's `state.json` seed, else 95.0). While ARF still runs, a mismatch with ARF's same-night value is a `[NOTE:]`, as is a fallback night (no overlap; `derived_at` keeps the last real derivation); a failed step or malformed output is an `[ALARM:]`. A valid cache never reads ARF, and non-finite values are rejected (review 2026-11-16, Codex).
+
+**Parity (sadalsuud, read-only, 2026-11-16).** 110.85 from `261115_204418_energy_price_forecast.json`, ARF's cache 110.85.
+
+**Step 2 (engineer, 2026-11-16: two steps, hide the Model tab).** After a few NOTE-free nights: drop `ml.update` from the job, the `arf_*` eval arm, ARF markers and heartbeat patterns, the seed fallback; hide the Model tab; archive `memory/ml-decisions.md`; mark ADR-006's ARF role superseded.
+
+## 2026-11-08 — The first ADR-009 night skipped the profile step; the FM gate moves to the profile rule (EXP-041)
 
 **What happened.** The 2026-11-07 run pulled the ADR-009 commit at `daily_update.sh:62`, resumed misaligned in the changed script (bash reads by byte offset) and never ran `update_profile`. The unset `PROFILE_RC` read as OK, so there was no alarm. The dashboard kept the manual-deploy forecast (`t0` 11-07 22:00). Fix: the job re-execs once on its pulled script, and `[ALARM: profile forecast t0 behind shadow]` asserts on the artifact. Deployed to sadalsuud by hand pull before the 2026-11-08 run started (gotcha-log 2026-11-08, RUNBOOK "Monitoring").
 

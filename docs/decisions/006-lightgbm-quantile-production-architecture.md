@@ -79,3 +79,7 @@ Notes on the comparison:
 - Retirement context: `docs/river-arf-retrospective.md` (closing addendum)
 - Literature: `docs/literature.md`, `docs/metric-redesign-literature-review.md`
 - Key papers: Romano, Patterson & Candès (2019) — CQR; Gneiting & Raftery (2007) — proper scoring rules; Lago, Marcjasz, De Schutter & Weron (2021) — EPF best practice.
+
+## Addendum 2026-11-16
+
+The consumer surcharge no longer comes from ARF: `ml/shadow/surcharge.py` derives and caches it (`ml/models/shadow/surcharge.json`), and `read_surcharge` replaced `read_arf_surcharge` in all three forecaster steps (augur#32, step 1). The ARF lines above are superseded when step 2 removes ARF.

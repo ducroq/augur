@@ -104,7 +104,7 @@ def test_run_writes_the_shadow_schema_on_production_t0(tmp_path, monkeypatch):
     shadow_dir = tmp_path / "shadow"
     shadow_dir.mkdir()
     (shadow_dir / up.SHADOW_STATE_FILENAME).write_text(json.dumps({"last_t0": t0.isoformat()}))
-    monkeypatch.setattr(up, "read_arf_surcharge", lambda: 110.0)
+    monkeypatch.setattr(up, "read_surcharge", lambda: 110.0)
     out = tmp_path / "profile.json"
 
     up.run_profile_update(shadow_dir, parquet, out)
