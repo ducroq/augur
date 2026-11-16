@@ -47,6 +47,30 @@ own file under `docs/` and are linked here.
 - Uniejewski & Weron (2021). "Regularized quantile regression averaging."
   *Energy Economics*. — LQRA; quantile averaging for EPF.
 
+### Similar-day and analog methods
+
+Added 2026-11-16 for EXP-043 and EXP-044. **Read from search snippets and
+secondary citations only; none of these was read in full.** Verify before
+citing outside the repo.
+
+- Nogales, Contreras, Conejo & Espínola (2002), IEEE Trans. Power Systems;
+  Conejo et al. (2005), Int. J. Forecasting. — cited (arXiv:1805.06649) as the
+  origin of the naive similar-day benchmark: Monday, Saturday and Sunday copy
+  the same hour a week earlier, other days copy yesterday. Reported there:
+  poorly calibrated models often fail to beat it.
+- Lago, Marcjasz, De Schutter & Weron (2021), above. — the same naive rule as a
+  mandatory benchmark.
+- Mandal, Srivastava & Park, IEEE Trans. Industry Applications. "An effort to
+  optimize similar days parameters for ANN-based electricity price
+  forecasting." — sweeps the lookback (15–60 days) and the number of similar
+  days (5 or 10).
+- "Short-term electricity price forecasting based on similar day-based neural
+  network." *Energies* 13(17), 4408 (2020). — neighbours by Euclidean,
+  Manhattan, cosine or Pearson distance on price and load; reference day is the
+  day before the forecast day.
+- Gab-SSDS, *Frontiers in Energy Research* (2022). — load forecasting; a
+  genetic algorithm weights the similarity factors (weather, calendar, price).
+
 ### Foundation models for EPF
 
 Deep-dive: [`foundation-models-epf-literature-review.md`](foundation-models-epf-literature-review.md).

@@ -29,40 +29,10 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 > | [2026-08-30] EXP-028a | ≥28 vintages | Deferred 2026-11-06 past the EXP-021a Stage 1 read. That read **passed 2026-11-15** (EXP-042), so this is no longer moot; Review by 11-30. Lagged-arm source: the EDH publish archive (see the entry's notes) |
 > | [2026-11-06] CQR on unwidened scores | 28 post-deploy vintages (`t0 ≥ 2026-11-06 22:00`) | fix merged 2026-11-06; live check running. **No slack:** 28 plus two partial vintages fill the 30-day history, so read it the run the 28th is fully realised (the counter's room hits 0) |
 > | [2026-10-28] product criterion | FM Stage 3 shadow reaches 14 vintages | pre-committed; the floor drives the dashboard since 2026-11-07 (ADR-009), so this is the bar to replace it |
-> | [2026-11-07] Stage 3 promotion criterion → **EXP-041** | 14 fully realised FM vintages with live CQR and a shipped profile forecast | skill gate and guardrail moved to the profile rule by EXP-041 (backlog, 2026-11-08); runner `scripts/exp041_fm_vs_profile.py` |
 > >
-> EXP-021a Stage 1 passed 2026-11-15 (EXP-042; Stage 3 continues under [2026-11-07] and EXP-041) and the entry moved to `docs/archive/hypothesis-log-resolved.md`, as did the parked EXP-018a Stage 1 and EXP-023a Stage B; the [2026-10-28] park entry below holds their revisit trigger.
+> EXP-021a Stage 1 passed 2026-11-15 (EXP-042; Stage 3 continues under EXP-041, which replaced [2026-11-07]'s gate; that entry was archived as superseded on 2026-11-16) and the entry moved to `docs/archive/hypothesis-log-resolved.md`, as did the parked EXP-018a Stage 1 and EXP-023a Stage B; the [2026-10-28] park entry below holds their revisit trigger.
 >
 > Vintage holes: count them at run time; do not trust a list here. Holes since 2026-09-14 have not been enumerated.
-
-### [2026-11-07] Stage 3 promotion criterion: Chronos-Bolt beats production LightGBM on live vintages
-
-**Status:** pre-committed 2026-11-07 with the engineer's sign-off, before the shadow deployed and before any FM vintage existed. Two choices were the engineer's: count only vintages whose CQR was live, and only fully realised ones.
-
-**Position (provisional):** on live vintages, Chronos-Bolt's `p50` has lower absolute error than production LightGBM's without worsening band coverage. This is the ADR-007 criterion that EXP-021a's Stage 3 said would be re-derived against the incumbent of the day. It's relative to LightGBM only: the floor is judged by the [2026-10-28] product criterion, which stands beside it.
-
-**Alternatives (failure-mode signals):**
-
-1. **The offline win doesn't survive live data.** Signal: the skill gate fails.
-2. **Raw Bolt bands look good only until production's CQR defect is gone.** The fix of 2026-11-06 raised production's coverage. Signal: the guardrail blocks.
-3. **The criterion measures a state that never ships.** A swapped-in FM would always run with warm CQR, so its cold-start vintages (q = 0 against a warmed-up incumbent) are excluded from the population, not merely reported. Signal that this exclusion matters: FM coverage on the excluded vintages differs from the counted ones by more than 0.02 on either side. That is reported, never gated.
-
-**Method (pre-committed 2026-11-07):**
-
-- **Population.** The first 14 FM vintages in date order whose rows carry `cqr_n_calib_days ≥ 3` (the FM's own CQR was live) and where all 72 hours are realised in both arms, read from `fm_state.json` and `shadow_state.json:calibration_history`, paired on (`eval_day`, `timestamp_utc`). Production's history can hold duplicate keys after a repeated `t0`: in each arm, keep the last row per key, and a vintage counts only with exactly 72 unique paired timestamps. Observations enter the DM ordered by `t0`, then horizon. No vintage is excluded for its result. No interim read of either gate, and the window isn't extended.
-- **Skill gate.** Paired DM on `|y − p50|`, FM against production `p50`, per observation, Newey-West HAC bandwidth 71, one-sided α = 0.10. Passes iff the mean difference is negative and p < 0.10.
-- **Calibration guardrail.** Lower- and upper-side coverage of the shipped bands (`p10`, `p90` after CQR, both arms) on the same population. Blocks if FM is more than 0.02 worse than production on either side.
-- **Swap.** Requires Stage 1 passed as written, the skill gate passed, no guardrail block, and the [2026-10-28] product criterion passed. Stage 3's judgement on operational surface stays the engineer's.
-
-**Revisit trigger:** 14 such vintages exist (≈17 nights after deploy, counting the warm-up). Compute the read before the first of them leaves the 30-day history.
-
-**Review by:** 2026-12-15.
-
-**Domain:** EXP-021a, ADR-006, ADR-007, augur#15.
-
-**Note added 2026-11-07, after ADR-009; the Method above is unchanged.** The dashboard now shows the day-type profile rule, and LightGBM is a shadow. The skill gate still pairs FM with LightGBM as written. The Swap clause's product criterion is against the floor, which is now the incumbent, so a passing swap replaces the rule. Whether the LightGBM skill gate still earns its place is the engineer's call. Changing it is a new entry, written before the 14 vintages are read.
-
-**Note added 2026-11-08; the Method above is unchanged.** The engineer decided to move the gate: `docs/experiment-backlog.md` EXP-041 (pre-committed 2026-11-08, before any qualifying FM vintage existed) replaces this entry's skill gate and calibration guardrail with the same tests against the profile rule. LightGBM is reported there, not gated. This entry's population conditions carry over into EXP-041's.
 
 ### [2026-11-06] Calibrating CQR on unwidened scores restores P80 coverage without costing either side
 

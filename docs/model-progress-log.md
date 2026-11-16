@@ -28,7 +28,7 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 **Rehearsal (situla, 2026-11-07, Python 3.12, clean bootstrap from `requirements.lock`, sadalsuud's parquet and state).** One real forecast took 6.4s including imports and model load, peak 1.4 GB, offline, with lightgbm and torch in one process. Same schema, `t0` and 72 timestamps as production; context 1319 present, 24 missing. No existing pin changed (33 added, venv 1.7G, no CUDA packages). torch stays out of `requirements.txt` because Netlify may install that file (augur#35). This doesn't yet cover sadalsuud's own venv.
 
-**Reading it.** The first vintages run at q = 0, so FM band width isn't comparable with production's until CQR warms up. See the 2026-11-07 addendum in `docs/hypothesis-log.md` [2026-08-29] and the promotion criterion at [2026-11-07].
+**Reading it.** The first vintages run at q = 0, so FM band width isn't comparable with production's until CQR warms up. See the 2026-11-07 addendum in `docs/archive/hypothesis-log-resolved.md` [2026-08-29] and the promotion criterion at [2026-11-07] (archived there 2026-11-16).
 
 ## 2026-11-06 — CQR stops scoring its own widening
 
