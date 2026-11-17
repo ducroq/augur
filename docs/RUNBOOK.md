@@ -126,13 +126,11 @@ ssh sadalsuud "sudo systemctl start augur-alert@augur-daily.service"      # end-
 
 **The job re-execs itself after its own pull** (2026-11-08). bash reads a script by byte offset, so a pull that changed `daily_update.sh` mid-run once skipped the profile step silently. It now re-execs once on the pulled file (`AUGUR_DAILY_REEXEC`; the log shows `Re-executing on the pulled script (<sha>)...`). **Never change a byte above that block**: an old shell pulling the change must land exactly on it.
 
-**A reboot re-runs a killed job** (augur#39). `Persistent=true` replays only a *missed* trigger, so on 2026-11-13 a reset mid-gate lost the day. The timer also fires ~5 min after boot; `scripts/daily_slot_done.sh` (ExecCondition) skips unless the latest 16:30 UTC slot lacks a `Daily update` commit on `origin/main`. A skip is "condition failed", not a failure; each check logs one `slot guard:` line. Limits, fail-open rule and `AUGUR_FORCE_RUN`: the script header. No multi-day backfill (#14); resets: #40.
-
 **Reading an alert.** The email leads with 40 lines of `logs/daily_update.log`, because that is where the error text is: `augur-daily.service` sets `StandardOutput/StandardError=append:`, which **overrides** systemd's journal capture, so `journalctl -u augur-daily.service` holds only lifecycle lines — start, exit code, timeout — and never script output.
 
 ## Common Problems
 
-Thinned 2026-11-10. Each row's history and incident dates are in `docs/archive/runbook-common-problems-2026-11-10.md`; grep it by marker. `[NOTE:]` is a result, `[ALARM:]` a fault (see "Monitoring" above).
+Thinned 2026-11-10. Each row's history and incident dates are in `docs/archive/runbook-common-problems-2026-11-10.md`; grep it by marker. Rows for unreachable or rare symptoms (gate lag, an EDH schema bump) and the boot catch-up note moved to `docs/archive/runbook-retired-2026-11-17.md`. `[NOTE:]` is a result, `[ALARM:]` a fault (see "Monitoring" above).
 
 **EDH gate and data freshness**
 
@@ -145,9 +143,7 @@ Thinned 2026-11-10. Each row's history and incident dates are in `docs/archive/r
 | `[NOTE: EDH <feed> short at publish N/M]` | A secondary feed (`load_forecast`) came in short. Not a fault. | Nothing. If it costs a feature row, `[ALARM: t0 held back Nh — <feeds> short]` says so on the same subject. |
 | `[ALARM: EDH publish Nh stale accepted after Nh]` | Clause (c) (augur#34): the newest report was already there when the run started, and no fresher one came within `EDH_STALE_HOLD_HOURS`. The vintage rests on data up to a day old. | Usually upstream published nothing. If EDH did publish normally, `EDH_STALE_GRACE_HOURS` (default 2h) is too tight. |
 | `[ALARM: t0 jumped Nd]` | The parquet advanced more than a day. Either upstream skipped a day, the gate lagged and a later publish superseded the one it held (ours), or sadalsuud went down mid-run and nothing re-ran it (2026-11-13; the boot catch-up above should now cover this). | Check ours first: `ssh sadalsuud 'bash -s' < scripts/check_gate_lag.sh`, and `journalctl --list-boots` for a reset during the run window. The skipped day is permanently unevaluable; note the hole wherever a trailing window reads `eval_log.jsonl`. Known holes: 2026-06-08, 2026-06-10, 2026-08-25. The 2026-11-13 reset lost that night's forecast but no eval date: the next row, dated 2026-11-13, covers 48h. |
-| Every marker clean, run ends ~16:35, but the forecast is anchored a day back | Gate lag (augur#34): consuming yesterday's unconsumed publish. Every guard reads green. Should be unreachable since clause (c), 2026-09-14. | `scripts/check_gate_lag.sh` prints CURRENT or LAGGED. If LAGGED, clause (c) is off or broken: check `EDH_STALE_GRACE_HOURS`, and that the gate on the box is the committed one (`ExecStartPre` runs before the pull). |
 | Dashboard shows old data | EDH's Action didn't run, or the webhook didn't trigger. | Check the Action logs; verify the `NETLIFY_BUILD_HOOK` secret. |
-| 72h forecast shows only a short stub; `WARNING ENTSO-E data missing` while EDH is healthy | An EDH schema bump; parsers read the old shape. | Audit `ml/data/consolidate.py`, `data-processor.js`, `tab-charts.js` for top-level `data['<source>']` access; add a `data.get('data', data)` shim. `memory/data-formats.md`. |
 
 **Pipeline steps**
 

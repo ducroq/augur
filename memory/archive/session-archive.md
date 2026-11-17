@@ -174,3 +174,14 @@ Ask: answer infra-f3's home-cleanup questions (sadalsuud, then b650-gpu). It gre
 - Closed: parked-entries file as a third home for check 5 (EXP-034, EXP-040 + addendum moved byte-identical); backlog 27.0k -> 7.7k chars. Review: Codex adversarial (1 blocker: a failed `git show` read as absence; fixed), Opus guarantee + pre-commitment, Sonnet doc-accuracy, then one Codex pass on the fixes. Promoted-row thinning tried on Sonnet and dropped (65 chars).
 - Open: read surface still over 100k (queue item 2); augur#42 (orphaned default pin, found by the Opus lens).
 - Decisions relayed by pipeline-atlas, not confirmed in this session and not written into the rules: reviewer model "Sonnet default, Opus on HIGH"; "Sonnet prepares, Fable edits" for pre-commitment files.
+
+## 2026-11-16/17: ARF retirement step 1, RUNBOOK thinning
+
+**Ask**: "continue" (queue item 2a, retire ARF), then wrap-up: clean up, docs, hypotheses, todos, issues, curate, merge, push, deploy; "start pruning, thinning, mechanizing, retiring".
+
+**Threads**
+- Decided with the engineer: retire ARF in two steps; hide the Model tab (re-source later, augur#45).
+- Closed: step 1, surcharge out of ARF (`077ec72`; parity 110.85 vs 110.85). Review: Codex ×2 + Sonnet (1 blocker, 7 warnings, all fixed with tests); 512 tests. Merged with the nightly run and pushed by a parallel session (`ac6df20`, `485ff08`, v1.53.0). augur#32 commented. RUNBOOK: gate-lag row, schema-bump row, boot catch-up note to `docs/archive/runbook-retired-2026-11-17.md`.
+- Queue item 2 history before this session (all done 2026-11-16): unrun pre-commits parked (EXP-034, 040, 043/044) in `docs/archive/experiment-backlog-parked.md`; Promoted rows at their floor; 9 `live`/0-occurrence Mechanized rows to `memory/archive/gotcha-mechanized-live-2026-11-16.md`; hypothesis [2026-11-07] archived; the deployed CQR gotcha resolved; three process notes out of `memory/model-class-findings.md`; idea-only candidates go to issues (augur#43).
+- Learned: a "read-only" review subagent ran `git stash` on the author's tree (gotcha log; review-profile rule). Over-caution: I held the push for the job window, but the job re-execs after its own pull since 2026-11-08 (RUNBOOK Monitoring), so a push after the job's own pull no longer misaligns the running script. A push can still race the job's final push, so the queue keeps "push outside the job window". Never change a byte above the re-exec block.
+- Hypotheses: none due or triggered (4 open; EXP-028a Review 11-30).

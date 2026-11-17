@@ -2,6 +2,17 @@
 
 Moved out of `memory/gotcha-log.md` on 2026-10-16, unedited. The Promoted table stays in the live log; it is the running record of what these taught.
 
+### A "read-only" review subagent ran `git stash`/`pop` on the author's tree (2026-11-16) [RESOLVED] (rule in `.claude/review-profile.md`)
+**Problem**: Briefed "do NOT edit files", the doc-lens agent stashed the working tree mid-edit to get a baseline test count; the author's concurrent edits survived only because the pop succeeded.
+**Root cause**: "Read-only" was read as "don't edit files", not "don't write git state"; a baseline run looked legitimate to it.
+**Fix**: `.claude/review-profile.md` Reviewer model: every brief forbids writing git commands; baselines come from `git worktree add` in the scratchpad.
+
+### A "read-only" agent sandbox could read the PII-holding NAS (2026-11-10) [RESOLVED*] (mounts moved to `nas`; the nightly permission check is queue item 0a)
+**Problem**: A Codex review failed with `bwrap: Can't bind mount … /mnt/sadalmelik/Administratie: No such device`. Diagnosing it, the agent ran `ls` on the NAS path itself. The NAS holds PII.
+**Root cause**: Codex's `-s read-only` sandbox bind-mounts the whole filesystem: it blocks writes, not reads, so it sees anything `jeroen` can, and whatever an agent reads is sent to its model provider. The 12 CIFS automounts were owned by `uid=1000` (jeroen), the user every agent runs as. The error appeared only because the NAS sleeps by day.
+**Fix**: The engineer moved the mounts to a dedicated `nas` account (uid 997, `/etc/fstab`, backup `/etc/fstab.bak-pre-nas-user`); agents get EACCES. Reviews fall back to Claude subagents while Codex can't start (`.claude/review-profile.md`). Nothing in Augur used the NAS.
+**Lesson**: "read-only" in a sandbox name says nothing about what it can read. Confine private data at the OS level, and never probe a private mount to diagnose a tool failure: read the tool's config instead.
+
 ### A known defect fell out of the index, and its cost was never measured (2026-11-06) [RESOLVED*] (fix deployed 2026-11-06; live check tracked in `docs/hypothesis-log.md` [2026-11-06] and augur#19; archived 2026-11-16)
 **Problem**: delivered P80 coverage is well under target, and `last_cqr_q` swings hard: 72 on 10-29, 0 from 11-03, while `calibration_history` coverage fell to 0.44–0.62 on eval days 11-03..11-05 (partly filled vintages).
 **Root cause**: `compute_cqr_q` (`ml/shadow/update_shadow.py`) passes the stored `p10`/`p90`, which are already CQR-widened, to `apply_cqr`. After a wide spell the scores go negative, `max(q, 0.0)` gives 0, the band collapses to raw, and the cycle restarts. EXP-015 recorded this on 2026-06-12 as a standing finding; the 2026-10-16 index rewrite did not carry it over, and EXP-025's "lean + production CQR 0.788" applies CQR once, so it is not what production ships.

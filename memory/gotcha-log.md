@@ -11,11 +11,6 @@ Promoted rows hold the rule and a pointer; the incident detail they carried unti
 
 Residuals of entries archived 2026-11-06, as recorded then and not re-checked: dev/prod Python skew (situla 3.14, sadalsuud 3.12); the 2026-06-10 lightgbm install damage has no known root cause; dashboard silent-empty-state hardening is on augur#24.
 
-### A "read-only" agent sandbox could read the PII-holding NAS (2026-11-10)
-**Problem**: A Codex review failed with `bwrap: Can't bind mount … /mnt/sadalmelik/Administratie: No such device`. Diagnosing it, the agent ran `ls` on the NAS path itself. The NAS holds PII.
-**Root cause**: Codex's `-s read-only` sandbox bind-mounts the whole filesystem: it blocks writes, not reads, so it sees anything `jeroen` can, and whatever an agent reads is sent to its model provider. The 12 CIFS automounts were owned by `uid=1000` (jeroen), the user every agent runs as. The error appeared only because the NAS sleeps by day.
-**Fix**: The engineer moved the mounts to a dedicated `nas` account (uid 997, `/etc/fstab`, backup `/etc/fstab.bak-pre-nas-user`); agents get EACCES. Reviews fall back to Claude subagents while Codex can't start (`.claude/review-profile.md`). Nothing in Augur used the NAS.
-**Lesson**: "read-only" in a sandbox name says nothing about what it can read. Confine private data at the OS level, and never probe a private mount to diagnose a tool failure: read the tool's config instead.
 
 ### systemd timers: `Persistent=` won't replay a killed run, and a restart won't fire an elapsed `OnBootSec` (2026-11-15)
 **Problem**: sadalsuud reset 12 min into the 2026-11-13 run and the day was lost despite `Persistent=true`. The fix's deploy note, following `systemd.timer(5)`, said restarting the timer would fire the new `OnBootSec` at once; on the host nothing fired.
