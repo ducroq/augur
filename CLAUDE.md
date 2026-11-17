@@ -5,7 +5,7 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 - **Stack**: Python 3.12 (ML pipeline), Hugo + Plotly.js (dashboard). **The dashboard shows the day-type profile rule** (ADR-009, 2026-11-07); LightGBM-Quantile + CQR (ADR-006) keeps running as a shadow; River ARF runs until its retirement (augur#32, step 1 done 2026-11-16).
 - **Status**: Production. Dashboard live at https://energy.jeroenveen.nl; ML pipeline runs daily on sadalsuud.
 - **Repo**: github.com/ducroq/augur
-- **agent-ready-projects**: v1.52.2
+- **agent-ready-projects**: v1.53.0
 
 > Thinned 2026-10-16 from 38k chars. The per-path narrative it carried is in `docs/archive/CLAUDE-2026-10-16.md`. **Keep this file to pointers.** Status and findings live in `memory/MEMORY.md`; reasoning lives in the docs it points to.
 
@@ -14,7 +14,7 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 | When | Read |
 |------|------|
 | **Starting a session — orient first** | `memory/MEMORY.md`. It opens with the **ON "CONTINUE"** queue. Not auto-loaded; read it before reconstructing state from anything deeper. |
-| **Stuck or debugging something weird** | `memory/gotcha-log.md` (Promoted patterns + open entries; resolved ones in `memory/archive/`). EDH publish late, short or missing → `memory/upstream-edh.md`. Already done? → `memory/archive/session-archive.md`. |
+| **Stuck or debugging something weird** | `memory/gotcha-log.md` (Promoted patterns + open entries; resolved ones in `memory/archive/`); log a fix when found. EDH publish late, short or missing → `memory/upstream-edh.md`. Already done? → `memory/archive/session-archive.md`. |
 | **Anything touching experiments or model work** | `docs/experiment-results.md` **Decision state**: closed / live / standing evidence, generated from the registry by `scripts/render_results.py` (never hand-edit; per-experiment detail is in `experiment-results-detail.md`, grep by id). Then `memory/model-class-findings.md`, which **opens with the EXP-036 correction that rescales every effect size here**. Log or cite → `experiments/registry.jsonl` (schema in `experiments/README.md`). Next experiment → `docs/experiment-backlog.md`. |
 | **⚠️ Before quoting any effect size** | augur#29: production `p50` doesn't reliably beat a seasonal-naive floor, and against EXP-036's profile floor it sits at **−12.4%** offline (verdict confirmed 2026-11-06). Every other metric here is *relative*. |
 | **ML features, training, forecast logic** | `ml/shadow/` (production) and `ml/features/`, `ml/training/` (ARF). Architecture questions → `memory/ml-decisions.md`, `docs/river-arf-retrospective.md`. Any pipeline/model change → a dated entry in `docs/model-progress-log.md`. |

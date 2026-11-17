@@ -5,6 +5,12 @@
      Moved out of memory/MEMORY.md 2026-09-06 — it is history, not current state,
      and the index is read at every session start. Nothing here was edited. -->
 
+## Closed 2026-11-17
+
+Ask: the 2026-11-17 heartbeat (`t0 held back 18h`), then push ARF retirement step 1, then `/update-drift` ("fix it all"). Threads:
+- **Closed:** hold-back was upstream (EDH `load_forecast` 289/384 and `solar_gen_forecast_mw` short; energyDataHub#95). Vintage kept; CQR 8 of 28, room 20, no slack. Step 1 pushed as merge `ac6df20`, 512 tests passing.
+- **Closed:** framework drift v1.52.2 → v1.53.0 (1 release). Adopted: "log a fix when found" in the `CLAUDE.md` gotcha row. **Declined:** the gotcha-log header capture text and `PreCompact` hook (agent-ready-projects#326, #323): augur's log header is its own and has no capture block, the read surface had 293 chars of margin, and the `CLAUDE.md` row carries the rule. Not applicable: `tagfree.sh` (#276, no release process), work-item savepoint quoting (#321, no `docs/work-items/`; the MEMORY.md queue already quotes the engineer). Already in force: global `curate`/`audit-context` byte-identical to v1.53.0's reference installs; `gotcha-headers.sh`, `hypothesis-due.sh`, `autoload-size.sh`, `verify-runner.sh` run against augur's files as described. Not verified: `refcheck.py` self-check (exit 70), until the next `/audit-context`.
+
 ## Closed 2026-11-16 (third session)
 
 Ask: a Tweakers article on the Nymo boiler controller (dynamic-price mode from Dec 2026), then wrap up, prune, curate, commit, push. Threads:
