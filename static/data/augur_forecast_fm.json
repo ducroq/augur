@@ -2,7 +2,7 @@
   "metadata": {
     "model": "amazon/chronos-bolt-base",
     "model_revision": "5d9f166d69f47aef3401367a7b842e78fe97b121",
-    "last_updated": "2026-11-17T00:01:50.286829+00:00",
+    "last_updated": "2026-11-17T23:26:49.976344+00:00",
     "t0": "2026-11-17T04:00:00+00:00",
     "window_days": 56,
     "context_end_offset_h": 1,
