@@ -2,7 +2,7 @@
   "metadata": {
     "model": "DayTypeProfile-5",
     "display_name": "Average of the last 5 similar days",
-    "last_updated": "2026-11-24T03:01:48.537767+00:00",
+    "last_updated": "2026-11-24T20:32:44.412753+00:00",
     "t0": "2026-11-24T22:00:00+00:00",
     "n_hours": 72,
     "n_holiday_fallback_hours": 0,

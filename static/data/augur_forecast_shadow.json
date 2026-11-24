@@ -1,7 +1,7 @@
 {
   "metadata": {
     "model": "LightGBM-Quantile-Multi-Horizon",
-    "last_updated": "2026-11-24T03:01:46.459960+00:00",
+    "last_updated": "2026-11-24T20:32:42.339993+00:00",
     "t0": "2026-11-24T22:00:00+00:00",
     "window_days": 56,
     "n_train_samples": 1134,
