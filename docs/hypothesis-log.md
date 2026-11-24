@@ -84,6 +84,8 @@ Lifecycle: **open** → dormant → revisit (with evidence) → resolved (close 
 
 **Revisit trigger:** EXP-021a fails Stage 1 or Stage 2 (then LightGBM stays in production and tuning it matters again), or the engineer asks.
 
+**Review by:** trigger-only. Stage 1 passed 2026-11-15 (EXP-042); the Stage 2 read is EXP-041.
+
 ### [2026-08-30] EXP-028a: Chronos-2's covariate gain survives on uncontaminated fresh vintages, and the coverage cost is a real trade rather than a fixable artifact
 
 **Position (provisional):** EXP-028 found `amazon/chronos-2` gains **8.3% quantile score** (DM p=0.0051) from exogenous covariates supplied at inference time with no retraining — Augur's first positive exogenous result, and a genuine qualification of EXP-020's "exogenous is inert" conclusion, which held for LightGBM and for a LightGBM-specific mechanism. Position: the gain reproduces on fresh vintages, and the coverage cost that failed gate 3 (lower 0.923→0.886, upper 0.880→0.856) persists rather than vanishing — i.e. it is a real skill-for-calibration trade that a conformal layer must be asked to absorb, not a small-sample wobble.

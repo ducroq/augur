@@ -39,13 +39,15 @@ spot (the heartbeat runs *on* sadalsuud, so it cannot report sadalsuud down).
 | `energydatahub#50` | skipped publishes ("silently skips whole days") — **live and correct, do not strike** |
 | `energydatahub#51` | load-forecast horizon — verdict **resolved-upstream**, not transient; closed 2026-11-06 |
 | *(none)* | the abandoned time-boxed drift block — **it has no number, because it does not exist** |
-| `energydatahub#69` | publish-failure issue for the 09-07 outage — opened 09-07 19:51Z, auto-closed 09-08 19:16Z |
-| `energydatahub#70` | publish-failure issue for the 09-09 outage — opened 09-09 19:13Z, auto-closed 09-10 ~07:4xZ |
 | `energydatahub#71` | Luchtmeetnet `air_quality_buurt` missing (HTTP 429) — **Augur does not consume it** |
 | `energydatahub#73` | whether `data/data_quality_report.json` should be a *published* artifact — **read this before adding gating** |
 
 ⚠️ The time-box was cited as `#47`, then as `#50`, and neither is its number.
 Citing any number for it is how a phantom dependency gets recorded.
+
+## Schedule lag (2026-11-24): the cron fires hours late, and a late run used to publish a short window
+
+EDH's `0 16 * * *` cron started 2.5–5h late in October, 4–8h in November, and the 2026-11-23 slot at 02:42Z on 11-24 (run 45314302508). Runners are fine (3–4 min); only GitHub's scheduled queue lags. EDH took the collection date from `date -u` at run start, so that run collected 11-24..11-25, before the 11-25 auction: entsoe 96/192, their #100, our `[ALARM: EDH gate timeout]`. **Fix proposed by EDH, pending engineer approval:** date from the slot (`github.event.schedule`) plus cron `23 13 * * *`. External `workflow_dispatch` timer + liveness check = their #67 (token on an infra host: engineer's call). Our side: augur#25. 11-17 (#96) and 11-20 (#98) were not lag: #79 (NL A67 actuals) and an Open-Meteo 429 (their #58).
 
 ## Publish reliability
 
