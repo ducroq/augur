@@ -5,7 +5,7 @@ Energy price forecasting platform for the Netherlands. Combines data from 18+ AP
 - **Stack**: Python 3.12 (ML pipeline), Hugo + Plotly.js (dashboard). **The dashboard shows the day-type profile rule** (ADR-009, 2026-11-07); LightGBM-Quantile + CQR (ADR-006) keeps running as a shadow; River ARF runs until its retirement (augur#32, step 1 done 2026-11-16).
 - **Status**: Production. Dashboard live at https://energy.jeroenveen.nl; ML pipeline runs daily on sadalsuud.
 - **Repo**: github.com/ducroq/augur
-- **agent-ready-projects**: v1.53.0
+- **agent-ready-projects**: v1.56.0
 
 > Thinned 2026-10-16 from 38k chars. The per-path narrative it carried is in `docs/archive/CLAUDE-2026-10-16.md`. **Keep this file to pointers.** Status and findings live in `memory/MEMORY.md`; reasoning lives in the docs it points to.
 
