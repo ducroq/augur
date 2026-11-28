@@ -41,10 +41,15 @@ set -u
 
 AUGUR_DIR="${AUGUR_DIR:-/home/jeroen/local_dev/augur}"
 LOG="$AUGUR_DIR/logs/alerts.log"
-# 30h at a 06:00 UTC check: a healthy run (commits ~18:30-21:00 UTC) is ~10h
-# old, and a single missed day is ~34h -- so one silent miss alarms the next
-# morning, while a legitimately late run never does.
-MAX_AGE_HOURS="${MAX_AGE_HOURS:-30}"
+# 20h at a 06:00 UTC check (30h until 2026-11-28; ages truncate, so it fires
+# from 21h). A scheduled run commits between ~17:00 and ~05:00 UTC: the 16:30 fire, up to an 8h stale hold (wait_for_edh.sh), the
+# 03:00 deadline and the 03:30 timeout cap. So a healthy commit is at most
+# ~13.5h old here, and after one silent miss the newest is at least ~25h old,
+# however late the run before it committed. 30h missed that case when the
+# previous commit landed after midnight (Codex review, 2026-11-28). Accepted
+# cost: a reboot that interrupts a run can alert at 06:00 while the boot
+# catch-up is still waiting on EDH. That vintage is late, so the alert is true.
+MAX_AGE_HOURS="${MAX_AGE_HOURS:-20}"
 
 # Notification state (2026-09-01). Check 4 reads an IMMUTABLE commit subject, so
 # a soft failure re-alarms EVERY morning until a clean run lands. During the

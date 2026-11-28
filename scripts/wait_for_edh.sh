@@ -85,9 +85,11 @@
 #
 # ⚠️ AND IT HOLDS, IT DOES NOT REFUSE -- the augur#31 shape, one level over.
 # Refusing a stale publish outright would fail closed on the night EDH never
-# publishes at all. So a stale candidate starts the same bounded clock a short
-# one does; if nothing fresher arrives it is accepted with an alarm, and the
-# 03:00 deadline still backstops everything. Cost of being wrong is a delay,
+# publishes at all. So a stale candidate starts a bounded hold of its own
+# (STALE_HOLD_HOURS, longer than the short hold since 2026-11-28); if nothing
+# fresher arrives it is accepted with an alarm, and the 03:00 deadline still
+# backstops everything. A candidate both stale and short waits out the longer
+# of the two holds. Cost of being wrong is a delay,
 # never a lost vintage.
 #
 # A short SECONDARY feed (load_forecast) does NOT block. 08-26 proves blocking
@@ -155,9 +157,14 @@ SHORT_HOLD_HOURS="${EDH_SHORT_HOLD_HOURS:-4}"
 # not a finely-tuned number. A very large value disables the freshness clause
 # and recovers the pre-2026-09-14 behaviour exactly.
 STALE_GRACE_HOURS="${EDH_STALE_GRACE_HOURS:-2}"
-# Bound on the stale hold. Defaults to the short hold so there is one dial to
-# reason about unless an operator deliberately splits them.
-STALE_HOLD_HOURS="${EDH_STALE_HOLD_HOURS:-$SHORT_HOLD_HOURS}"
+# Bound on the stale hold: 8h, holding a 16:30 start to 00:30 UTC. It was tied
+# to the 4h short hold until 2026-11-28, when GitHub's queue began starting
+# EDH's 13:23 cron ~9h late (publishes 22:09-22:39Z on 11-25..11-27) and a 20:30
+# cutoff accepted yesterday's report every night. The two holds wait for
+# different things: a short publish waits for a catch-up, which comes soon or
+# not at all; a stale one waits for tonight's scheduled run, however late
+# GitHub starts it. Bounded by the deadline and TimeoutStartSec cap above.
+STALE_HOLD_HOURS="${EDH_STALE_HOLD_HOURS:-8}"
 
 # Upstream publish-failure signal. Polled every Nth iteration rather than every
 # one: at the default 120s poll that is a GitHub API read every 10 minutes,
@@ -181,20 +188,20 @@ esac
 # Seconds override: finer granularity than the hours knob, for tests and for
 # an operator who wants a hold shorter than an hour. Hours remains the
 # documented dial; this is the same value in the unit the code compares in.
-SHORT_HOLD_SEC="${EDH_SHORT_HOLD_SEC:-$(( SHORT_HOLD_HOURS * 3600 ))}"
+SHORT_HOLD_SEC="${EDH_SHORT_HOLD_SEC:-$(( 10#$SHORT_HOLD_HOURS * 3600 ))}"
 case "$SHORT_HOLD_SEC" in
-    ''|*[!0-9]*) SHORT_HOLD_SEC=$(( SHORT_HOLD_HOURS * 3600 )) ;;
+    ''|*[!0-9]*) SHORT_HOLD_SEC=$(( 10#$SHORT_HOLD_HOURS * 3600 )) ;;
 esac
 FIRST_SHORT_TS=""
 
 case "$STALE_HOLD_HOURS" in
     ''|*[!0-9]*)
-        echo "[wait_for_edh] WARN: EDH_STALE_HOLD_HOURS='${STALE_HOLD_HOURS}' is not a number — using ${SHORT_HOLD_HOURS}."
-        STALE_HOLD_HOURS="$SHORT_HOLD_HOURS" ;;
+        echo "[wait_for_edh] WARN: EDH_STALE_HOLD_HOURS='${STALE_HOLD_HOURS}' is not a number — using 8."
+        STALE_HOLD_HOURS=8 ;;
 esac
-STALE_HOLD_SEC="${EDH_STALE_HOLD_SEC:-$(( STALE_HOLD_HOURS * 3600 ))}"
+STALE_HOLD_SEC="${EDH_STALE_HOLD_SEC:-$(( 10#$STALE_HOLD_HOURS * 3600 ))}"
 case "$STALE_HOLD_SEC" in
-    ''|*[!0-9]*) STALE_HOLD_SEC=$(( STALE_HOLD_HOURS * 3600 )) ;;
+    ''|*[!0-9]*) STALE_HOLD_SEC=$(( 10#$STALE_HOLD_HOURS * 3600 )) ;;
 esac
 case "$STALE_GRACE_HOURS" in
     ''|*[!0-9]*)
@@ -205,7 +212,7 @@ FIRST_STALE_TS=""
 
 START_TS=$(date -u +%s)
 # Anything stamped at or after this counts as "arrived while we were waiting".
-STALE_CUTOFF_TS=$(( START_TS - STALE_GRACE_HOURS * 3600 ))
+STALE_CUTOFF_TS=$(( START_TS - 10#$STALE_GRACE_HOURS * 3600 ))
 mkdir -p "$(dirname "$VERDICT")" 2>/dev/null || true
 : > "$VERDICT"
 
@@ -470,19 +477,28 @@ while : ; do
     # deadline (~5h saved on the 09-08 shape). The bound runs from the first
     # short seen IN THIS RUN and is never reset by a later one -- upstream
     # republishing shorts hourly must not extend the hold indefinitely.
+    #
+    # A short that is ALSO stale (from before this run) waits out the longer
+    # stale hold as well: otherwise yesterday's short report is accepted at
+    # 20:30 UTC, before tonight's full one (2026-11-28 review).
+    SHORT_NEED_SEC="$SHORT_HOLD_SEC"; SHORT_NEED_H="$SHORT_HOLD_HOURS"
+    if [ "$IS_CURRENT" = "0" ] && [ -n "$LAST_CONSUMED" ] \
+       && [ "$STALE_HOLD_SEC" -gt "$SHORT_HOLD_SEC" ]; then
+        SHORT_NEED_SEC="$STALE_HOLD_SEC"; SHORT_NEED_H="$STALE_HOLD_HOURS"
+    fi
     if [ "$IS_NEW" = "1" ] && [ "$IS_FULL" = "0" ] \
        && printf '%s' "$PRIMARY_PTS" | grep -qE '^[0-9]+$'; then
         if [ -z "$FIRST_SHORT_TS" ]; then
             FIRST_SHORT_TS=$(date -u +%s)
-            echo "[wait_for_edh] SHORT primary: ${PRIMARY_DATASET}=${PRIMARY_PTS} < ${EXPECTED_PTS}. Holding up to ${SHORT_HOLD_HOURS}h for a fuller publish, then accepting anyway."
+            echo "[wait_for_edh] SHORT primary: ${PRIMARY_DATASET}=${PRIMARY_PTS} < ${EXPECTED_PTS}. Holding up to ${SHORT_NEED_H}h for a fuller publish, then accepting anyway."
         fi
         HELD_SEC=$(( $(date -u +%s) - FIRST_SHORT_TS ))
-        if [ "$HELD_SEC" -ge "$SHORT_HOLD_SEC" ]; then
+        if [ "$HELD_SEC" -ge "$SHORT_NEED_SEC" ]; then
             check_secondary
             echo "[wait_for_edh] ACCEPTING short publish after $(( HELD_SEC / 60 ))min: no fuller one arrived. The vintage is degraded, not lost — t0 guards mark the consequence."
             echo "[wait_for_edh] READY: ${UPSTREAM_TS}, ${PRIMARY_DATASET}=${PRIMARY_PTS} (< ${EXPECTED_PTS}, accepted after hold), ${SECONDARY_DATASET}=${SECONDARY_PTS:-?}."
             record_and_go "$UPSTREAM_TS" \
-                " [ALARM: EDH ${PRIMARY_DATASET} short ${PRIMARY_PTS}/${EXPECTED_PTS} accepted after ${SHORT_HOLD_HOURS}h]${SECONDARY_MARKER}"
+                " [ALARM: EDH ${PRIMARY_DATASET} short ${PRIMARY_PTS}/${EXPECTED_PTS} accepted after ${SHORT_NEED_H}h]${SECONDARY_MARKER}"
         fi
     fi
 
@@ -493,7 +509,7 @@ while : ; do
     # night EDH publishes nothing still gets a forecast, degraded and named.
     #
     # Bootstrap is exempt. With no prior state there is nothing to be behind
-    # OF, and holding a first run for 4h to re-learn that would be pure cost.
+    # OF, and holding a first run for hours to re-learn that would be pure cost.
     if [ "$IS_NEW" = "1" ] && [ "$IS_FULL" = "1" ] && [ "$IS_CURRENT" = "0" ] \
        && [ -n "$LAST_CONSUMED" ]; then
         if [ -z "$FIRST_STALE_TS" ]; then

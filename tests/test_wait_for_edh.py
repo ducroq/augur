@@ -114,7 +114,8 @@ class Hub:
         self.api_url = "file://" + str(fixture)
 
     def run(self, max_wait=2, poll=1, issue_poll_every=0, env_extra=None):
-        env = dict(os.environ)
+        # An operator's exported EDH_* knob must not leak into a test of a default.
+        env = {k: v for k, v in os.environ.items() if not k.startswith("EDH_")}
         env.update({
             "DATAHUB_DIR": str(self.hub),
             "AUGUR_DIR": str(self.augur),
@@ -661,6 +662,45 @@ class TestFreshnessContract:
         assert "ACCEPTING stale publish" in r.stdout
         assert h.consumed == stale, "an accepted publish IS consumed"
         assert "ALARM" in h.marker and "stale" in h.marker
+
+    def test_the_stale_hold_defaults_to_8h_independent_of_the_short_hold(self, tmp_path):
+        """2026-11-28: EDH's cron started ~9h late, so a 4h stale hold (tied to
+        the short hold) accepted yesterday's report every night at 20:30 UTC."""
+        h = Hub(tmp_path)
+        history(h)
+        h.stub_systemctl("infinity")
+        h.seed(_ago(hours=48))
+        h.publish(_ago(hours=22), NORMAL)
+        r = h.run(max_wait=2, poll=1,
+                  env_extra={**self.FRESH, "EDH_SHORT_HOLD_HOURS": "1"})
+        assert "Holding up to 8h" in r.stdout
+
+    def test_a_stale_short_publish_waits_out_the_stale_hold(self, tmp_path):
+        """Yesterday's SHORT report must not be taken at the 4h short hold, before
+        tonight's full one can land (2026-11-28 review)."""
+        h = Hub(tmp_path)
+        history(h)
+        h.stub_systemctl("infinity")
+        seeded = _ago(hours=48)
+        h.seed(seeded)
+        h.publish(_ago(hours=22), SHORT_ENTSOE)
+        r = h.run(max_wait=3, poll=1,
+                  env_extra={**self.FRESH, "EDH_SHORT_HOLD_SEC": "0"})
+        assert "Holding up to 8h" in r.stdout
+        assert "ACCEPTING short" not in r.stdout
+        assert h.consumed == seeded
+
+    def test_a_zero_padded_hours_override_is_decimal(self, tmp_path):
+        """`08` is octal to bash arithmetic and used to exit the gate with 1."""
+        h = Hub(tmp_path)
+        history(h)
+        h.stub_systemctl("infinity")
+        h.seed(_ago(hours=48))
+        h.publish(_ago(hours=22), NORMAL)
+        r = h.run(max_wait=2, poll=1,
+                  env_extra={**self.FRESH, "EDH_STALE_HOLD_HOURS": "08"})
+        assert r.returncode == 0, r.stderr
+        assert "Holding up to 08h" in r.stdout
 
     def test_bootstrap_is_exempt(self, tmp_path):
         """With no prior state there is nothing to be behind of."""

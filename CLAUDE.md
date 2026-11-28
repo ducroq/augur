@@ -61,7 +61,7 @@ sadalsuud — augur-daily.timer 16:30 UTC, ExecStartPre=scripts/wait_for_edh.sh
     ├── python -m ml.shadow.update_fm       → Chronos-Bolt shadow on production's t0 (EXP-021a Stage 3, NON-FATAL), own regret log
     └── git push augur                    → Netlify rebuild
         Every alarm rides in the COMMIT SUBJECT: [ALARM: …] = fault, [NOTE: …] = result.
-        Alerting: OnFailure= (unit dies) + augur-heartbeat.timer 06:00 UTC (no commit >30h,
+        Alerting: OnFailure= (unit dies) + augur-heartbeat.timer 06:00 UTC (no commit >20h,
         timer off, unpushed, ALARM/rc marker). It can't see sadalsuud itself being down.
     ▼
 Netlify build: decrypt_data_cached.py --force → hugo --minify → CDN

@@ -31,6 +31,15 @@ newest=$(git -C "$DATAHUB_DIR" show origin/main:data/data_quality_report.json 2>
          | python3 -c 'import json,sys; print(json.load(sys.stdin).get("timestamp",""))' 2>/dev/null)
 
 [ -n "$consumed" ] || { echo "CANNOT VERIFY: gate state is empty"; exit 0; }
+# The clone is only fetched while the gate runs, so between runs its origin/main
+# can predate EDH's latest publish and "CURRENT" would compare against a stale
+# view (2026-11-28: said CURRENT while a day behind). ls-remote writes nothing.
+remote_head=$(git -C "$DATAHUB_DIR" ls-remote origin refs/heads/main 2>/dev/null | cut -f1)
+local_head=$(git -C "$DATAHUB_DIR" rev-parse origin/main 2>/dev/null)
+if [ -n "$remote_head" ] && [ "$remote_head" != "$local_head" ]; then
+    echo "CANNOT VERIFY: EDH clone is behind origin (fetched before EDH's latest commit); consumed $consumed"
+    exit 0
+fi
 [ -n "$newest" ]   || { echo "CANNOT VERIFY: could not read EDH's newest report"; exit 0; }
 
 if [ "$consumed" = "$newest" ]; then

@@ -52,7 +52,7 @@ MEDIUM. A hand edit to them is a carve-out below.
 - `scripts/wait_for_edh.sh`: never fail-closed; deadline 03:00 UTC; the clause semantics in
   its header, including clause (c) (augur#34).
 - `scripts/heartbeat_check.sh`, `scripts/alert_failure.sh`, `scripts/notify_email.py`,
-  `scripts/systemd/**`: a dead unit, a missed commit (>30h), a disabled timer, an unpushed
+  `scripts/systemd/**`: a dead unit, a missed commit (>20h), a disabled timer, an unpushed
   commit or an ALARM marker each produce an alert.
 - `ml/shadow/*.py`, `ml/data/consolidate.py`, `ml/update.py`: train/validation/test splits are
   temporal, never random. `t0` comes from `latest_feasible_t0`. The forecast JSON keeps the

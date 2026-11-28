@@ -4,7 +4,11 @@ Dated investigation log tracking Augur's ML forecasting model performance, diagn
 
 ---
 
-## 2026-11-16 (latest) — The consumer surcharge leaves ARF (augur#32, step 1 of 2)
+## 2026-11-28 (latest) — The EDH gate holds a stale report 8h, not 4h
+
+**What changed.** `scripts/wait_for_edh.sh`: `STALE_HOLD_HOURS` defaults to 8, no longer tied to the 4h short hold. GitHub started EDH's new 13:23 cron ~9h late (publishes 22:09–22:39Z on 11-25..11-27), so the old 20:30Z cutoff accepted the previous night's report every night (`[ALARM: EDH publish 17h stale accepted after 4h]`) and the dashboard ran a day behind. The hold now ends ~00:30Z; the 03:00 deadline and the reserve-adjusted timeout cap (~03:30Z) stay. A report both stale and short now waits out the stale hold too (it was taken at the 4h short hold). Hours knobs parse as decimal (`08` used to exit the gate with 1). **Heartbeat** 30h → 20h: a run can now commit after midnight, and 30h then missed the next silent slot (Codex review). Cost: a night with only yesterday's report gets its forecast ~4h later. The real fix is external dispatch (their #67, augur#25). No model changed.
+
+## 2026-11-16 — The consumer surcharge leaves ARF (augur#32, step 1 of 2)
 
 **What changed.** `ml.update.derive_surcharge` moved (same rule; non-finite results now rejected) to `ml/shadow/surcharge.py`, run as its own non-fatal step after consolidate. It caches `ml/models/shadow/surcharge.json`; `update_shadow`, `update_profile` and `update_fm` read it via `read_surcharge` (cache, else ARF's `state.json` seed, else 95.0). While ARF still runs, a mismatch with ARF's same-night value is a `[NOTE:]`, as is a fallback night (no overlap; `derived_at` keeps the last real derivation); a failed step or malformed output is an `[ALARM:]`. A valid cache never reads ARF, and non-finite values are rejected (review 2026-11-16, Codex).
 

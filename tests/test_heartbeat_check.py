@@ -133,6 +133,31 @@ ALARM = "Daily update 2026-08-31 — ARF OK | shadow rc=0/eval rc=0 [ALARM: t0 j
 CLEAN = "Daily update 2026-09-02 — ARF OK | shadow rc=0/eval rc=0"
 
 
+class TestAgeThreshold:
+    """2026-11-28: with the 8h stale hold a run can commit after midnight, and a
+    30h threshold then missed the next silent slot. 20h separates the two."""
+
+    def _commit_aged(self, env, hours):
+        (env.root / "f.txt").write_text(str(time.time()))
+        env._git("add", "-A")
+        when = f"@{int(time.time() - hours * 3600)} +0000"
+        subprocess.run(["git", "commit", "-q", "-m", "Daily update — ARF OK | shadow rc=0/eval rc=0"],
+                       cwd=env.root, check=True, capture_output=True,
+                       env={**os.environ, "GIT_COMMITTER_DATE": when, "GIT_AUTHOR_DATE": when})
+
+    def test_a_missed_slot_after_a_late_commit_alarms(self, tmp_path):
+        env = Env(tmp_path)
+        self._commit_aged(env, 26)   # 04:00 commit, then slot missed, check at 06:00 next day
+        env.run()
+        assert "shape 'stale'" in env.log and len(env.sent) == 1
+
+    def test_a_healthy_late_commit_does_not_alarm(self, tmp_path):
+        env = Env(tmp_path)
+        self._commit_aged(env, 13)   # 17:00 commit, check at 06:00
+        env.run()
+        assert env.sent == []
+
+
 class TestCleanRun:
     def test_clean_commit_sends_nothing_and_writes_no_state(self, tmp_path):
         env = Env(tmp_path)

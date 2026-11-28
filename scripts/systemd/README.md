@@ -110,7 +110,7 @@ git diff --cached --quiet && echo "No changes to commit" || { commit; push; }
 with nothing staged — the run exits 0, the unit succeeds, and the vintage is
 lost in silence. Nor when the timer is disabled, nor when the box was down at
 16:30 UTC. `augur-heartbeat.timer` covers those by checking, every morning at
-06:00 UTC, that a `Daily update` commit landed within 30h and that
+06:00 UTC, that a `Daily update` commit landed within 20h and that
 `augur-daily.timer` is still enabled and active.
 
 **Limitation, deliberately not hidden:** the heartbeat runs on sadalsuud, so it
